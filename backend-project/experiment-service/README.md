@@ -14,21 +14,81 @@
 
 ## Запуск
 
+### Быстрый запуск с Docker Compose (рекомендуется)
+
+Самый простой способ запустить сервис с базой данных:
+
+```bash
+# Запуск всех сервисов (БД + experiment-service)
+docker-compose up -d
+
+# Просмотр логов
+docker-compose logs -f experiment-service
+
+# Остановка
+docker-compose down
+
+# Остановка с удалением данных БД
+docker-compose down -v
+```
+
+Сервис будет доступен по адресу: http://localhost:8002
+
+База данных будет автоматически инициализирована при первом запуске. Сервис автоматически создаст все необходимые таблицы.
+
+**Быстрый старт:**
+```bash
+# Запуск
+./start.sh
+
+# Или запуск только БД для локальной разработки
+./start.sh local
+```
+
 ### Локальная разработка
+
+#### Вариант 1: С Docker Compose для БД
+
+```bash
+# Запустить только БД
+docker-compose up -d postgres
+
+# Установка зависимостей
+pip install -r requirements.txt
+
+# Копировать пример конфигурации
+cp env.example .env
+
+# Настройка переменных окружения (или редактировать .env)
+export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/experiment_db"
+export PORT=8002
+
+# Запуск сервиса
+python main.py
+```
+
+#### Вариант 2: Локальная PostgreSQL
+
+Убедитесь, что PostgreSQL установлен и запущен:
 
 ```bash
 # Установка зависимостей
 pip install -r requirements.txt
 
+# Создание базы данных (если еще не создана)
+createdb experiment_db
+
 # Настройка переменных окружения
-export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/experiment_db"
-export PORT=8002
+cp env.example .env
+# Отредактируйте .env файл или установите переменные окружения
 
 # Запуск
 python main.py
 ```
 
-### Docker
+### Docker (только контейнер сервиса)
+
+Если БД уже запущена отдельно:
 
 ```bash
 docker build -t experiment-service .

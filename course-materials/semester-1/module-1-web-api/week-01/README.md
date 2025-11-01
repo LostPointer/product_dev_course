@@ -21,11 +21,11 @@
 ### 2. Архитектура клиент-сервер
 
 ```
-┌──────────┐      HTTP Request       ┌──────────┐
+┌──────────┐       HTTP Request       ┌──────────┐
 │          │ ────────────────────────>│          │
 │  Client  │                          │  Server  │
 │          │ <────────────────────────│          │
-└──────────┘      HTTP Response      └──────────┘
+└──────────┘       HTTP Response      └──────────┘
 ```
 
 **Клиент:**
@@ -111,7 +111,12 @@ Cache-Control: no-cache
 - 401 Unauthorized - требуется аутентификация
 - 403 Forbidden - доступ запрещен
 - 404 Not Found - ресурс не найден
+- 405 Method Not Allowed - метод не поддерживается
+- 409 Conflict - конфликт
+- 418 I'm a teapot - я чайник
 - 422 Unprocessable Entity - ошибка валидации
+- 429 Too Many Requests - превышено количество запросов
+- 451 Unavailable For Legal Reasons - недоступен по юридическим причинам
 
 **5xx - Server Error**
 - 500 Internal Server Error - ошибка сервера

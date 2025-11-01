@@ -1,4 +1,5 @@
 """Управление подключением к базе данных."""
+import asyncio
 import asyncpg
 import logging
 from typing import Optional
@@ -15,22 +16,33 @@ async def init_db() -> None:
     """Инициализация пула подключений к БД."""
     global _db_pool
 
-    try:
-        _db_pool = await asyncpg.create_pool(
-            settings.DATABASE_URL,
-            min_size=settings.DB_POOL_MIN_SIZE,
-            max_size=settings.DB_POOL_MAX_SIZE,
-            command_timeout=60
-        )
-        logger.info("Database pool created successfully")
+    max_retries = 10
+    retry_delay = 2
 
-        # Создание таблиц
-        await create_tables()
-        logger.info("Database tables created")
+    for attempt in range(1, max_retries + 1):
+        try:
+            logger.info(f"Attempting to connect to database (attempt {attempt}/{max_retries})...")
+            _db_pool = await asyncpg.create_pool(
+                settings.DATABASE_URL,
+                min_size=settings.DB_POOL_MIN_SIZE,
+                max_size=settings.DB_POOL_MAX_SIZE,
+                command_timeout=60
+            )
+            logger.info("Database pool created successfully")
 
-    except Exception as e:
-        logger.error(f"Failed to initialize database: {e}")
-        raise
+            # Создание таблиц
+            await create_tables()
+            logger.info("Database tables created")
+            return
+
+        except Exception as e:
+            if attempt < max_retries:
+                logger.warning(f"Failed to connect to database (attempt {attempt}/{max_retries}): {e}")
+                logger.info(f"Retrying in {retry_delay} seconds...")
+                await asyncio.sleep(retry_delay)
+            else:
+                logger.error(f"Failed to initialize database after {max_retries} attempts: {e}")
+                raise
 
 
 async def close_db() -> None:

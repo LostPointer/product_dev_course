@@ -64,7 +64,7 @@ DELETE FROM users WHERE id = 1;
               │
 ┌─────────────▼───────────────────┐
 │         asyncpg Pool            │
-│   (Connection Management)      │
+│    (Connection Management)      │
 └─────────────┬───────────────────┘
               │
 ┌─────────────▼───────────────────┐
