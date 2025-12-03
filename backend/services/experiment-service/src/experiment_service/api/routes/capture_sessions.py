@@ -7,17 +7,23 @@ from aiohttp import web
 from pydantic import ValidationError
 
 from experiment_service.api.utils import paginated_response, pagination_params, parse_uuid, read_json
-from experiment_service.core.exceptions import NotFoundError
+from experiment_service.core.exceptions import (
+    IdempotencyConflictError,
+    InvalidStatusTransitionError,
+    NotFoundError,
+)
 from experiment_service.domain.dto import CaptureSessionCreateDTO, CaptureSessionUpdateDTO
 from experiment_service.domain.enums import CaptureSessionStatus
 from experiment_service.domain.models import CaptureSession
 from experiment_service.services.dependencies import (
     ensure_project_access,
     get_capture_session_service,
+    get_idempotency_service,
     get_run_service,
     require_current_user,
     resolve_project_id,
 )
+from experiment_service.services.idempotency import IDEMPOTENCY_HEADER, IdempotencyService
 
 routes = web.RouteTableDef()
 
@@ -66,13 +72,41 @@ async def create_capture_session(request: web.Request):
     body = await read_json(request)
     body["project_id"] = project_id
     body["run_id"] = run_id
+    idempotency_service = await get_idempotency_service(request)
+    idempotency_key = request.headers.get(IDEMPOTENCY_HEADER)
     try:
         dto = CaptureSessionCreateDTO.model_validate(body)
     except ValidationError as exc:
         raise web.HTTPBadRequest(text=exc.json()) from exc
     service = await get_capture_session_service(request)
-    session = await service.create_session(dto)
-    return web.json_response(_session_response(session), status=201)
+    serialized_body, body_hash = IdempotencyService.canonical_body(body)
+    if idempotency_key:
+        try:
+            cached = await idempotency_service.get_cached_response(
+                idempotency_key, user.user_id, request.rel_url.path, body_hash
+            )
+        except IdempotencyConflictError as exc:
+            raise web.HTTPConflict(text=str(exc)) from exc
+        if cached:
+            return IdempotencyService.build_response(cached)
+    try:
+        session = await service.create_session(dto)
+    except InvalidStatusTransitionError as exc:
+        raise web.HTTPBadRequest(text=str(exc)) from exc
+    response_payload = _session_response(session)
+    if idempotency_key:
+        try:
+            await idempotency_service.store_response(
+                idempotency_key,
+                user.user_id,
+                request.rel_url.path,
+                body_hash,
+                201,
+                response_payload,
+            )
+        except IdempotencyConflictError as exc:
+            raise web.HTTPConflict(text=str(exc)) from exc
+    return web.json_response(response_payload, status=201)
 
 
 @routes.post("/api/v1/runs/{run_id}/capture-sessions/{session_id}/stop")

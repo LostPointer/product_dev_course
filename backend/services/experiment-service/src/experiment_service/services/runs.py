@@ -10,6 +10,7 @@ from experiment_service.domain.enums import RunStatus
 from experiment_service.domain.models import Run
 from experiment_service.repositories.experiments import ExperimentRepository
 from experiment_service.repositories.runs import RunRepository
+from experiment_service.services.state_machine import validate_run_transition
 
 
 class RunService:
@@ -23,6 +24,8 @@ class RunService:
         experiment = await self._experiment_repository.get(data.project_id, data.experiment_id)
         if experiment.project_id != data.project_id:
             raise ScopeMismatchError("Experiment does not belong to project")
+        if data.status != RunStatus.DRAFT:
+            validate_run_transition(RunStatus.DRAFT, data.status)
         return await self._repository.create(data)
 
     async def get_run(self, project_id: UUID, run_id: UUID) -> Run:
@@ -46,6 +49,9 @@ class RunService:
         run_id: UUID,
         updates: RunUpdateDTO,
     ) -> Run:
+        current = await self._repository.get(project_id, run_id)
+        if updates.status is not None:
+            validate_run_transition(current.status, updates.status)
         return await self._repository.update(project_id, run_id, updates)
 
     async def delete_run(self, project_id: UUID, run_id: UUID) -> None:
@@ -54,5 +60,10 @@ class RunService:
     async def batch_update_status(
         self, project_id: UUID, run_ids: list[UUID], status: RunStatus
     ) -> List[Run]:
+        runs = []
+        for run_id in run_ids:
+            current = await self._repository.get(project_id, run_id)
+            validate_run_transition(current.status, status)
+            runs.append(current)
         return await self._repository.update_status_batch(project_id, run_ids, status)
 
