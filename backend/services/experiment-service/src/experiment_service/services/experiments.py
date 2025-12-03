@@ -8,8 +8,10 @@ from experiment_service.domain.dto import (
     ExperimentCreateDTO,
     ExperimentUpdateDTO,
 )
+from experiment_service.domain.enums import ExperimentStatus
 from experiment_service.domain.models import Experiment
 from experiment_service.repositories.experiments import ExperimentRepository
+from experiment_service.services.state_machine import validate_experiment_transition
 
 
 class ExperimentService:
@@ -19,6 +21,8 @@ class ExperimentService:
         self._repository = repository
 
     async def create_experiment(self, data: ExperimentCreateDTO) -> Experiment:
+        if data.status != ExperimentStatus.DRAFT:
+            validate_experiment_transition(ExperimentStatus.DRAFT, data.status)
         return await self._repository.create(data)
 
     async def get_experiment(self, project_id: UUID, experiment_id: UUID) -> Experiment:
@@ -35,6 +39,9 @@ class ExperimentService:
         experiment_id: UUID,
         updates: ExperimentUpdateDTO,
     ) -> Experiment:
+        current = await self._repository.get(project_id, experiment_id)
+        if updates.status is not None:
+            validate_experiment_transition(current.status, updates.status)
         return await self._repository.update(project_id, experiment_id, updates)
 
     async def delete_experiment(self, project_id: UUID, experiment_id: UUID) -> None:

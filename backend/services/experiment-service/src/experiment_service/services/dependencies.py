@@ -14,10 +14,15 @@ from experiment_service.repositories import (
     ExperimentRepository,
     RunRepository,
 )
+from experiment_service.repositories.idempotency import IdempotencyRepository
 from experiment_service.services import (
     CaptureSessionService,
     ExperimentService,
     RunService,
+)
+from experiment_service.services.idempotency import (
+    IDEMPOTENCY_HEADER,
+    IdempotencyService,
 )
 
 TService = TypeVar("TService")
@@ -25,6 +30,7 @@ TService = TypeVar("TService")
 _EXPERIMENT_SERVICE_KEY = "experiment_service"
 _RUN_SERVICE_KEY = "run_service"
 _CAPTURE_SERVICE_KEY = "capture_session_service"
+_IDEMPOTENCY_SERVICE_KEY = "idempotency_service"
 
 USER_ID_HEADER = "X-User-Id"
 PROJECT_ID_HEADER = "X-Project-Id"
@@ -131,3 +137,12 @@ async def get_capture_session_service(request: web.Request) -> CaptureSessionSer
         return CaptureSessionService(capture_repo, run_repo)
 
     return await _get_or_create_service(request, _CAPTURE_SERVICE_KEY, builder)
+
+
+async def get_idempotency_service(request: web.Request) -> IdempotencyService:
+    async def builder(_: web.Request) -> IdempotencyService:
+        pool = await get_pool()
+        repo = IdempotencyRepository(pool)
+        return IdempotencyService(repo)
+
+    return await _get_or_create_service(request, _IDEMPOTENCY_SERVICE_KEY, builder)

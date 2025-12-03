@@ -9,9 +9,11 @@ from experiment_service.domain.dto import (
     CaptureSessionCreateDTO,
     CaptureSessionUpdateDTO,
 )
+from experiment_service.domain.enums import CaptureSessionStatus
 from experiment_service.domain.models import CaptureSession
 from experiment_service.repositories.capture_sessions import CaptureSessionRepository
 from experiment_service.repositories.runs import RunRepository
+from experiment_service.services.state_machine import validate_capture_transition
 
 
 class CaptureSessionService:
@@ -25,6 +27,8 @@ class CaptureSessionService:
         run = await self._run_repository.get(data.project_id, data.run_id)
         if run.project_id != data.project_id:
             raise ScopeMismatchError("Run does not belong to project")
+        if data.status != CaptureSessionStatus.DRAFT:
+            validate_capture_transition(CaptureSessionStatus.DRAFT, data.status)
         return await self._repository.create(data)
 
     async def get_session(
@@ -50,6 +54,9 @@ class CaptureSessionService:
         capture_session_id: UUID,
         updates: CaptureSessionUpdateDTO,
     ) -> CaptureSession:
+        current = await self._repository.get(project_id, capture_session_id)
+        if updates.status is not None:
+            validate_capture_transition(current.status, updates.status)
         return await self._repository.update(project_id, capture_session_id, updates)
 
     async def delete_session(self, project_id: UUID, capture_session_id: UUID) -> None:

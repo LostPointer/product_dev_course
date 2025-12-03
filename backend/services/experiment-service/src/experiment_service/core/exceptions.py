@@ -17,3 +17,11 @@ class NotFoundError(RepositoryError):
 class ScopeMismatchError(ExperimentServiceError):
     """Raised when entity belongs to a different project."""
 
+
+class InvalidStatusTransitionError(ExperimentServiceError):
+    """Raised when an entity attempts an unsupported status change."""
+
+
+class IdempotencyConflictError(ExperimentServiceError):
+    """Raised when the same idempotency key is reused with a different payload."""
+
