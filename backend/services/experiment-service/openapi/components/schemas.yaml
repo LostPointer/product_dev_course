@@ -41,7 +41,7 @@ Experiment:
       items:
         type: string
     status:
-      $ref: '#/components/schemas/ExperimentStatus'
+      $ref: '#/ExperimentStatus'
     owner_id:
       type: string
       format: uuid
@@ -94,14 +94,14 @@ ExperimentUpdate:
       type: object
       additionalProperties: true
     status:
-      $ref: '#/components/schemas/ExperimentStatus'
+      $ref: '#/ExperimentStatus'
 ExperimentListResponse:
   type: object
   properties:
     experiments:
       type: array
       items:
-        $ref: '#/components/schemas/Experiment'
+        $ref: '#/Experiment'
     total:
       type: integer
     page:
@@ -125,7 +125,7 @@ Run:
     env:
       type: string
     status:
-      $ref: '#/components/schemas/RunStatus'
+      $ref: '#/RunStatus'
     started_at:
       type: string
       format: date-time
@@ -177,14 +177,14 @@ RunUpdate:
       type: object
       additionalProperties: true
     status:
-      $ref: '#/components/schemas/RunStatus'
+      $ref: '#/RunStatus'
 RunListResponse:
   type: object
   properties:
     runs:
       type: array
       items:
-        $ref: '#/components/schemas/Run'
+        $ref: '#/Run'
     total:
       type: integer
     page:
@@ -203,7 +203,7 @@ RunBatchStatusRequest:
         type: string
         format: uuid
     status:
-      $ref: '#/components/schemas/RunStatus'
+      $ref: '#/RunStatus'
 CaptureSession:
   type: object
   properties:
@@ -224,7 +224,7 @@ CaptureSession:
       format: date-time
       nullable: true
     status:
-      $ref: '#/components/schemas/CaptureSessionStatus'
+      $ref: '#/CaptureSessionStatus'
     initiated_by:
       type: string
       format: uuid
@@ -377,11 +377,11 @@ SensorCreate:
       type: string
 SensorRegisterRequest:
   allOf:
-    - $ref: '#/components/schemas/SensorCreate'
+    - $ref: '#/SensorCreate'
     - type: object
       properties:
         conversion_profile:
-          $ref: '#/components/schemas/ConversionProfileInput'
+          $ref: '#/ConversionProfileInput'
 ConversionProfile:
   type: object
   properties:
@@ -444,12 +444,12 @@ ConversionProfileInput:
       format: date-time
       nullable: true
 ConversionProfileCreate:
-  $ref: '#/components/schemas/ConversionProfileInput'
+  $ref: '#/ConversionProfileInput'
 SensorTokenResponse:
   type: object
   properties:
     sensor:
-      $ref: '#/components/schemas/Sensor'
+      $ref: '#/Sensor'
     token:
       type: string
 SensorListResponse:
@@ -458,7 +458,7 @@ SensorListResponse:
     sensors:
       type: array
       items:
-        $ref: '#/components/schemas/Sensor'
+        $ref: '#/Sensor'
     total:
       type: integer
     page:
@@ -471,7 +471,7 @@ ConversionProfileListResponse:
     conversion_profiles:
       type: array
       items:
-        $ref: '#/components/schemas/ConversionProfile'
+        $ref: '#/ConversionProfile'
     total:
       type: integer
     page:

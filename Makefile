@@ -2,7 +2,7 @@
 
 BACKEND_DIR := backend/services/experiment-service
 FRONTEND_DIR := frontend/apps/experiment-portal
-OPENAPI_SPEC := $(BACKEND_DIR)/openapi/openapi.yaml
+OPENAPI_SPEC := openapi/openapi.yaml
 
 test: type-check test-backend test-frontend
 

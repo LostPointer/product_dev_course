@@ -82,6 +82,16 @@ OpenAPI (`openapi/openapi.yaml`) синхронизирован с текущи�
   - `cpp-restsdk-config.yaml` — C++ клиент на базе cpprestsdk с кастомными namespace'ами.
 - Все артефакты пишутся в `clients/` (игнорируется Git'ом). Перед генерацией директории очищаются.
 - Запуск: `make generate-sdk` (или из каталога сервиса `poetry run openapi-generator-cli generate ...`).
+
+```bash
+cd backend/services/experiment-service
+poetry run openapi-generator-cli generate \
+  -i openapi/openapi.yaml \
+  -g typescript-fetch \
+  -o clients/typescript-fetch \
+  -c openapi/clients/typescript-fetch-config.yaml
+```
+
 - Полученные пакеты можно дальше упаковывать/публиковать согласно потребностям (npm, conan/vcpkg и т.д.).
 
 ## Следующие шаги
