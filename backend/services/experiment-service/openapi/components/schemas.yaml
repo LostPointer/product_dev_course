@@ -1,3 +1,23 @@
+SensorListResponse:
+  type: object
+  properties:
+    sensors:
+      type: array
+      items:
+        $ref: '#/Sensor'
+    total:
+      type: integer
+    page:
+      type: integer
+    page_size:
+      type: integer
+SensorTokenResponse:
+  type: object
+  properties:
+    sensor:
+      $ref: '#/Sensor'
+    token:
+      type: string
 ExperimentStatus:
   type: string
   enum:
@@ -41,7 +61,7 @@ Experiment:
       items:
         type: string
     status:
-      $ref: '#/components/schemas/ExperimentStatus'
+      $ref: '#/ExperimentStatus'
     owner_id:
       type: string
       format: uuid
@@ -59,9 +79,13 @@ ExperimentCreate:
   type: object
   required:
   - project_id
+  - owner_id
   - name
   properties:
     project_id:
+      type: string
+      format: uuid
+    owner_id:
       type: string
       format: uuid
     name:
@@ -94,14 +118,14 @@ ExperimentUpdate:
       type: object
       additionalProperties: true
     status:
-      $ref: '#/components/schemas/ExperimentStatus'
+      $ref: '#/ExperimentStatus'
 ExperimentListResponse:
   type: object
   properties:
     experiments:
       type: array
       items:
-        $ref: '#/components/schemas/Experiment'
+        $ref: '#/Experiment'
     total:
       type: integer
     page:
@@ -125,7 +149,7 @@ Run:
     env:
       type: string
     status:
-      $ref: '#/components/schemas/RunStatus'
+      $ref: '#/RunStatus'
     started_at:
       type: string
       format: date-time
@@ -143,15 +167,28 @@ Run:
     updated_at:
       type: string
       format: date-time
+    project_id:
+      type: string
+      format: uuid
 RunCreate:
   type: object
   required:
-  - name
-  - parameters
+  - experiment_id
+  - project_id
+  - created_by
   properties:
+    experiment_id:
+      type: string
+      format: uuid
+    project_id:
+      type: string
+      format: uuid
+    created_by:
+      type: string
+      format: uuid
     name:
       type: string
-    parameters:
+    params:
       type: object
       additionalProperties: true
     notes:
@@ -168,7 +205,7 @@ RunUpdate:
   properties:
     name:
       type: string
-    parameters:
+    params:
       type: object
       additionalProperties: true
     notes:
@@ -177,14 +214,14 @@ RunUpdate:
       type: object
       additionalProperties: true
     status:
-      $ref: '#/components/schemas/RunStatus'
+      $ref: '#/RunStatus'
 RunListResponse:
   type: object
   properties:
     runs:
       type: array
       items:
-        $ref: '#/components/schemas/Run'
+        $ref: '#/Run'
     total:
       type: integer
     page:
@@ -203,7 +240,7 @@ RunBatchStatusRequest:
         type: string
         format: uuid
     status:
-      $ref: '#/components/schemas/RunStatus'
+      $ref: '#/RunStatus'
 CaptureSession:
   type: object
   properties:
@@ -211,6 +248,9 @@ CaptureSession:
       type: string
       format: uuid
     run_id:
+      type: string
+      format: uuid
+    project_id:
       type: string
       format: uuid
     ordinal_number:
@@ -224,18 +264,52 @@ CaptureSession:
       format: date-time
       nullable: true
     status:
-      $ref: '#/components/schemas/CaptureSessionStatus'
+      $ref: '#/CaptureSessionStatus'
     initiated_by:
       type: string
       format: uuid
       nullable: true
     notes:
       type: string
+    archived:
+      type: boolean
+    created_at:
+      type: string
+      format: date-time
+    updated_at:
+      type: string
+      format: date-time
 CaptureSessionCreate:
   type: object
+  required:
+  - project_id
+  - run_id
+  - ordinal_number
   properties:
+    project_id:
+      type: string
+      format: uuid
+    run_id:
+      type: string
+      format: uuid
+    ordinal_number:
+      type: integer
+    status:
+      $ref: '#/CaptureSessionStatus'
+      default: draft
+    initiated_by:
+      type: string
+      format: uuid
     notes:
       type: string
+    started_at:
+      type: string
+      format: date-time
+    stopped_at:
+      type: string
+      format: date-time
+    archived:
+      type: boolean
 MetricIngestRequest:
   type: object
   required:
@@ -377,11 +451,31 @@ SensorCreate:
       type: string
 SensorRegisterRequest:
   allOf:
-    - $ref: '#/components/schemas/SensorCreate'
+    - $ref: '#/SensorCreate'
     - type: object
       properties:
         conversion_profile:
-          $ref: '#/components/schemas/ConversionProfileInput'
+          $ref: '#/ConversionProfileInput'
+SensorListResponse:
+  type: object
+  properties:
+    sensors:
+      type: array
+      items:
+        $ref: '#/Sensor'
+    total:
+      type: integer
+    page:
+      type: integer
+    page_size:
+      type: integer
+SensorTokenResponse:
+  type: object
+  properties:
+    sensor:
+      $ref: '#/Sensor'
+    token:
+      type: string
 ConversionProfile:
   type: object
   properties:
@@ -444,12 +538,12 @@ ConversionProfileInput:
       format: date-time
       nullable: true
 ConversionProfileCreate:
-  $ref: '#/components/schemas/ConversionProfileInput'
+  $ref: '#/ConversionProfileInput'
 SensorTokenResponse:
   type: object
   properties:
     sensor:
-      $ref: '#/components/schemas/Sensor'
+      $ref: '#/Sensor'
     token:
       type: string
 SensorListResponse:
@@ -458,7 +552,7 @@ SensorListResponse:
     sensors:
       type: array
       items:
-        $ref: '#/components/schemas/Sensor'
+        $ref: '#/Sensor'
     total:
       type: integer
     page:
@@ -471,7 +565,7 @@ ConversionProfileListResponse:
     conversion_profiles:
       type: array
       items:
-        $ref: '#/components/schemas/ConversionProfile'
+        $ref: '#/ConversionProfile'
     total:
       type: integer
     page:
@@ -482,7 +576,7 @@ TelemetryIngestRequest:
   type: object
   required:
   - sensor_id
-  - records
+  - readings
   properties:
     sensor_id:
       type: string
@@ -495,7 +589,7 @@ TelemetryIngestRequest:
       type: string
       format: uuid
       nullable: true
-    records:
+    readings:
       type: array
       items:
         type: object
@@ -508,6 +602,9 @@ TelemetryIngestRequest:
             format: date-time
           raw_value:
             type: number
-          metadata:
+          physical_value:
+            type: number
+            nullable: true
+          meta:
             type: object
             additionalProperties: true
