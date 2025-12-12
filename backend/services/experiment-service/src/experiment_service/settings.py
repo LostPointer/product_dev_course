@@ -40,8 +40,12 @@ class Settings(BaseSettings):
     def parse_cors_origins(cls, v: str | list[str]) -> list[str]:
         """Parse CORS origins from comma-separated string or list."""
         if isinstance(v, str):
+            if not v.strip():
+                return ["http://localhost:3000", "http://localhost:8080"]
             return [origin.strip() for origin in v.split(",") if origin.strip()]
-        return v
+        if isinstance(v, list):
+            return v
+        return ["http://localhost:3000", "http://localhost:8080"]
 
 
 @lru_cache
