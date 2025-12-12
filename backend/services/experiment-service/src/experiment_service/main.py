@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from aiohttp import web
-from aiohttp_cors import setup as cors_setup, ResourceOptions
+from aiohttp_cors import setup as cors_setup, ResourceOptions  # type: ignore[import-untyped]
 
 from experiment_service.api.router import setup_routes
 from experiment_service.db.pool import close_pool, init_pool
