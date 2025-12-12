@@ -138,7 +138,9 @@
 
 | Файл | Путь | Описание |
 |------|------|----------|
-| experiment-service | `backend/services/experiment-service/docker-compose.yml` | Локальный compose только для experiment-service + PostgreSQL |
+| Основной | `docker-compose.yml` | Единый compose для всех сервисов |
+| Override (dev) | `docker-compose.override.yml.example` | Пример для dev режима с hot-reload |
+| Локальный | `backend/services/experiment-service/docker-compose.yml` | Устаревший, использовать основной |
 
 ## Переменные окружения
 
