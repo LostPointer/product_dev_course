@@ -36,13 +36,14 @@
 ### 3. Experiment Portal (Frontend)
 - **Путь:** `frontend/apps/experiment-portal/`
 - **Технологии:** React 18, TypeScript, Vite, Nginx (production)
-- **Порт:** 80 (в production), 3000 (dev)
+- **Порт:** 3000 (dev режим с Vite), 80 (production с Nginx)
 - **Dockerfile:** ✅ Есть (`frontend/apps/experiment-portal/Dockerfile`)
-- **docker-compose.yml:** ❌ Нет
+- **docker-compose.yml:** ✅ Есть (в корне проекта)
 - **env.example:** ❌ Нет (использует переменные Vite)
 - **Зависимости:**
   - Auth Proxy или Experiment Service (для API запросов)
 - **Статус:** ✅ Реализован, готов к запуску
+- **Примечание:** Для доступа извне контейнера в `vite.config.ts` настроен `host: '0.0.0.0'`
 
 ## Отсутствующие сервисы (упоминаются в документации)
 
@@ -137,7 +138,9 @@
 
 | Файл | Путь | Описание |
 |------|------|----------|
-| experiment-service | `backend/services/experiment-service/docker-compose.yml` | Локальный compose только для experiment-service + PostgreSQL |
+| Основной | `docker-compose.yml` | Единый compose для всех сервисов |
+| Override (dev) | `docker-compose.override.yml.example` | Пример для dev режима с hot-reload |
+| Локальный | `backend/services/experiment-service/docker-compose.yml` | Устаревший, использовать основной |
 
 ## Переменные окружения
 
