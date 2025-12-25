@@ -4,7 +4,7 @@
 
 ## 1. Подготовка окружения
 
-1. `docker-compose up -d` из `backend/services/experiment-service` (API + PostgreSQL).
+1. `docker-compose up -d` из `projects/backend/services/experiment-service` (API + PostgreSQL).
 2. `poetry run python bin/migrate.py --database-url <dsn>` — применить миграции.
 3. `poetry run python bin/demo_seed.py` — создать `demo_project`, базовые эксперименты, датчики и тестовые токены.
 4. Сохранить `project_id`, `owner_user_id`, выданные токены (`token_preview` виден в БД, полный токен выводится только при seed).
@@ -92,7 +92,7 @@ curl -X POST http://localhost:8002/api/v1/runs/<run_id>/metrics \
 
 ## 6. Визуальный walkthrough
 
-- В `frontend/apps/experiment-portal`:
+- В `projects/frontend/apps/experiment-portal`:
   - Открыть список экспериментов, найти `demo_project`.
   - Зайти в run → переключиться между capture session, показать графики (при реализации WebSocket — лайв-график).
   - Показать журнал событий (capture start/stop, ingest, метрики).

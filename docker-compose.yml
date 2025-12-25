@@ -37,7 +37,7 @@ services:
   # Experiment Service - Backend API
   experiment-service:
     build:
-      context: ./backend/services/experiment-service
+      context: ./projects/backend/services/experiment-service
       dockerfile: Dockerfile
     container_name: experiment-service
     env_file:
@@ -70,7 +70,7 @@ services:
   # Auth Proxy - BFF для фронтенда
   auth-proxy:
     build:
-      context: ./frontend/apps/auth-proxy
+      context: ./projects/frontend/apps/auth-proxy
       dockerfile: Dockerfile
       target: production
     container_name: auth-proxy
@@ -110,7 +110,7 @@ services:
   # Experiment Portal - Frontend SPA
   experiment-portal:
     build:
-      context: ./frontend/apps/experiment-portal
+      context: ./projects/frontend/apps/experiment-portal
       dockerfile: Dockerfile
       target: production
     container_name: experiment-portal

@@ -56,7 +56,7 @@ docker-compose up
 **Инструмент:** `watchfiles` (настроен в `docker-compose.override.yml`)
 
 **Как работает:**
-1. Исходный код монтируется через volume из `./backend/services/experiment-service/src`
+1. Исходный код монтируется через volume из `./projects/backend/services/experiment-service/src`
 2. `watchfiles` отслеживает изменения `.py` файлов в `./src`
 3. При изменении автоматически перезапускается процесс `python -m experiment_service.main`
 
@@ -66,7 +66,7 @@ watchfiles 'python -m experiment_service.main' ./src
 ```
 
 **Проверка работы:**
-1. Откройте файл `backend/services/experiment-service/src/experiment_service/main.py`
+1. Откройте файл `projects/backend/services/experiment-service/src/experiment_service/main.py`
 2. Внесите изменение (например, добавьте комментарий)
 3. Сохраните файл
 4. В логах `docker-compose logs -f experiment-service` должно появиться сообщение о перезапуске
@@ -76,7 +76,7 @@ watchfiles 'python -m experiment_service.main' ./src
 **Инструмент:** `ts-node-dev`
 
 **Как работает:**
-1. Исходный код монтируется через volume из `./frontend/apps/auth-proxy/src`
+1. Исходный код монтируется через volume из `./projects/frontend/apps/auth-proxy/src`
 2. `ts-node-dev` компилирует TypeScript на лету и отслеживает изменения
 3. При изменении автоматически перезапускает процесс
 
@@ -86,7 +86,7 @@ npm run dev  # выполняет: ts-node-dev --respawn --transpile-only src/in
 ```
 
 **Проверка работы:**
-1. Откройте файл `frontend/apps/auth-proxy/src/index.ts`
+1. Откройте файл `projects/frontend/apps/auth-proxy/src/index.ts`
 2. Внесите изменение
 3. Сохраните файл
 4. В логах должно появиться сообщение о перезапуске
@@ -107,7 +107,7 @@ npm run dev  # выполняет: vite
 
 **Проверка работы:**
 1. Откройте браузер на `http://localhost:3000`
-2. Откройте файл компонента, например `frontend/apps/experiment-portal/src/pages/ExperimentsList.tsx`
+2. Откройте файл компонента, например `projects/frontend/apps/experiment-portal/src/pages/ExperimentsList.tsx`
 3. Внесите изменение (например, измените текст)
 4. Сохраните файл
 5. Изменения должны появиться в браузере без перезагрузки страницы
@@ -152,7 +152,7 @@ npm run dev  # выполняет: vite
 services:
   experiment-service:
     volumes:
-      - ./backend/services/experiment-service/src:/app/src:ro
+      - ./projects/backend/services/experiment-service/src:/app/src:ro
     command: watchfiles 'python -m experiment_service.main' --filter python ./src
 ```
 
@@ -205,7 +205,7 @@ services:
 1. Проверьте правильность путей в volumes:
    ```yaml
    volumes:
-     - ./backend/services/experiment-service/src:/app/src  # правильный путь
+     - ./projects/backend/services/experiment-service/src:/app/src  # правильный путь
      # НЕ: - ./src:/app/src  (относительно compose файла)
    ```
 2. Убедитесь, что файлы сохранены на диске
@@ -240,11 +240,11 @@ services:
 2. Проверьте, что все зависимости установлены:
    ```bash
    # Для Python
-   cd backend/services/experiment-service
+   cd projects/backend/services/experiment-service
    poetry install
 
    # Для Node.js
-   cd frontend/apps/auth-proxy
+   cd projects/frontend/apps/auth-proxy
    npm install
    ```
 3. Проверьте версии в Dockerfile (Node.js, Python)

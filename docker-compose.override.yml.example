@@ -18,7 +18,7 @@ services:
   experiment-service:
     # Монтируем исходный код для hot-reload
     volumes:
-      - ./backend/services/experiment-service/src:/app/src:ro
+      - ./projects/backend/services/experiment-service/src:/app/src:ro
       # Исключаем кэш Python для избежания конфликтов
       - /app/src/__pycache__
     # Используем watchfiles для автоматической перезагрузки при изменении кода
@@ -41,13 +41,13 @@ services:
   auth-proxy:
     # Используем development stage из Dockerfile
     build:
-      context: ./frontend/apps/auth-proxy
+      context: ./projects/frontend/apps/auth-proxy
       dockerfile: Dockerfile
       target: development
     # Монтируем исходный код для hot-reload
     volumes:
-      - ./frontend/apps/auth-proxy/src:/app/src
-      - ./frontend/apps/auth-proxy/tsconfig.json:/app/tsconfig.json
+      - ./projects/frontend/apps/auth-proxy/src:/app/src
+      - ./projects/frontend/apps/auth-proxy/tsconfig.json:/app/tsconfig.json
       # Исключаем node_modules и dist для избежания конфликтов
       - /app/node_modules
       - /app/dist
@@ -62,16 +62,16 @@ services:
   experiment-portal:
     # Используем development stage из Dockerfile
     build:
-      context: ./frontend/apps/experiment-portal
+      context: ./projects/frontend/apps/experiment-portal
       dockerfile: Dockerfile
       target: development
     # Монтируем исходный код для hot-reload
     volumes:
-      - ./frontend/apps/experiment-portal/src:/app/src
-      - ./frontend/apps/experiment-portal/index.html:/app/index.html
-      - ./frontend/apps/experiment-portal/vite.config.ts:/app/vite.config.ts
-      - ./frontend/apps/experiment-portal/tsconfig.json:/app/tsconfig.json
-      - ./frontend/apps/experiment-portal/tsconfig.node.json:/app/tsconfig.node.json
+      - ./projects/frontend/apps/experiment-portal/src:/app/src
+      - ./projects/frontend/apps/experiment-portal/index.html:/app/index.html
+      - ./projects/frontend/apps/experiment-portal/vite.config.ts:/app/vite.config.ts
+      - ./projects/frontend/apps/experiment-portal/tsconfig.json:/app/tsconfig.json
+      - ./projects/frontend/apps/experiment-portal/tsconfig.node.json:/app/tsconfig.node.json
       # Исключаем node_modules и dist
       - /app/node_modules
       - /app/dist

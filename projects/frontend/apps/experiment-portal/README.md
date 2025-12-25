@@ -66,7 +66,7 @@ VITE_API_URL=http://localhost:8002
 ## Структура проекта
 
 ```
-frontend/
+experiment-portal/
 ├── src/
 │   ├── api/           # API клиент
 │   ├── components/     # Переиспользуемые компоненты

@@ -24,10 +24,10 @@ jobs:
         run: pipx install poetry==${{ env.POETRY_VERSION }}
 
       - name: Install backend dependencies
-        working-directory: backend/services/experiment-service
+        working-directory: projects/backend/services/experiment-service
         run: poetry install --no-interaction --no-root
 
       - name: Run mypy
-        working-directory: backend/services/experiment-service
+        working-directory: projects/backend/services/experiment-service
         run: poetry run mypy src
 

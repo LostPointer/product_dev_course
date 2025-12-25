@@ -2,8 +2,8 @@
 .PHONY: logs logs-follow logs-service logs-proxy logs-errors
 .PHONY: logs-stack logs-stack-up logs-stack-down logs-stack-restart
 
-BACKEND_DIR := backend/services/experiment-service
-FRONTEND_DIR := frontend/apps/experiment-portal
+BACKEND_DIR := projects/backend/services/experiment-service
+FRONTEND_DIR := projects/frontend/apps/experiment-portal
 OPENAPI_SPEC := openapi/openapi.yaml
 
 test: type-check test-backend test-frontend

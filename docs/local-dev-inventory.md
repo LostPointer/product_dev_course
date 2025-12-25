@@ -8,10 +8,10 @@
 ## Реализованные сервисы
 
 ### 1. Experiment Service (Backend)
-- **Путь:** `backend/services/experiment-service/`
+- **Путь:** `projects/backend/services/experiment-service/`
 - **Технологии:** Python 3.11, aiohttp 3.10, asyncpg 0.29, PostgreSQL
 - **Порт:** 8002
-- **Dockerfile:** ✅ Есть (`backend/services/experiment-service/Dockerfile`)
+- **Dockerfile:** ✅ Есть (`projects/backend/services/experiment-service/Dockerfile`)
 - **docker-compose.yml:** ✅ Есть (локальный, только для experiment-service)
 - **env.example:** ✅ Есть
 - **Зависимости:**
@@ -22,10 +22,10 @@
 - **Статус:** ✅ Полностью реализован и готов к запуску
 
 ### 2. Auth Proxy (Frontend BFF)
-- **Путь:** `frontend/apps/auth-proxy/`
+- **Путь:** `projects/frontend/apps/auth-proxy/`
 - **Технологии:** Node.js 20, TypeScript, Fastify
 - **Порт:** 8080
-- **Dockerfile:** ✅ Есть (`frontend/apps/auth-proxy/Dockerfile`)
+- **Dockerfile:** ✅ Есть (`projects/frontend/apps/auth-proxy/Dockerfile`)
 - **docker-compose.yml:** ❌ Нет
 - **env.example:** ✅ Есть
 - **Зависимости:**
@@ -34,10 +34,10 @@
 - **Статус:** ✅ Реализован, но требует Auth Service для полной функциональности
 
 ### 3. Experiment Portal (Frontend)
-- **Путь:** `frontend/apps/experiment-portal/`
+- **Путь:** `projects/frontend/apps/experiment-portal/`
 - **Технологии:** React 18, TypeScript, Vite, Nginx (production)
 - **Порт:** 3000 (dev режим с Vite), 80 (production с Nginx)
-- **Dockerfile:** ✅ Есть (`frontend/apps/experiment-portal/Dockerfile`)
+- **Dockerfile:** ✅ Есть (`projects/frontend/apps/experiment-portal/Dockerfile`)
 - **docker-compose.yml:** ✅ Есть (в корне проекта)
 - **env.example:** ❌ Нет (использует переменные Vite)
 - **Зависимости:**
@@ -87,7 +87,7 @@
 - **Порт:** 5432
 - **База данных:** `experiment_db`
 - **Статус:** ✅ Используется, есть в docker-compose.yml experiment-service
-- **Миграции:** ✅ Есть (`backend/services/experiment-service/migrations/`)
+- **Миграции:** ✅ Есть (`projects/backend/services/experiment-service/migrations/`)
 
 ### RabbitMQ
 - **Упоминается в:** `env.example`, `settings.py`
@@ -130,9 +130,9 @@
 
 | Сервис | Путь к Dockerfile | Статус |
 |--------|-------------------|--------|
-| Experiment Service | `backend/services/experiment-service/Dockerfile` | ✅ Готов |
-| Auth Proxy | `frontend/apps/auth-proxy/Dockerfile` | ✅ Готов |
-| Experiment Portal | `frontend/apps/experiment-portal/Dockerfile` | ✅ Готов |
+| Experiment Service | `projects/backend/services/experiment-service/Dockerfile` | ✅ Готов |
+| Auth Proxy | `projects/frontend/apps/auth-proxy/Dockerfile` | ✅ Готов |
+| Experiment Portal | `projects/frontend/apps/experiment-portal/Dockerfile` | ✅ Готов |
 
 ## Текущие docker-compose файлы
 
@@ -140,12 +140,12 @@
 |------|------|----------|
 | Основной | `docker-compose.yml` | Единый compose для всех сервисов |
 | Override (dev) | `docker-compose.override.yml.example` | Пример для dev режима с hot-reload |
-| Локальный | `backend/services/experiment-service/docker-compose.yml` | Устаревший, использовать основной |
+| Локальный | `projects/backend/services/experiment-service/docker-compose.yml` | Устаревший, использовать основной |
 
 ## Переменные окружения
 
 ### Experiment Service
-- Файл: `backend/services/experiment-service/env.example`
+- Файл: `projects/backend/services/experiment-service/env.example`
 - Основные переменные:
   - `DATABASE_URL` - подключение к PostgreSQL
   - `AUTH_SERVICE_URL` - URL Auth Service (опционально)
@@ -153,7 +153,7 @@
   - `TELEMETRY_BROKER_URL` - URL Redis (не используется активно)
 
 ### Auth Proxy
-- Файл: `frontend/apps/auth-proxy/env.example`
+- Файл: `projects/frontend/apps/auth-proxy/env.example`
 - Основные переменные:
   - `TARGET_EXPERIMENT_URL` - URL Experiment Service
   - `AUTH_URL` - URL Auth Service

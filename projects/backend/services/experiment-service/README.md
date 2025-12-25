@@ -28,7 +28,7 @@
 ## Быстрый старт
 
 ```bash
-cd backend/services/experiment-service
+cd projects/backend/services/experiment-service
 poetry install
 cp .env.example .env
 # локальный запуск (ожидает PostgreSQL по settings.database_url)

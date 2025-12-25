@@ -44,16 +44,19 @@ product_dev_course/
 ├── course-materials/           # Материалы курса
 │   ├── semester-1/
 │   └── semester-2/
-├── backend/
-│   ├── common/                 # Общие компоненты и DTO
-│   ├── libs/                   # Внутренние библиотеки/SDK
-│   └── services/               # Микросервисы платформы
-│       └── experiment-service/
-├── frontend/
-│   ├── common/                 # Общие UI-компоненты и токены
-│   ├── libs/                   # Фронтенд библиотеки
-│   └── apps/                   # SPA/виджеты
-│       └── experiment-portal/
+├── projects/
+│   ├── backend/
+│   │   ├── common/             # Общие компоненты и DTO
+│   │   ├── libs/               # Внутренние библиотеки/SDK
+│   │   └── services/           # Микросервисы платформы
+│   │       └── experiment-service/
+│   ├── frontend/
+│   │   ├── common/             # Общие UI-компоненты и токены
+│   │   ├── libs/               # Фронтенд библиотеки
+│   │   └── apps/               # SPA/виджеты
+│   │       └── experiment-portal/
+│   ├── telemetry_cli/          # CLI для отправки телеметрии в Experiment Service
+│   └── rc_vehicle/             # Документация и материалы по RC-модели
 ├── docs/                       # Документация
 ├── examples/                   # Примеры кода с занятий
 └── README.md

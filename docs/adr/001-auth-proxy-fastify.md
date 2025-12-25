@@ -42,7 +42,7 @@
 ## Docker Compose (набросок сервиса)
 ```yaml
   auth-proxy:
-    build: ./frontend/apps/auth-proxy
+    build: ./projects/frontend/apps/auth-proxy
     ports:
       - "8080:8080"
     environment:

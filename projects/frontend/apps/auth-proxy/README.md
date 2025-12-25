@@ -12,7 +12,7 @@
 
 ## Запуск локально
 ```bash
-cd frontend/apps/auth-proxy
+cd projects/frontend/apps/auth-proxy
 npm install
 cp env.example .env
 npm run dev

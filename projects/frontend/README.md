@@ -1,9 +1,9 @@
 # Frontend Workspace
 
-Каталог `frontend/` зеркалирует структуру `backend/`:
+Каталог `projects/frontend/` зеркалирует структуру `projects/backend/`:
 
 ```
-frontend/
+projects/frontend/
 ├── common/      # Общие UI-компоненты, стили, дизайн-токены
 ├── libs/        # Шаримые библиотеки/SDK для фронтенда
 └── apps/        # Конкретные фронтенд-приложения
