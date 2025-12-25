@@ -38,6 +38,8 @@ poetry run python -m experiment_service.main
 poetry run pytest
 ```
 
+Примечание: на Python 3.14 часть DeprecationWarning идёт из `pytest-asyncio` (не из нашего кода) и подавляется через `filterwarnings` в `pyproject.toml`. Убрать фильтры можно будет после обновления `pytest-asyncio`.
+
 ## Работа с миграциями
 
 Все изменения схемы находятся в `migrations/*.sql`. Применение/проверка:

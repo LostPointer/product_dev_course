@@ -43,6 +43,13 @@ asyncio_mode = "auto"
 addopts = "-p testsuite.pytest_plugin"
 testpaths = ["tests"]
 pythonpath = ["src"]
+filterwarnings = [
+    # Python 3.14+: pytest-asyncio currently triggers deprecated asyncio APIs in its plugin.
+    # These are not actionable in our codebase; suppress to keep test output readable.
+    # TODO: remove these filters after upgrading pytest-asyncio to a version compatible with Python 3.14+.
+    "ignore:'asyncio\\.iscoroutinefunction' is deprecated.*:DeprecationWarning:pytest_asyncio\\.plugin",
+    "ignore:'asyncio\\.get_event_loop_policy' is deprecated.*:DeprecationWarning:pytest_asyncio\\.plugin",
+]
 
 [tool.mypy]
 python_version = "3.14"
