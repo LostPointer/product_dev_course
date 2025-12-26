@@ -4,9 +4,11 @@
 .PHONY: logs-stack logs-stack-up logs-stack-down logs-stack-restart
 .PHONY: dev dev-up dev-down dev-restart dev-logs dev-fix grafana-reset-password
 
-BACKEND_DIR := projects/backend/services/experiment-service
+BACKEND_SERVICES_DIR := projects/backend/services
 FRONTEND_DIR := projects/frontend/apps/experiment-portal
 OPENAPI_SPEC := openapi/openapi.yaml
+# Find all backend services (directories with pyproject.toml)
+BACKEND_SERVICES := $(shell find $(BACKEND_SERVICES_DIR) -maxdepth 2 -name "pyproject.toml" -type f | sed 's|/pyproject.toml||' | sort)
 # Python interpreter to use for Poetry virtualenv.
 # Override examples:
 #   make PYTHON=/path/to/python backend-install
@@ -21,28 +23,36 @@ FRONTEND_NODE_IMAGE ?= node:24-alpine
 test: type-check test-backend test-frontend
 
 backend-install:
-	@cd $(BACKEND_DIR) && \
-		PY=""; \
-		if [ -n "$(PYTHON)" ] && [ -x "$(PYTHON)" ]; then PY="$(PYTHON)"; fi; \
-		if [ -z "$$PY" ] && command -v "$(PYTHON)" >/dev/null 2>&1; then PY="$(PYTHON)"; fi; \
-		if [ -z "$$PY" ] && [ -x "$$HOME/.pyenv/shims/python3.14" ]; then PY="$$HOME/.pyenv/shims/python3.14"; fi; \
-		if [ -z "$$PY" ] && command -v python3.14 >/dev/null 2>&1; then PY="python3.14"; fi; \
-		if [ -z "$$PY" ] && command -v python3 >/dev/null 2>&1; then PY="python3"; fi; \
-		if [ -z "$$PY" ] && command -v python >/dev/null 2>&1; then PY="python"; fi; \
-		if [ -z "$$PY" ]; then \
-			echo "❌ Не найден Python интерпретатор (пробовал: $$PYTHON, python3.14, python3, python)."; \
-			echo "   Этот репозиторий требует Python 3.14+."; \
-			echo "   Установите Python 3.14 (например через pyenv) и повторите, или укажите путь: make PYTHON=/path/to/python backend-install"; \
-			exit 1; \
-		fi; \
-		if ! "$$PY" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 14) else 1)' >/dev/null 2>&1; then \
-			echo "❌ Найден Python, но версия < 3.14: $$($$PY -V 2>&1)"; \
-			echo "   Этот репозиторий требует Python 3.14+."; \
-			echo "   Установите Python 3.14 (например через pyenv) и повторите, или укажите путь: make PYTHON=/path/to/python3.14 backend-install"; \
-			exit 1; \
-		fi; \
-		poetry env use "$$PY" >/dev/null && \
-		poetry install --with dev
+	@if [ -z "$(BACKEND_SERVICES)" ]; then \
+		echo "⚠️  Не найдено ни одного backend сервиса в $(BACKEND_SERVICES_DIR)"; \
+		exit 1; \
+	fi; \
+	for service in $(BACKEND_SERVICES); do \
+		echo "📦 Installing dependencies for $$(basename $$service)..."; \
+		cd $$service && \
+			PY=""; \
+			if [ -n "$(PYTHON)" ] && [ -x "$(PYTHON)" ]; then PY="$(PYTHON)"; fi; \
+			if [ -z "$$PY" ] && command -v "$(PYTHON)" >/dev/null 2>&1; then PY="$(PYTHON)"; fi; \
+			if [ -z "$$PY" ] && [ -x "$$HOME/.pyenv/shims/python3.14" ]; then PY="$$HOME/.pyenv/shims/python3.14"; fi; \
+			if [ -z "$$PY" ] && command -v python3.14 >/dev/null 2>&1; then PY="python3.14"; fi; \
+			if [ -z "$$PY" ] && command -v python3 >/dev/null 2>&1; then PY="python3"; fi; \
+			if [ -z "$$PY" ] && command -v python >/dev/null 2>&1; then PY="python"; fi; \
+			if [ -z "$$PY" ]; then \
+				echo "❌ Не найден Python интерпретатор (пробовал: $(PYTHON), python3.14, python3, python)."; \
+				echo "   Этот репозиторий требует Python 3.14+."; \
+				echo "   Установите Python 3.14 (например через pyenv) и повторите, или укажите путь: make PYTHON=/path/to/python backend-install"; \
+				exit 1; \
+			fi; \
+			if ! "$$PY" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 14) else 1)' >/dev/null 2>&1; then \
+				echo "❌ Найден Python, но версия < 3.14: $$($$PY -V 2>&1)"; \
+				echo "   Этот репозиторий требует Python 3.14+."; \
+				echo "   Установите Python 3.14 (например через pyenv) и повторите, или укажите путь: make PYTHON=/path/to/python3.14 backend-install"; \
+				exit 1; \
+			fi; \
+			poetry env use "$$PY" >/dev/null && \
+			poetry install --with dev || exit 1; \
+		cd - > /dev/null; \
+	done
 
 frontend-install:
 	@cd $(FRONTEND_DIR) && \
@@ -73,10 +83,28 @@ frontend-install:
 		npm ci --no-audit --no-fund --loglevel=error
 
 type-check: backend-install
-	@cd $(BACKEND_DIR) && poetry run mypy src
+	@if [ -z "$(BACKEND_SERVICES)" ]; then \
+		echo "⚠️  Не найдено ни одного backend сервиса в $(BACKEND_SERVICES_DIR)"; \
+		exit 1; \
+	fi; \
+	failed=0; \
+	for service in $(BACKEND_SERVICES); do \
+		echo "🔍 Type checking $$(basename $$service)..."; \
+		(cd $$service && poetry run mypy src) || failed=1; \
+	done; \
+	exit $$failed
 
 test-backend: backend-install
-	@cd $(BACKEND_DIR) && poetry run pytest
+	@if [ -z "$(BACKEND_SERVICES)" ]; then \
+		echo "⚠️  Не найдено ни одного backend сервиса в $(BACKEND_SERVICES_DIR)"; \
+		exit 1; \
+	fi; \
+	failed=0; \
+	for service in $(BACKEND_SERVICES); do \
+		echo "🧪 Running tests for $$(basename $$service)..."; \
+		(cd $$service && poetry run pytest) || failed=1; \
+	done; \
+	exit $$failed
 
 test-frontend: frontend-install
 	@cd $(FRONTEND_DIR) && \

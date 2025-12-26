@@ -96,7 +96,7 @@ class ProjectRepository(BaseRepository):
         if not updates:
             return await self.get_by_id_or_raise(project_id)
 
-        params.append(project_id)
+        params.append(str(project_id))
         query = f"""
             UPDATE projects
             SET {', '.join(updates)}, updated_at = now()
