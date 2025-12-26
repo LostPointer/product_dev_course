@@ -179,6 +179,7 @@ files = [
 
 [package.dependencies]
 frozenlist = ">=1.1.0"
+typing-extensions = {version = ">=4.2", markers = "python_version < \"3.13\""}
 
 [[package]]
 name = "annotated-types"
@@ -204,6 +205,7 @@ files = [
 
 [package.dependencies]
 idna = ">=2.8"
+typing_extensions = {version = ">=4.5", markers = "python_version < \"3.13\""}
 
 [package.extras]
 trio = ["trio (>=0.31.0)", "trio (>=0.32.0)"]
@@ -293,7 +295,7 @@ name = "backend-common"
 version = "0.1.0"
 description = "Common code shared between backend services"
 optional = false
-python-versions = "^3.14"
+python-versions = "^3.12"
 files = []
 develop = true
 
@@ -2028,5 +2030,5 @@ propcache = ">=0.2.1"
 
 [metadata]
 lock-version = "2.0"
-python-versions = "^3.14"
-content-hash = "14dab8dec58c7b4b5251184cc9e99c57d06c8f599efcb1d542317b90f0ef3f99"
+python-versions = "^3.12"
+content-hash = "d52e3b8f3127455585a0525e76d2166ba12a57d709b7f4fb883b095ed78dcc1c"
