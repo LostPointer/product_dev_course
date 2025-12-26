@@ -22,15 +22,17 @@ RUN pip install --upgrade pip \
     && pip install poetry \
     && poetry config virtualenvs.create false
 
-# Copy dependency files first (for better layer caching)
-COPY pyproject.toml README.md ./
+# Copy backend_common directory first (needed for backend-common dependency)
+COPY common ./common
+# Copy dependency files (for better layer caching)
+COPY services/experiment-service/pyproject.toml services/experiment-service/README.md ./
 
 # Install dependencies (including dev dependencies for hot-reload support)
 # In production, this can be optimized by using --no-dev flag
 RUN poetry install --no-root
 
 # Copy source code
-COPY src ./src
+COPY services/experiment-service/src ./src
 
 # Set PYTHONPATH to include src directory
 ENV PYTHONPATH=/app/src

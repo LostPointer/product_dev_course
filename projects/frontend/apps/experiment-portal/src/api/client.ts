@@ -41,6 +41,7 @@ const apiClient = axios.create({
     'Content-Type': 'application/json',
   },
   withCredentials: true, // Важно для работы с HttpOnly куками
+  timeout: 30000, // 30 секунд таймаут
 })
 
 // Interceptor для добавления trace_id и request_id в заголовки
@@ -74,8 +75,29 @@ apiClient.interceptors.request.use(
 
 // Обработка ошибок и автоматическое обновление токена
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Логирование успешных ответов
+    console.log('API response SUCCESS:', {
+      url: response.config.url,
+      method: response.config.method?.toUpperCase(),
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+      data: response.data,
+    })
+    return response
+  },
   async (error) => {
+    // Логирование ошибок
+    console.error('API response ERROR:', {
+      url: error.config?.url,
+      method: error.config?.method?.toUpperCase(),
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      message: error.message,
+      code: error.code,
+    })
     const originalRequest = error.config
     const traceId = error.config?.headers?.['X-Trace-Id'] as string | undefined
     const requestId = error.config?.headers?.['X-Request-Id'] as string | undefined

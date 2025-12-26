@@ -244,6 +244,21 @@ async function buildServer(config: Config) {
         request.log.info(logData, 'Request completed')
     })
 
+    // Логирование ответов от проксированных запросов через отдельный hook
+    // Это нужно, так как onResponse в http-proxy может блокировать ответ
+    app.addHook('onSend', async (request, reply) => {
+        // Логируем только проксированные запросы (не /health и не /auth/*)
+        if (request.url.startsWith('/projects') || request.url.startsWith('/api/')) {
+            const { traceId } = getTraceContext(request as FastifyRequest)
+            app.log.debug({
+                method: request.method,
+                url: request.url,
+                status_code: reply.statusCode,
+                trace_id: traceId,
+            }, 'Sending response to client')
+        }
+    })
+
     // Hook для логирования ошибок прокси
     app.addHook('onError', async (request, reply, error) => {
         request.log.error({
@@ -444,6 +459,19 @@ async function buildServer(config: Config) {
                 // Генерируем новый request_id для каждого исходящего запроса
                 const outgoingHeaders = getOutgoingRequestHeaders(traceId)
 
+                // Логируем входящий запрос к прокси
+                // Используем app.log, так как в rewriteRequestHeaders нет прямого доступа к request.log
+                const isStateChanging = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method || '')
+                app.log.info({
+                    method: req.method,
+                    url: req.url,
+                    upstream: config.authUrl,
+                    has_auth_token: !!access,
+                    is_state_changing: isStateChanging,
+                    trace_id: outgoingHeaders['X-Trace-Id'],
+                    request_id: outgoingHeaders['X-Request-Id'],
+                }, 'Proxying request to Auth Service')
+
                 // Создаем новый объект заголовков, фильтруя массивы
                 const newHeaders: Record<string, string> = {}
 
@@ -471,8 +499,29 @@ async function buildServer(config: Config) {
                     newHeaders['authorization'] = `Bearer ${access}`
                 }
 
+                // Логируем заголовки, которые отправляются (без чувствительных данных)
+                app.log.debug({
+                    method: req.method,
+                    url: req.url,
+                    headers_sent: Object.keys(newHeaders).filter(h => h.toLowerCase() !== 'authorization'),
+                    has_authorization: !!newHeaders['authorization'],
+                    content_type: newHeaders['content-type'] || undefined,
+                }, 'Request headers prepared for Auth Service')
+
                 return newHeaders
             },
+            // Временно убираем onResponse hook для диагностики проблемы с зависанием
+            // onResponse: (request, reply, res) => {
+            //     const fastifyReq = request as FastifyRequest
+            //     const statusCode = reply.statusCode || res.statusCode
+            //     const logger = (fastifyReq.log || app.log) as typeof app.log
+            //     logger.info({
+            //         method: request.method,
+            //         url: request.url,
+            //         status_code: statusCode,
+            //         upstream: config.authUrl,
+            //     }, 'Response received from Auth Service')
+            // },
         },
     })
 
@@ -491,6 +540,29 @@ async function buildServer(config: Config) {
                 const traceId = normalizeUUID(req.headers['x-trace-id'] as string) || generateUUID()
                 // Генерируем новый request_id для каждого исходящего запроса
                 const outgoingHeaders = getOutgoingRequestHeaders(traceId)
+
+                // Извлекаем project_id из запроса (query параметры или body)
+                let projectId = extractProjectId(req as FastifyRequest)
+
+                // Если не нашли в query, пытаемся извлечь из body (для POST/PUT/PATCH)
+                if (!projectId) {
+                    const bodyProjectId = (req as any).bodyProjectId
+                    if (bodyProjectId && typeof bodyProjectId === 'string') {
+                        projectId = bodyProjectId
+                    }
+                }
+
+                // Логируем входящий запрос к прокси
+                app.log.info({
+                    method: req.method,
+                    url: req.url,
+                    upstream: config.targetExperimentUrl,
+                    has_auth_token: !!access,
+                    has_project_id: !!projectId,
+                    project_id: projectId || undefined,
+                    trace_id: outgoingHeaders['X-Trace-Id'],
+                    request_id: outgoingHeaders['X-Request-Id'],
+                }, 'Proxying request to Experiment Service')
 
                 // Создаем новый объект заголовков, фильтруя массивы
                 const newHeaders: Record<string, string> = {}
@@ -520,17 +592,6 @@ async function buildServer(config: Config) {
                     }
                 }
 
-                // Извлекаем project_id из запроса (query параметры или body)
-                let projectId = extractProjectId(req as FastifyRequest)
-
-                // Если не нашли в query, пытаемся извлечь из body (для POST/PUT/PATCH)
-                if (!projectId) {
-                    const bodyProjectId = (req as any).bodyProjectId
-                    if (bodyProjectId && typeof bodyProjectId === 'string') {
-                        projectId = bodyProjectId
-                    }
-                }
-
                 // Добавляем project_id в заголовки только если он найден
                 // Если не найден, Experiment Service будет требовать его в query/body
                 if (projectId) {
@@ -539,8 +600,22 @@ async function buildServer(config: Config) {
                     newHeaders['X-Project-Role'] = 'owner'
                 }
 
+                // Логируем заголовки, которые отправляются (без чувствительных данных)
+                app.log.debug({
+                    method: req.method,
+                    url: req.url,
+                    headers_sent: Object.keys(newHeaders).filter(h =>
+                        !['authorization', 'x-user-id'].includes(h.toLowerCase())
+                    ),
+                    has_authorization: !!newHeaders['authorization'],
+                    has_user_id: !!newHeaders['X-User-Id'],
+                    has_project_id: !!newHeaders['X-Project-Id'],
+                }, 'Request headers prepared for Experiment Service')
+
                 return newHeaders
             },
+            // Не используем onResponse hook, так как он может блокировать передачу ответа клиенту
+            // Логирование ответов происходит через app.addHook('onSend')
         },
     })
 

@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { experimentsApi } from '../api/client'
+import { experimentsApi, projectsApi } from '../api/client'
 import { format } from 'date-fns'
 import {
   StatusBadge,
@@ -25,30 +25,55 @@ function ExperimentsList() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const pageSize = 20
 
+  // Загружаем список проектов для автоматического выбора первого проекта
+  const { data: projectsData } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => projectsApi.list(),
+  })
+
+  // Автоматически выбираем первый проект, если project_id не указан
+  useEffect(() => {
+    if (!projectId && projectsData?.projects && projectsData.projects.length > 0) {
+      setProjectId(projectsData.projects[0].id)
+    }
+  }, [projectId, projectsData])
+
   const { data, isLoading, error } = useQuery({
     queryKey: ['experiments', projectId, status, searchQuery, page],
     queryFn: () => {
       if (searchQuery) {
         return experimentsApi.search({
           q: searchQuery,
-          project_id: projectId || undefined,
+          project_id: projectId,
           page,
           page_size: pageSize,
         })
       }
       return experimentsApi.list({
-        project_id: projectId || undefined,
+        project_id: projectId,
         status: status || undefined,
         page,
         page_size: pageSize,
       })
     },
+    enabled: !!projectId, // Запрос выполняется только если project_id выбран
   })
 
   return (
     <div className="experiments-list">
       {isLoading && <Loading />}
-      {error && <Error message="Ошибка загрузки экспериментов" />}
+      {error && (
+        <Error
+          message={
+            error instanceof Error
+              ? error.message
+              : 'Ошибка загрузки экспериментов. Убедитесь, что выбран проект.'
+          }
+        />
+      )}
+      {!projectId && projectsData?.projects && projectsData.projects.length === 0 && (
+        <EmptyState message="У вас нет проектов. Создайте проект, чтобы начать работу с экспериментами." />
+      )}
 
       {!isLoading && !error && (
         <>
@@ -79,16 +104,21 @@ function ExperimentsList() {
                 />
               </div>
               <div className="form-group">
-                <label>Project ID</label>
-                <input
-                  type="text"
-                  placeholder="UUID проекта"
+                <label>Проект</label>
+                <select
                   value={projectId}
                   onChange={(e) => {
                     setProjectId(e.target.value)
                     setPage(1)
                   }}
-                />
+                >
+                  <option value="">Выберите проект</option>
+                  {projectsData?.projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="form-group">
                 <label>Статус</label>

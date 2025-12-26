@@ -19,16 +19,18 @@ RUN pip install --upgrade pip \
     && pip install poetry \
     && poetry config virtualenvs.create false
 
-# Copy dependency files first (for better layer caching)
-COPY pyproject.toml README.md ./
+# Copy backend_common directory first (needed for backend-common dependency)
+COPY common ./common
+# Copy dependency files (for better layer caching)
+COPY services/auth-service/pyproject.toml services/auth-service/README.md ./
 
 # Install dependencies
 RUN poetry install --no-root
 
 # Copy source code
-COPY src ./src
-COPY bin ./bin
-COPY migrations ./migrations
+COPY services/auth-service/src ./src
+COPY services/auth-service/bin ./bin
+COPY services/auth-service/migrations ./migrations
 
 # Set PYTHONPATH to include src directory
 ENV PYTHONPATH=/app/src

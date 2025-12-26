@@ -38,8 +38,8 @@ services:
   # Auth Service - сервис аутентификации
   auth-service:
     build:
-      context: ./projects/backend/services/auth-service
-      dockerfile: Dockerfile
+      context: ./projects/backend
+      dockerfile: services/auth-service/Dockerfile
     container_name: auth-service
     env_file:
       - .env
@@ -74,8 +74,8 @@ services:
   # Experiment Service - Backend API
   experiment-service:
     build:
-      context: ./projects/backend/services/experiment-service
-      dockerfile: Dockerfile
+      context: ./projects/backend
+      dockerfile: services/experiment-service/Dockerfile
     container_name: experiment-service
     env_file:
       - .env
@@ -89,6 +89,7 @@ services:
       - AUTH_SERVICE_URL=${AUTH_SERVICE_URL:-http://auth-service:8001/api/v1}
       - RABBITMQ_URL=${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672/}
       - TELEMETRY_BROKER_URL=${TELEMETRY_BROKER_URL:-redis://redis:6379/0}
+    command: ["python", "-m", "experiment_service.main"]
     ports:
       - "${EXPERIMENT_SERVICE_PORT:-8002}:8002"
     depends_on:
@@ -140,7 +141,7 @@ services:
       - experiment-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1"]
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:8080/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)}).on('error', () => process.exit(1))\" || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

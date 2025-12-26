@@ -17,7 +17,8 @@ function CreateProject() {
     const createMutation = useMutation({
         mutationFn: (data: ProjectCreate) => projectsApi.create(data),
         onSuccess: (project) => {
-            navigate(`/projects/${project.id}`)
+            // Переходим на список проектов после создания
+            navigate('/projects')
         },
         onError: (err: any) => {
             setError(err.response?.data?.error || 'Ошибка создания проекта')

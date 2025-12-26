@@ -45,7 +45,21 @@ async def list_experiments(request: web.Request):
     user = await require_current_user(request)
     service = await get_experiment_service(request)
     limit, offset = pagination_params(request)
-    project_id = resolve_project_id(user, request.rel_url.query.get("project_id"))
+
+    # project_id опционален - если не передан, используем active_project_id из заголовков
+    project_id_query = request.rel_url.query.get("project_id")
+    if project_id_query:
+        project_id = resolve_project_id(user, project_id_query)
+    elif user.active_project_id:
+        # Используем active_project_id из заголовков, если project_id не передан в query
+        ensure_project_access(user, user.active_project_id)
+        project_id = user.active_project_id
+    else:
+        # Если project_id не передан и нет active_project_id, возвращаем ошибку
+        raise web.HTTPBadRequest(
+            text="project_id is required. Provide it in query parameter (?project_id=...) or X-Project-Id header"
+        )
+
     experiments, total = await service.list_experiments(project_id, limit=limit, offset=offset)
     payload = paginated_response(
         [_experiment_response(item) for item in experiments],

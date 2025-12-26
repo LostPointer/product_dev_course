@@ -21,14 +21,28 @@ function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps) {
     const [error, setError] = useState<string | null>(null)
 
     const createMutation = useMutation({
-        mutationFn: (data: ProjectCreate) => projectsApi.create(data),
+        mutationFn: async (data: ProjectCreate) => {
+            console.log('CreateProjectModal: Starting create...', data)
+            try {
+                const result = await projectsApi.create(data)
+                console.log('CreateProjectModal: Create success:', result)
+                return result
+            } catch (err) {
+                console.error('CreateProjectModal: Create error:', err)
+                throw err
+            }
+        },
         onSuccess: (project) => {
+            console.log('CreateProjectModal: onSuccess called', project)
             queryClient.invalidateQueries({ queryKey: ['projects'] })
             onClose()
-            navigate(`/projects/${project.id}`)
+            // Переходим на список проектов после создания
+            navigate('/projects')
         },
         onError: (err: any) => {
-            setError(err.response?.data?.error || 'Ошибка создания проекта')
+            console.error('CreateProjectModal: onError called', err)
+            const errorMessage = err.response?.data?.error || err.response?.data?.message || err.message || 'Ошибка создания проекта'
+            setError(errorMessage)
         },
     })
 

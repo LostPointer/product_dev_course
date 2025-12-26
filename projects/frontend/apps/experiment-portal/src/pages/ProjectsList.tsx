@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
 import { projectsApi } from '../api/client'
 import { Loading, Error, EmptyState, PageHeader } from '../components/common'
 import CreateProjectModal from '../components/CreateProjectModal'
@@ -9,17 +8,44 @@ import './ProjectsList.css'
 
 function ProjectsList() {
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
-    const { data, isLoading, error } = useQuery({
+    const { data, isLoading, error, isError, status } = useQuery({
         queryKey: ['projects'],
-        queryFn: () => projectsApi.list(),
+        queryFn: async () => {
+            console.log('ProjectsList: Starting fetch...')
+            try {
+                const result = await projectsApi.list()
+                console.log('ProjectsList: Fetch success:', result)
+                return result
+            } catch (err) {
+                console.error('ProjectsList: Fetch error:', err)
+                throw err
+            }
+        },
+        retry: 1,
+        refetchOnWindowFocus: false,
+        staleTime: 0, // Не кешировать данные
     })
+
+    // Отладочная информация
+    console.log('ProjectsList render:', { isLoading, isError, status, hasData: !!data, data })
+
+    // Показываем контент, если данные загружены
+    const showContent = !isLoading && !isError && data
 
     return (
         <div className="projects-list">
             {isLoading && <Loading />}
-            {error && <Error message="Ошибка загрузки проектов" />}
+            {isError && error && (
+                <Error
+                    message={
+                        error instanceof Error
+                            ? error.message
+                            : 'Ошибка загрузки проектов'
+                    }
+                />
+            )}
 
-            {!isLoading && !error && (
+            {showContent && data && (
                 <>
                     <PageHeader
                         title="Проекты"
@@ -33,7 +59,7 @@ function ProjectsList() {
                         }
                     />
 
-                    {data && data.projects.length === 0 ? (
+                    {data.projects.length === 0 ? (
                         <EmptyState message="У вас пока нет проектов">
                             <button
                                 className="btn btn-primary"
@@ -44,10 +70,9 @@ function ProjectsList() {
                         </EmptyState>
                     ) : (
                         <div className="projects-grid">
-                            {data?.projects.map((project) => (
-                                <Link
+                            {data.projects.map((project) => (
+                                <div
                                     key={project.id}
-                                    to={`/projects/${project.id}`}
                                     className="project-card card"
                                 >
                                     <div className="project-card-header">
@@ -61,7 +86,7 @@ function ProjectsList() {
                                             Создан: {new Date(project.created_at).toLocaleDateString('ru-RU')}
                                         </span>
                                     </div>
-                                </Link>
+                                </div>
                             ))}
                         </div>
                     )}
