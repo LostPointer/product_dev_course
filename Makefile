@@ -14,6 +14,7 @@ OPENAPI_SPEC := openapi/openapi.yaml
 # IMPORTANT: do NOT resolve to an absolute path at Makefile parse time.
 # Many setups (pyenv, asdf) expose Python via shims in $PATH only in interactive shells.
 PYTHON ?= python3.14
+NODE ?= node
 
 test: type-check test-backend test-frontend
 
@@ -42,7 +43,20 @@ backend-install:
 		poetry install --with dev
 
 frontend-install:
-	@cd $(FRONTEND_DIR) && npm ci --no-audit --no-fund --loglevel=error
+	@cd $(FRONTEND_DIR) && \
+		if ! command -v "$(NODE)" >/dev/null 2>&1; then \
+			echo "❌ Не найден Node.js (пробовал: $(NODE))."; \
+			echo "   Фронтенд требует Node.js 24 (LTS) или новее."; \
+			echo "   Установите Node LTS и повторите, или укажите бинарник: make NODE=/path/to/node test-frontend"; \
+			exit 1; \
+		fi; \
+		if ! "$(NODE)" -e 'const [maj]=process.versions.node.split(\".\"); process.exit(Number(maj) >= 24 ? 0 : 1)' >/dev/null 2>&1; then \
+			echo "❌ Node.js слишком старый: $$($(NODE) -v 2>&1)"; \
+			echo "   Фронтенд требует Node.js 24 (LTS) или новее."; \
+			echo "   Подсказка: если используете nvm — выполните: nvm install --lts && nvm use --lts"; \
+			exit 1; \
+		fi; \
+		npm ci --no-audit --no-fund --loglevel=error
 
 type-check: backend-install
 	@cd $(BACKEND_DIR) && poetry run mypy src

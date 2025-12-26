@@ -23,7 +23,7 @@
 
 ### 2. Auth Proxy (Frontend BFF)
 - **Путь:** `projects/frontend/apps/auth-proxy/`
-- **Технологии:** Node.js 20, TypeScript, Fastify
+- **Технологии:** Node.js 24 (LTS), TypeScript, Fastify
 - **Порт:** 8080
 - **Dockerfile:** ✅ Есть (`projects/frontend/apps/auth-proxy/Dockerfile`)
 - **docker-compose.yml:** ❌ Нет

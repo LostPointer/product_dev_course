@@ -12,7 +12,7 @@ function ExperimentsList() {
   const [page, setPage] = useState(1)
   const pageSize = 20
 
-  const { data, isLoading, error, refetch } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['experiments', projectId, status, searchQuery, page],
     queryFn: () => {
       if (searchQuery) {

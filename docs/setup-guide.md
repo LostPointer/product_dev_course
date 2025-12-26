@@ -52,8 +52,8 @@ pyenv install 3.14.2
 cd product_dev_course
 pyenv local 3.14.2
 
-# Node.js 18
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+# Node.js (LTS)
+curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
 sudo apt install nodejs -y
 
 # Docker
@@ -320,7 +320,7 @@ code --install-extension eamodio.gitlens
 brew install node
 
 # Linux
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
 sudo apt install nodejs -y
 
 # Windows

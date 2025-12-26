@@ -66,7 +66,7 @@ product_dev_course/
 
 ### Предварительные требования
 - Python 3.14+
-- Node.js 18+
+- Node.js 24 LTS+
 - Docker Desktop
 - Git
 - Любой редактор кода (VS Code рекомендуется)

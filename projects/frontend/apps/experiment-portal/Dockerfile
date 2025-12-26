@@ -1,5 +1,5 @@
 # Development stage: for hot-reload with Vite
-FROM node:18-alpine AS development
+FROM node:24-alpine AS development
 WORKDIR /app
 
 ENV NODE_ENV=development
@@ -18,7 +18,7 @@ EXPOSE 3000
 CMD ["npm", "run", "dev"]
 
 # Build stage: compile React app
-FROM node:18-alpine AS builder
+FROM node:24-alpine AS builder
 
 WORKDIR /app
 
