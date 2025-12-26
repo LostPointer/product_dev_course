@@ -122,8 +122,8 @@ function CreateSensor() {
                             {projectsData?.projects.length === 0 && (
                                 <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#666' }}>
                                     У вас нет проектов.{' '}
-                                    <Link to="/projects/new" style={{ color: 'var(--primary-color, #007bff)' }}>
-                                        Создать проект
+                                    <Link to="/projects" style={{ color: 'var(--primary-color, #007bff)' }}>
+                                        Перейти к проектам
                                     </Link>
                                 </div>
                             )}

@@ -1,0 +1,247 @@
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { experimentsApi, projectsApi } from '../api/client'
+import type { ExperimentCreate } from '../types'
+import './CreateRunModal.css'
+
+interface CreateExperimentModalProps {
+    isOpen: boolean
+    onClose: () => void
+}
+
+function CreateExperimentModal({ isOpen, onClose }: CreateExperimentModalProps) {
+    const navigate = useNavigate()
+    const queryClient = useQueryClient()
+    const [formData, setFormData] = useState<ExperimentCreate>({
+        project_id: '',
+        name: '',
+        description: '',
+        experiment_type: '',
+        tags: [],
+        metadata: {},
+    })
+    const [tagsInput, setTagsInput] = useState('')
+    const [metadataInput, setMetadataInput] = useState('{}')
+    const [error, setError] = useState<string | null>(null)
+
+    const { data: projectsData, isLoading: projectsLoading } = useQuery({
+        queryKey: ['projects'],
+        queryFn: () => projectsApi.list(),
+    })
+
+    const createMutation = useMutation({
+        mutationFn: (data: ExperimentCreate) => experimentsApi.create(data),
+        onSuccess: (experiment) => {
+            queryClient.invalidateQueries({ queryKey: ['experiments'] })
+            onClose()
+            navigate(`/experiments/${experiment.id}`)
+        },
+        onError: (err: any) => {
+            setError(err.response?.data?.error || 'Ошибка создания эксперимента')
+        },
+    })
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault()
+        setError(null)
+
+        // Парсинг тегов
+        const tags = tagsInput
+            .split(',')
+            .map((t) => t.trim())
+            .filter((t) => t.length > 0)
+
+        // Парсинг metadata
+        let metadata = {}
+        try {
+            metadata = JSON.parse(metadataInput)
+        } catch (e) {
+            setError('Неверный формат JSON в метаданных')
+            return
+        }
+
+        createMutation.mutate({
+            ...formData,
+            tags,
+            metadata,
+            description: formData.description || undefined,
+            experiment_type: formData.experiment_type || undefined,
+        })
+    }
+
+    const handleClose = () => {
+        if (!createMutation.isPending) {
+            setFormData({
+                project_id: '',
+                name: '',
+                description: '',
+                experiment_type: '',
+                tags: [],
+                metadata: {},
+            })
+            setTagsInput('')
+            setMetadataInput('{}')
+            setError(null)
+            onClose()
+        }
+    }
+
+    if (!isOpen) {
+        return null
+    }
+
+    return (
+        <div className="modal-overlay" onClick={handleClose}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">
+                    <h2>Создать эксперимент</h2>
+                    <button
+                        type="button"
+                        className="modal-close"
+                        onClick={handleClose}
+                        disabled={createMutation.isPending}
+                    >
+                        ×
+                    </button>
+                </div>
+
+                <form onSubmit={handleSubmit} className="modal-form">
+                    {error && <div className="error">{error}</div>}
+
+                    <div className="form-group">
+                        <label htmlFor="experiment_project">
+                            Проект <span className="required">*</span>
+                        </label>
+                        {projectsLoading ? (
+                            <div>Загрузка проектов...</div>
+                        ) : (
+                            <>
+                                <select
+                                    id="experiment_project"
+                                    value={formData.project_id}
+                                    onChange={(e) =>
+                                        setFormData({ ...formData, project_id: e.target.value })
+                                    }
+                                    required
+                                    disabled={createMutation.isPending}
+                                >
+                                    <option value="">Выберите проект</option>
+                                    {projectsData?.projects.map((project) => (
+                                        <option key={project.id} value={project.id}>
+                                            {project.name}
+                                        </option>
+                                    ))}
+                                </select>
+                                {projectsData?.projects.length === 0 && (
+                                    <small className="form-hint">
+                                        У вас нет проектов. Перейдите на страницу проектов, чтобы создать проект.
+                                    </small>
+                                )}
+                            </>
+                        )}
+                    </div>
+
+                    <div className="form-group">
+                        <label htmlFor="experiment_name">
+                            Название <span className="required">*</span>
+                        </label>
+                        <input
+                            id="experiment_name"
+                            type="text"
+                            value={formData.name}
+                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                            required
+                            placeholder="Например: Аэродинамические испытания крыла"
+                            disabled={createMutation.isPending}
+                        />
+                    </div>
+
+                    <div className="form-group">
+                        <label htmlFor="experiment_description">Описание</label>
+                        <textarea
+                            id="experiment_description"
+                            value={formData.description}
+                            onChange={(e) =>
+                                setFormData({ ...formData, description: e.target.value })
+                            }
+                            placeholder="Детальное описание эксперимента..."
+                            rows={3}
+                            disabled={createMutation.isPending}
+                        />
+                    </div>
+
+                    <div className="form-group">
+                        <label htmlFor="experiment_type">Тип эксперимента</label>
+                        <select
+                            id="experiment_type"
+                            value={formData.experiment_type}
+                            onChange={(e) =>
+                                setFormData({ ...formData, experiment_type: e.target.value })
+                            }
+                            disabled={createMutation.isPending}
+                        >
+                            <option value="">Выберите тип</option>
+                            <option value="aerodynamics">Аэродинамика</option>
+                            <option value="strength">Прочность</option>
+                            <option value="thermal">Термические</option>
+                            <option value="vibration">Вибрационные</option>
+                            <option value="other">Другое</option>
+                        </select>
+                    </div>
+
+                    <div className="form-group">
+                        <label htmlFor="experiment_tags">Теги</label>
+                        <input
+                            id="experiment_tags"
+                            type="text"
+                            value={tagsInput}
+                            onChange={(e) => setTagsInput(e.target.value)}
+                            placeholder="Через запятую: аэродинамика, крыло, naca"
+                            disabled={createMutation.isPending}
+                        />
+                        <small className="form-hint">
+                            Введите теги через запятую для удобной фильтрации
+                        </small>
+                    </div>
+
+                    <div className="form-group">
+                        <label htmlFor="experiment_metadata">Метаданные (JSON)</label>
+                        <textarea
+                            id="experiment_metadata"
+                            value={metadataInput}
+                            onChange={(e) => setMetadataInput(e.target.value)}
+                            placeholder='{"wind_speed": "30 m/s", "angle_of_attack": "0-15 deg"}'
+                            rows={6}
+                            disabled={createMutation.isPending}
+                        />
+                        <small className="form-hint">
+                            Дополнительные данные эксперимента в формате JSON
+                        </small>
+                    </div>
+
+                    <div className="modal-actions">
+                        <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={handleClose}
+                            disabled={createMutation.isPending}
+                        >
+                            Отмена
+                        </button>
+                        <button
+                            type="submit"
+                            className="btn btn-primary"
+                            disabled={createMutation.isPending}
+                        >
+                            {createMutation.isPending ? 'Создание...' : 'Создать эксперимент'}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    )
+}
+
+export default CreateExperimentModal
+

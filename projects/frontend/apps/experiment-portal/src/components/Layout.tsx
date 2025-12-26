@@ -1,4 +1,4 @@
-import { ReactNode } from 'react'
+import { ReactNode, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { authApi } from '../api/auth'
@@ -12,6 +12,7 @@ function Layout({ children }: LayoutProps) {
   const location = useLocation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
 
   const { data: user } = useQuery({
     queryKey: ['auth', 'me'],
@@ -33,32 +34,40 @@ function Layout({ children }: LayoutProps) {
 
   return (
     <div className="layout">
+      <div
+        className="sidebar-trigger"
+        onMouseEnter={() => setIsMenuOpen(true)}
+        onMouseLeave={() => setIsMenuOpen(false)}
+      >
+        <div className={`sidebar ${isMenuOpen ? 'open' : ''}`}>
+          <nav className="nav">
+            <Link
+              to="/projects"
+              className={location.pathname.startsWith('/projects') ? 'active' : ''}
+            >
+              Проекты
+            </Link>
+            <Link
+              to="/experiments"
+              className={location.pathname.startsWith('/experiments') ? 'active' : ''}
+            >
+              Эксперименты
+            </Link>
+            <Link
+              to="/sensors"
+              className={location.pathname.startsWith('/sensors') ? 'active' : ''}
+            >
+              Датчики
+            </Link>
+          </nav>
+        </div>
+      </div>
       <header className="header">
         <div className="container">
           <div className="header-content">
             <Link to="/" className="logo">
               <h1>Experiment Tracking</h1>
             </Link>
-            <nav className="nav">
-              <Link
-                to="/experiments"
-                className={location.pathname.startsWith('/experiments') ? 'active' : ''}
-              >
-                Эксперименты
-              </Link>
-              <Link
-                to="/experiments/new"
-                className={location.pathname === '/experiments/new' ? 'active' : ''}
-              >
-                Новый эксперимент
-              </Link>
-              <Link
-                to="/sensors"
-                className={location.pathname.startsWith('/sensors') ? 'active' : ''}
-              >
-                Датчики
-              </Link>
-            </nav>
             <div className="user-menu">
               {user && (
                 <div className="user-info">
