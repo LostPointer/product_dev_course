@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import json
 from typing import Any, List, Tuple
 from uuid import UUID
 
@@ -108,6 +107,64 @@ class ExperimentRepository(BaseRepository):
             project_id,
         )
         return int(record["total"]) if record else 0
+
+    async def search_experiments(
+        self,
+        project_id: UUID,
+        query: str,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Tuple[List[Experiment], int]:
+        """Search experiments by name and description."""
+        search_pattern = f"%{query}%"
+        records = await self._fetch(
+            """
+            SELECT *,
+                   COUNT(*) OVER() AS total_count
+            FROM experiments
+            WHERE project_id = $1
+              AND (
+                  name ILIKE $2
+                  OR description ILIKE $2
+              )
+            ORDER BY created_at DESC
+            LIMIT $3 OFFSET $4
+            """,
+            project_id,
+            search_pattern,
+            limit,
+            offset,
+        )
+        items: List[Experiment] = []
+        total: int | None = None
+        for rec in records:
+            rec_dict = dict(rec)
+            total_value = rec_dict.pop("total_count", None)
+            if total_value is not None:
+                total = int(total_value)
+            for column in self.JSONB_COLUMNS:
+                value = rec_dict.get(column)
+                if isinstance(value, str):
+                    rec_dict[column] = json.loads(value)
+            items.append(Experiment.model_validate(rec_dict))
+        if total is None:
+            # Fallback count if window function didn't work
+            count_record = await self._fetchrow(
+                """
+                SELECT COUNT(*) AS total
+                FROM experiments
+                WHERE project_id = $1
+                  AND (
+                      name ILIKE $2
+                      OR description ILIKE $2
+                  )
+                """,
+                project_id,
+                search_pattern,
+            )
+            total = int(count_record["total"]) if count_record else 0
+        return items, total
 
     async def update(
         self,

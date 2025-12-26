@@ -57,6 +57,28 @@ async def list_experiments(request: web.Request):
     return web.json_response(payload)
 
 
+@routes.get("/api/v1/experiments/search")
+async def search_experiments(request: web.Request):
+    user = await require_current_user(request)
+    service = await get_experiment_service(request)
+    limit, offset = pagination_params(request)
+    project_id = resolve_project_id(user, request.rel_url.query.get("project_id"))
+    query = request.rel_url.query.get("q", "").strip()
+    if not query:
+        raise web.HTTPBadRequest(text="Query parameter 'q' is required")
+    experiments, total = await service.search_experiments(
+        project_id, query, limit=limit, offset=offset
+    )
+    payload = paginated_response(
+        [_experiment_response(item) for item in experiments],
+        limit=limit,
+        offset=offset,
+        key="experiments",
+        total=total,
+    )
+    return web.json_response(payload)
+
+
 @routes.post("/api/v1/experiments")
 async def create_experiment(request: web.Request):
     user = await require_current_user(request)

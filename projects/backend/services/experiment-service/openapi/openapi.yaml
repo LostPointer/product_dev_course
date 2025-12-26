@@ -20,6 +20,8 @@ paths:
     $ref: ./paths/health.yaml
   /api/v1/experiments:
     $ref: ./paths/experiments.yaml#/collection
+  /api/v1/experiments/search:
+    $ref: ./paths/experiments.yaml#/search
   /api/v1/experiments/{experiment_id}:
     $ref: ./paths/experiments.yaml#/item
   /api/v1/experiments/{experiment_id}/archive:

@@ -33,6 +33,19 @@ class ExperimentService:
     ) -> tuple[List[Experiment], int]:
         return await self._repository.list_by_project(project_id, limit=limit, offset=offset)
 
+    async def search_experiments(
+        self,
+        project_id: UUID,
+        query: str,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[List[Experiment], int]:
+        """Search experiments by name and description."""
+        return await self._repository.search_experiments(
+            project_id, query, limit=limit, offset=offset
+        )
+
     async def update_experiment(
         self,
         project_id: UUID,

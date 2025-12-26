@@ -114,6 +114,51 @@ item:
     responses:
       200:
         description: Deleted
+search:
+  get:
+    tags:
+    - experiments
+    summary: Search experiments
+    operationId: searchExperiments
+    parameters:
+    - $ref: ../components/parameters.yaml#/ProjectIdQuery
+    - name: q
+      in: query
+      required: true
+      schema:
+        type: string
+      description: Search query (searches in name and description)
+    - name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 50
+    - name: offset
+      in: query
+      schema:
+        type: integer
+        minimum: 0
+    - name: page
+      in: query
+      schema:
+        type: integer
+        default: 1
+    - name: page_size
+      in: query
+      schema:
+        type: integer
+        default: 50
+    responses:
+      200:
+        description: Experiment search results
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/ExperimentListResponse
+      400:
+        description: Bad request (missing query parameter)
 archive:
   post:
     tags:
