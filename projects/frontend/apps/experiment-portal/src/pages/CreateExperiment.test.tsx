@@ -3,13 +3,16 @@ import { MemoryRouter } from 'react-router-dom'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import CreateExperiment from './CreateExperiment'
-import { experimentsApi } from '../api/client'
+import CreateExperimentModal from '../components/CreateExperimentModal'
+import { experimentsApi, projectsApi } from '../api/client'
 
-// Мокаем experimentsApi
+// Мокаем API
 vi.mock('../api/client', () => ({
     experimentsApi: {
         create: vi.fn(),
+    },
+    projectsApi: {
+        list: vi.fn(),
     },
 }))
 
@@ -37,21 +40,37 @@ const createWrapper = () => {
     )
 }
 
-describe('CreateExperiment', () => {
+describe('CreateExperimentModal', () => {
     beforeEach(() => {
         vi.clearAllMocks()
         mockNavigate.mockClear()
+        // Мокаем projectsApi.list по умолчанию
+        const mockProjectsApi = vi.mocked(projectsApi)
+        mockProjectsApi.list.mockResolvedValue({
+            projects: [
+                { id: 'project-1', name: 'Test Project', description: '', created_at: '2024-01-01T00:00:00Z' },
+            ],
+        })
     })
 
-    it('renders create experiment form', () => {
-        render(<CreateExperiment />, { wrapper: createWrapper() })
+    it('renders create experiment form when open', async () => {
+        render(<CreateExperimentModal isOpen={true} onClose={vi.fn()} />, { wrapper: createWrapper() })
 
-        // "Создать эксперимент" встречается и в заголовке, и в кнопке
-        const createTexts = screen.getAllByText('Создать эксперимент')
-        expect(createTexts.length).toBeGreaterThan(0)
-        expect(screen.getByPlaceholderText('UUID проекта')).toBeInTheDocument()
+        await waitFor(() => {
+            expect(screen.getByRole('heading', { name: /создать эксперимент/i })).toBeInTheDocument()
+        })
+
+        await waitFor(() => {
+            expect(screen.getByLabelText(/проект/i)).toBeInTheDocument()
+        }, { timeout: 3000 })
+
         expect(screen.getByPlaceholderText('Например: Аэродинамические испытания крыла')).toBeInTheDocument()
         expect(screen.getByPlaceholderText('Детальное описание эксперимента...')).toBeInTheDocument()
+    })
+
+    it('does not render when closed', () => {
+        render(<CreateExperimentModal isOpen={false} onClose={vi.fn()} />, { wrapper: createWrapper() })
+        expect(screen.queryByText('Создать эксперимент')).not.toBeInTheDocument()
     })
 
     it('submits form with valid data', async () => {
@@ -73,9 +92,12 @@ describe('CreateExperiment', () => {
 
         mockCreate.mockResolvedValueOnce(createdExperiment)
 
-        render(<CreateExperiment />, { wrapper: createWrapper() })
+        render(<CreateExperimentModal isOpen={true} onClose={vi.fn()} />, { wrapper: createWrapper() })
 
-        await user.type(screen.getByPlaceholderText('UUID проекта'), 'project-1')
+        await waitFor(() => {
+            expect(screen.getByLabelText(/проект/i)).toBeInTheDocument()
+        })
+        await user.selectOptions(screen.getByLabelText(/проект/i), 'project-1')
         await user.type(screen.getByPlaceholderText('Например: Аэродинамические испытания крыла'), 'New Experiment')
         await user.type(screen.getByPlaceholderText('Детальное описание эксперимента...'), 'Test description')
 
@@ -111,9 +133,12 @@ describe('CreateExperiment', () => {
             updated_at: '2024-01-01T00:00:00Z',
         })
 
-        render(<CreateExperiment />, { wrapper: createWrapper() })
+        render(<CreateExperimentModal isOpen={true} onClose={vi.fn()} />, { wrapper: createWrapper() })
 
-        await user.type(screen.getByPlaceholderText('UUID проекта'), 'project-1')
+        await waitFor(() => {
+            expect(screen.getByLabelText(/проект/i)).toBeInTheDocument()
+        })
+        await user.selectOptions(screen.getByLabelText(/проект/i), 'project-1')
         await user.type(screen.getByPlaceholderText('Например: Аэродинамические испытания крыла'), 'New Experiment')
         await user.type(screen.getByPlaceholderText(/через запятую/i), 'tag1, tag2, tag3')
 
@@ -145,9 +170,12 @@ describe('CreateExperiment', () => {
             updated_at: '2024-01-01T00:00:00Z',
         })
 
-        render(<CreateExperiment />, { wrapper: createWrapper() })
+        render(<CreateExperimentModal isOpen={true} onClose={vi.fn()} />, { wrapper: createWrapper() })
 
-        await user.type(screen.getByPlaceholderText('UUID проекта'), 'project-1')
+        await waitFor(() => {
+            expect(screen.getByLabelText(/проект/i)).toBeInTheDocument()
+        })
+        await user.selectOptions(screen.getByLabelText(/проект/i), 'project-1')
         await user.type(screen.getByPlaceholderText('Например: Аэродинамические испытания крыла'), 'New Experiment')
         const metadataLabel = screen.getByText('Метаданные (JSON)')
         const metadataTextarea = metadataLabel.parentElement?.querySelector('textarea')
@@ -172,9 +200,12 @@ describe('CreateExperiment', () => {
         const user = userEvent.setup()
         const mockCreate = vi.mocked(experimentsApi.create)
 
-        render(<CreateExperiment />, { wrapper: createWrapper() })
+        render(<CreateExperimentModal isOpen={true} onClose={vi.fn()} />, { wrapper: createWrapper() })
 
-        await user.type(screen.getByPlaceholderText('UUID проекта'), 'project-1')
+        await waitFor(() => {
+            expect(screen.getByLabelText(/проект/i)).toBeInTheDocument()
+        })
+        await user.selectOptions(screen.getByLabelText(/проект/i), 'project-1')
         await user.type(screen.getByPlaceholderText('Например: Аэродинамические испытания крыла'), 'New Experiment')
         const metadataLabel = screen.getByText('Метаданные (JSON)')
         const metadataTextarea = metadataLabel.parentElement?.querySelector('textarea')
@@ -202,9 +233,12 @@ describe('CreateExperiment', () => {
             },
         })
 
-        render(<CreateExperiment />, { wrapper: createWrapper() })
+        render(<CreateExperimentModal isOpen={true} onClose={vi.fn()} />, { wrapper: createWrapper() })
 
-        await user.type(screen.getByPlaceholderText('UUID проекта'), 'project-1')
+        await waitFor(() => {
+            expect(screen.getByLabelText(/проект/i)).toBeInTheDocument()
+        })
+        await user.selectOptions(screen.getByLabelText(/проект/i), 'project-1')
         await user.type(screen.getByPlaceholderText('Например: Аэродинамические испытания крыла'), 'New Experiment')
 
         const submitButton = screen.getByRole('button', { name: /создать эксперимент/i })
@@ -228,9 +262,12 @@ describe('CreateExperiment', () => {
 
         mockCreate.mockRejectedValueOnce(new Error('Network error'))
 
-        render(<CreateExperiment />, { wrapper: createWrapper() })
+        render(<CreateExperimentModal isOpen={true} onClose={vi.fn()} />, { wrapper: createWrapper() })
 
-        await user.type(screen.getByPlaceholderText('UUID проекта'), 'project-1')
+        await waitFor(() => {
+            expect(screen.getByLabelText(/проект/i)).toBeInTheDocument()
+        })
+        await user.selectOptions(screen.getByLabelText(/проект/i), 'project-1')
         await user.type(screen.getByPlaceholderText('Например: Аэродинамические испытания крыла'), 'New Experiment')
 
         const submitButton = screen.getByRole('button', { name: /создать эксперимент/i })
@@ -258,9 +295,12 @@ describe('CreateExperiment', () => {
         })
         mockCreate.mockReturnValueOnce(createPromise as any)
 
-        render(<CreateExperiment />, { wrapper: createWrapper() })
+        render(<CreateExperimentModal isOpen={true} onClose={vi.fn()} />, { wrapper: createWrapper() })
 
-        await user.type(screen.getByPlaceholderText('UUID проекта'), 'project-1')
+        await waitFor(() => {
+            expect(screen.getByLabelText(/проект/i)).toBeInTheDocument()
+        })
+        await user.selectOptions(screen.getByLabelText(/проект/i), 'project-1')
         await user.type(screen.getByPlaceholderText('Например: Аэродинамические испытания крыла'), 'New Experiment')
 
         const submitButton = screen.getByRole('button', { name: /создать эксперимент/i })
@@ -288,15 +328,20 @@ describe('CreateExperiment', () => {
         })
     })
 
-    it('navigates back on cancel', async () => {
+    it('calls onClose when cancel button is clicked', async () => {
         const user = userEvent.setup()
+        const mockOnClose = vi.fn()
 
-        render(<CreateExperiment />, { wrapper: createWrapper() })
+        render(<CreateExperimentModal isOpen={true} onClose={mockOnClose} />, { wrapper: createWrapper() })
+
+        await waitFor(() => {
+            expect(screen.getByLabelText(/проект/i)).toBeInTheDocument()
+        })
 
         const cancelButton = screen.getByRole('button', { name: /отмена/i })
         await user.click(cancelButton)
 
-        expect(mockNavigate).toHaveBeenCalledWith('/experiments')
+        expect(mockOnClose).toHaveBeenCalled()
     })
 
     it('allows selecting experiment type', async () => {
@@ -316,15 +361,14 @@ describe('CreateExperiment', () => {
             updated_at: '2024-01-01T00:00:00Z',
         })
 
-        render(<CreateExperiment />, { wrapper: createWrapper() })
+        render(<CreateExperimentModal isOpen={true} onClose={vi.fn()} />, { wrapper: createWrapper() })
 
-        // Используем placeholder, так как label не связан с input через for
-        await user.type(screen.getByPlaceholderText('UUID проекта'), 'project-1')
+        await waitFor(() => {
+            expect(screen.getByLabelText(/проект/i)).toBeInTheDocument()
+        })
+        await user.selectOptions(screen.getByLabelText(/проект/i), 'project-1')
         await user.type(screen.getByPlaceholderText('Например: Аэродинамические испытания крыла'), 'New Experiment')
-        const typeLabel = screen.getByText('Тип эксперимента')
-        const typeSelect = typeLabel.parentElement?.querySelector('select')
-        expect(typeSelect).toBeInTheDocument()
-        await user.selectOptions(typeSelect!, 'aerodynamics')
+        await user.selectOptions(screen.getByLabelText(/тип эксперимента/i), 'aerodynamics')
 
         const submitButton = screen.getByRole('button', { name: /создать эксперимент/i })
         await user.click(submitButton)
@@ -354,10 +398,12 @@ describe('CreateExperiment', () => {
             updated_at: '2024-01-01T00:00:00Z',
         })
 
-        render(<CreateExperiment />, { wrapper: createWrapper() })
+        render(<CreateExperimentModal isOpen={true} onClose={vi.fn()} />, { wrapper: createWrapper() })
 
-        // Используем placeholder, так как label не связан с input через for
-        await user.type(screen.getByPlaceholderText('UUID проекта'), 'project-1')
+        await waitFor(() => {
+            expect(screen.getByLabelText(/проект/i)).toBeInTheDocument()
+        })
+        await user.selectOptions(screen.getByLabelText(/проект/i), 'project-1')
         await user.type(screen.getByPlaceholderText('Например: Аэродинамические испытания крыла'), 'New Experiment')
         await user.type(screen.getByPlaceholderText(/через запятую/i), 'tag1, , tag2,  ')
 

@@ -5,6 +5,14 @@ const { mockAxiosInstance, mockCreate } = vi.hoisted(() => {
     const instance = {
         post: vi.fn(),
         get: vi.fn(),
+        interceptors: {
+            request: {
+                use: vi.fn(),
+            },
+            response: {
+                use: vi.fn(),
+            },
+        },
     }
     const create = vi.fn(() => instance)
     return { mockAxiosInstance: instance, mockCreate: create }

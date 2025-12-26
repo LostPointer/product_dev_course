@@ -104,7 +104,7 @@ describe('App', () => {
         expect(screen.getByText('ExperimentsList Page')).toBeInTheDocument()
     })
 
-    it('renders create experiment page at /experiments/new', () => {
+    it('redirects /experiments/new to /experiments (route removed, now using modal)', () => {
         const mockMe = vi.mocked(authApi.me)
         mockMe.mockResolvedValueOnce({
             id: '1',
@@ -115,7 +115,9 @@ describe('App', () => {
         })
 
         render(<App />, { wrapper: createWrapper(['/experiments/new']) })
-        expect(screen.getByText('CreateExperiment Page')).toBeInTheDocument()
+        // Маршрут /experiments/new больше не существует, должен быть редирект или 404
+        // Проверяем, что страница CreateExperiment не рендерится
+        expect(screen.queryByText('CreateExperiment Page')).not.toBeInTheDocument()
     })
 
     it('renders experiment detail at /experiments/:id', () => {

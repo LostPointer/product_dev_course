@@ -8,6 +8,9 @@ const { mockAxiosInstance, mockCreate, mockAxiosPost } = vi.hoisted(() => {
         patch: vi.fn(),
         delete: vi.fn(),
         interceptors: {
+            request: {
+                use: vi.fn(),
+            },
             response: {
                 use: vi.fn(),
             },
