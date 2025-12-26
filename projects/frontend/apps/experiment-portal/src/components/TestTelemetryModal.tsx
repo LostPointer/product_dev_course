@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { telemetryApi } from '../api/client'
 import type { TelemetryIngest } from '../types'
+import Modal from './Modal'
 import './TestTelemetryModal.css'
 
 interface TestTelemetryModalProps {
@@ -155,133 +156,121 @@ function TestTelemetryModal({ sensorId, sensorToken, isOpen, onClose }: TestTele
         ))
     }
 
-    if (!isOpen) {
-        return null
-    }
-
     return (
-        <div className="modal-overlay" onClick={handleClose}>
-            <div className="modal-content telemetry-modal" onClick={(e) => e.stopPropagation()}>
-                <div className="modal-header">
-                    <h2>Тестовая отправка телеметрии</h2>
+        <Modal
+            isOpen={isOpen}
+            onClose={handleClose}
+            title="Тестовая отправка телеметрии"
+            disabled={ingestMutation.isPending}
+            className="telemetry-modal"
+        >
+            <form onSubmit={handleSubmit} className="modal-form">
+                {error && <div className="error">{error}</div>}
+                {success && <div className="success">{success}</div>}
+
+                <div className="form-group">
+                    <label htmlFor="telemetry_token">
+                        Токен датчика <span className="required">*</span>
+                    </label>
+                    <input
+                        id="telemetry_token"
+                        type="text"
+                        value={token}
+                        onChange={(e) => setToken(e.target.value)}
+                        required
+                        placeholder="Введите токен датчика"
+                        disabled={ingestMutation.isPending || !!sensorToken}
+                    />
+                    {sensorToken && (
+                        <small className="form-hint">
+                            Используется токен из контекста датчика
+                        </small>
+                    )}
+                </div>
+
+                <div className="form-group">
+                    <label htmlFor="telemetry_run_id">Run ID (опционально)</label>
+                    <input
+                        id="telemetry_run_id"
+                        type="text"
+                        value={runId}
+                        onChange={(e) => setRunId(e.target.value)}
+                        placeholder="UUID запуска"
+                        disabled={ingestMutation.isPending}
+                    />
+                </div>
+
+                <div className="form-group">
+                    <label htmlFor="telemetry_capture_session_id">Capture Session ID (опционально)</label>
+                    <input
+                        id="telemetry_capture_session_id"
+                        type="text"
+                        value={captureSessionId}
+                        onChange={(e) => setCaptureSessionId(e.target.value)}
+                        placeholder="UUID capture session"
+                        disabled={ingestMutation.isPending}
+                    />
+                </div>
+
+                <div className="form-group">
+                    <label htmlFor="telemetry_meta">Meta (JSON, опционально)</label>
+                    <textarea
+                        id="telemetry_meta"
+                        value={metaJson}
+                        onChange={(e) => setMetaJson(e.target.value)}
+                        placeholder='{"key": "value"}'
+                        rows={4}
+                        disabled={ingestMutation.isPending}
+                    />
+                    <small className="form-hint">
+                        Метаданные для всего пакета телеметрии
+                    </small>
+                </div>
+
+                <div className="form-group">
+                    <label htmlFor="telemetry_readings">
+                        Readings (JSON массив) <span className="required">*</span>
+                    </label>
+                    <textarea
+                        id="telemetry_readings"
+                        value={readingsJson}
+                        onChange={(e) => setReadingsJson(e.target.value)}
+                        placeholder='[{"timestamp": "2024-01-01T00:00:00Z", "raw_value": 25.5, "meta": {"signal": "test.signal"}}]'
+                        rows={8}
+                        disabled={ingestMutation.isPending}
+                    />
+                    <small className="form-hint">
+                        Массив readings. Если пусто, будет создан один тестовый reading.
+                        <button
+                            type="button"
+                            className="btn-link"
+                            onClick={fillExample}
+                            disabled={ingestMutation.isPending}
+                        >
+                            Заполнить примером
+                        </button>
+                    </small>
+                </div>
+
+                <div className="modal-actions">
                     <button
                         type="button"
-                        className="modal-close"
+                        className="btn btn-secondary"
                         onClick={handleClose}
                         disabled={ingestMutation.isPending}
                     >
-                        ×
+                        Отмена
+                    </button>
+                    <button
+                        type="submit"
+                        className="btn btn-primary"
+                        disabled={ingestMutation.isPending}
+                    >
+                        {ingestMutation.isPending ? 'Отправка...' : 'Отправить телеметрию'}
                     </button>
                 </div>
-
-                <form onSubmit={handleSubmit} className="modal-form">
-                    {error && <div className="error">{error}</div>}
-                    {success && <div className="success">{success}</div>}
-
-                    <div className="form-group">
-                        <label htmlFor="telemetry_token">
-                            Токен датчика <span className="required">*</span>
-                        </label>
-                        <input
-                            id="telemetry_token"
-                            type="text"
-                            value={token}
-                            onChange={(e) => setToken(e.target.value)}
-                            required
-                            placeholder="Введите токен датчика"
-                            disabled={ingestMutation.isPending || !!sensorToken}
-                        />
-                        {sensorToken && (
-                            <small className="form-hint">
-                                Используется токен из контекста датчика
-                            </small>
-                        )}
-                    </div>
-
-                    <div className="form-group">
-                        <label htmlFor="telemetry_run_id">Run ID (опционально)</label>
-                        <input
-                            id="telemetry_run_id"
-                            type="text"
-                            value={runId}
-                            onChange={(e) => setRunId(e.target.value)}
-                            placeholder="UUID запуска"
-                            disabled={ingestMutation.isPending}
-                        />
-                    </div>
-
-                    <div className="form-group">
-                        <label htmlFor="telemetry_capture_session_id">Capture Session ID (опционально)</label>
-                        <input
-                            id="telemetry_capture_session_id"
-                            type="text"
-                            value={captureSessionId}
-                            onChange={(e) => setCaptureSessionId(e.target.value)}
-                            placeholder="UUID capture session"
-                            disabled={ingestMutation.isPending}
-                        />
-                    </div>
-
-                    <div className="form-group">
-                        <label htmlFor="telemetry_meta">Meta (JSON, опционально)</label>
-                        <textarea
-                            id="telemetry_meta"
-                            value={metaJson}
-                            onChange={(e) => setMetaJson(e.target.value)}
-                            placeholder='{"key": "value"}'
-                            rows={4}
-                            disabled={ingestMutation.isPending}
-                        />
-                        <small className="form-hint">
-                            Метаданные для всего пакета телеметрии
-                        </small>
-                    </div>
-
-                    <div className="form-group">
-                        <label htmlFor="telemetry_readings">
-                            Readings (JSON массив) <span className="required">*</span>
-                        </label>
-                        <textarea
-                            id="telemetry_readings"
-                            value={readingsJson}
-                            onChange={(e) => setReadingsJson(e.target.value)}
-                            placeholder='[{"timestamp": "2024-01-01T00:00:00Z", "raw_value": 25.5, "meta": {"signal": "test.signal"}}]'
-                            rows={8}
-                            disabled={ingestMutation.isPending}
-                        />
-                        <small className="form-hint">
-                            Массив readings. Если пусто, будет создан один тестовый reading.
-                            <button
-                                type="button"
-                                className="btn-link"
-                                onClick={fillExample}
-                                disabled={ingestMutation.isPending}
-                            >
-                                Заполнить примером
-                            </button>
-                        </small>
-                    </div>
-
-                    <div className="modal-actions">
-                        <button
-                            type="button"
-                            className="btn btn-secondary"
-                            onClick={handleClose}
-                            disabled={ingestMutation.isPending}
-                        >
-                            Отмена
-                        </button>
-                        <button
-                            type="submit"
-                            className="btn btn-primary"
-                            disabled={ingestMutation.isPending}
-                        >
-                            {ingestMutation.isPending ? 'Отправка...' : 'Отправить телеметрию'}
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
+            </form>
+        </Modal>
     )
 }
 
