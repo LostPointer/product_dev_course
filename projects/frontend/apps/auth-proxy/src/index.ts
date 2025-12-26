@@ -1,9 +1,10 @@
 import 'dotenv/config'
-import fastify, { FastifyReply } from 'fastify'
+import fastify, { FastifyReply, FastifyRequest } from 'fastify'
 import cors from '@fastify/cors'
 import cookie from '@fastify/cookie'
 import rateLimit from '@fastify/rate-limit'
 import httpProxy from '@fastify/http-proxy'
+import { randomUUID } from 'crypto'
 
 type Config = {
     port: number
@@ -115,10 +116,38 @@ function clearAuthCookies(reply: FastifyReply, cfg: Config) {
     reply.clearCookie(cfg.refreshCookieName, { path: '/' })
 }
 
+/**
+ * Извлекает или генерирует trace_id и request_id из заголовков
+ */
+function getTraceContext(request: FastifyRequest): {
+    traceId: string
+    requestId: string
+} {
+    const traceId = (request.headers['x-trace-id'] as string) || randomUUID()
+    const requestId = (request.headers['x-request-id'] as string) || request.id || randomUUID()
+    return { traceId, requestId }
+}
+
 async function buildServer(config: Config) {
     const app = fastify({
         logger: {
             level: config.logLevel,
+            serializers: {
+                req: (req) => {
+                    const { traceId, requestId } = getTraceContext(req as FastifyRequest)
+                    return {
+                        method: req.method,
+                        url: req.url,
+                        trace_id: traceId,
+                        request_id: requestId,
+                    }
+                },
+                res: (res) => {
+                    return {
+                        statusCode: res.statusCode,
+                    }
+                },
+            },
             redact: [
                 'req.headers.authorization',
                 'request.headers.authorization',
@@ -144,12 +173,47 @@ async function buildServer(config: Config) {
         allowList: (req) => req.url === '/health',
     })
 
+    // Middleware для извлечения и логирования trace_id и request_id
+    app.addHook('onRequest', async (request, reply) => {
+        const { traceId, requestId } = getTraceContext(request)
+
+            // Сохраняем в request для использования в обработчиках
+            ; (request as any).traceId = traceId
+            ; (request as any).requestId = requestId
+
+        // Добавляем trace_id и request_id в контекст логгера для всех последующих логов
+        request.log = request.log.child({
+            trace_id: traceId,
+            request_id: requestId,
+            service: 'auth-proxy',
+        })
+
+        // Логирование запроса с trace_id и request_id
+        request.log.info({
+            method: request.method,
+            url: request.url,
+        }, 'Incoming request')
+    })
+
+    // Hook для логирования ответов
+    app.addHook('onResponse', async (request, reply) => {
+        request.log.info({
+            method: request.method,
+            url: request.url,
+            statusCode: reply.statusCode,
+        }, 'Request completed')
+    })
+
     // Auth routes (login/refresh/logout/me) — устанавливают куки
     app.post('/auth/login', async (request, reply) => {
+        const { traceId, requestId } = getTraceContext(request)
+
         const res = await fetch(`${config.authUrl}/auth/login`, {
             method: 'POST',
             headers: {
                 'content-type': 'application/json',
+                'X-Trace-Id': traceId,
+                'X-Request-Id': requestId,
             },
             body: JSON.stringify(request.body ?? {}),
         })
@@ -183,9 +247,15 @@ async function buildServer(config: Config) {
             return { error: 'Refresh token not provided' }
         }
 
+        const { traceId, requestId } = getTraceContext(request)
+
         const res = await fetch(`${config.authUrl}/auth/refresh`, {
             method: 'POST',
-            headers: { 'content-type': 'application/json' },
+            headers: {
+                'content-type': 'application/json',
+                'X-Trace-Id': traceId,
+                'X-Request-Id': requestId,
+            },
             body: JSON.stringify({ refresh_token: refreshToken }),
         })
 
@@ -207,15 +277,24 @@ async function buildServer(config: Config) {
     })
 
     app.post('/auth/logout', async (request, reply) => {
+        const { traceId, requestId } = getTraceContext(request)
+
         // Best-effort revoke
         try {
             await fetch(`${config.authUrl}/auth/logout`, {
                 method: 'POST',
-                headers: { 'content-type': 'application/json' },
+                headers: {
+                    'content-type': 'application/json',
+                    'X-Trace-Id': traceId,
+                    'X-Request-Id': requestId,
+                },
                 body: JSON.stringify({}),
             })
         } catch (err) {
-            request.log.warn({ err }, 'Auth logout upstream failed')
+            request.log.warn(
+                { err, trace_id: traceId, request_id: requestId },
+                'Auth logout upstream failed'
+            )
         }
 
         clearAuthCookies(reply, config)
@@ -229,8 +308,14 @@ async function buildServer(config: Config) {
             return { error: 'Unauthorized' }
         }
 
+        const { traceId, requestId } = getTraceContext(request)
+
         const res = await fetch(`${config.authUrl}/auth/me`, {
-            headers: { authorization: `Bearer ${access}` },
+            headers: {
+                authorization: `Bearer ${access}`,
+                'X-Trace-Id': traceId,
+                'X-Request-Id': requestId,
+            },
         })
 
         if (!res.ok) {
@@ -255,9 +340,13 @@ async function buildServer(config: Config) {
             rewriteRequestHeaders: (req, headers) => {
                 const cookies = parseCookies(req.headers.cookie as string | undefined)
                 const access = cookies[config.accessCookieName]
+                const traceId = (req.headers['x-trace-id'] as string) || randomUUID()
+                const requestId = (req.headers['x-request-id'] as string) || req.id || randomUUID()
+
                 return {
                     ...headers,
-                    'x-request-id': (req.headers['x-request-id'] as string) || req.id,
+                    'X-Trace-Id': traceId,
+                    'X-Request-Id': requestId,
                     ...(access ? { authorization: `Bearer ${access}` } : {}),
                 }
             },

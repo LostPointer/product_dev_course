@@ -12,7 +12,12 @@ from aiohttp_cors import setup as cors_setup, ResourceOptions
 from auth_service.api.routes.auth import setup_routes as setup_auth_routes
 from auth_service.api.routes.projects import setup_routes as setup_project_routes
 from auth_service.db.pool import close_pool, init_pool
+from auth_service.logging_config import configure_logging
+from auth_service.middleware.trace import trace_middleware
 from auth_service.settings import settings
+
+# Configure structured logging
+configure_logging()
 
 
 async def healthcheck(request: web.Request) -> web.Response:
@@ -136,6 +141,9 @@ async def apply_migrations_on_startup(_app: web.Application) -> None:
 def create_app() -> web.Application:
     """Create aiohttp application."""
     app = web.Application()
+
+    # Add trace middleware first (before other middleware)
+    app.middlewares.append(trace_middleware)
 
     # Configure CORS
     cors = cors_setup(

@@ -15,24 +15,73 @@ scrape_configs:
       - host: unix:///var/run/docker.sock
         refresh_interval: 5s
     relabel_configs:
+      # Сначала добавляем обязательные метки
+      - target_label: 'job'
+        replacement: 'docker'
       # Извлекаем имя контейнера
       - source_labels: ['__meta_docker_container_name']
         regex: '/(.*)'
         target_label: 'container'
-      # Извлекаем имя сервиса из лейблов Docker Compose
+      # Если container пустой, используем короткий ID
+      - source_labels: ['__meta_docker_container_id']
+        regex: '(.{12}).*'
+        target_label: 'container'
+        replacement: '${1}'
+      # Извлекаем имя сервиса
       - source_labels: ['__meta_docker_container_label_com_docker_compose_service']
         target_label: 'service'
-      # Извлекаем имя проекта из лейблов Docker Compose
+      # Извлекаем имя проекта
       - source_labels: ['__meta_docker_container_label_com_docker_compose_project']
         target_label: 'project'
-      # Фильтруем только контейнеры нашего проекта (опционально, можно убрать для всех логов)
+      # Фильтруем только контейнеры нашего проекта
       - source_labels: ['__meta_docker_container_label_com_docker_compose_project']
         regex: 'product_dev_course'
         action: keep
-      # Добавляем лейбл для всех логов
-      - target_label: 'job'
-        replacement: 'docker'
-      # Удаляем служебные метки для чистоты
+      # Путь к логам контейнера
+      - source_labels: ['__meta_docker_container_id']
+        target_label: '__path__'
+        replacement: '/var/lib/docker/containers/$1/$1-json.log'
+      # Удаляем только служебные метки Docker Compose
       - regex: '__meta_docker_container_label_com_docker_compose_.*'
         action: labeldrop
-
+      # Удаляем служебные метки, но сохраняем __path__
+      - regex: '__meta_docker_container_id'
+        action: labeldrop
+      - regex: '__meta_docker_container_name'
+        action: labeldrop
+      - regex: '__meta_docker_container_log_file'
+        action: labeldrop
+      - regex: '__meta_docker_container_label_.*'
+        action: labeldrop
+    pipeline_stages:
+      # Парсим JSON логи Docker (обертка Docker)
+      - json:
+          expressions:
+            docker_log: log
+            stream: stream
+      # Пытаемся распарсить JSON из сообщения лога (структурированные логи приложения)
+      # docker_log содержит JSON строку от structlog
+      - json:
+          expressions:
+            trace_id: trace_id
+            request_id: request_id
+            level: level
+            event: event
+            message: message
+            service: service
+            method: method
+            path: path
+            status_code: status_code
+            error: error
+            error_type: error_type
+          source: docker_log
+      # Извлекаем сообщение лога для отображения
+      - output:
+          source: docker_log
+      # Извлекаем trace_id и request_id как labels для фильтрации в Grafana
+      # Используем только если они есть (необязательные labels)
+      - labels:
+          trace_id:
+          request_id:
+          level:
+          service:

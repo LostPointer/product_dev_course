@@ -29,6 +29,8 @@ import type {
   ProjectMemberUpdate,
   ProjectMembersListResponse,
 } from '../types'
+import { generateRequestId } from '../utils/uuid'
+import { getTraceId } from '../utils/trace'
 
 // API работает через Auth Proxy, который автоматически добавляет токен из куки
 const AUTH_PROXY_URL = import.meta.env.VITE_AUTH_PROXY_URL || 'http://localhost:8080'
@@ -41,11 +43,53 @@ const apiClient = axios.create({
   withCredentials: true, // Важно для работы с HttpOnly куками
 })
 
+// Interceptor для добавления trace_id и request_id в заголовки
+apiClient.interceptors.request.use(
+  (config) => {
+    // Генерируем request_id для каждого запроса
+    const requestId = generateRequestId()
+    const traceId = getTraceId()
+
+    // Добавляем заголовки
+    config.headers['X-Trace-Id'] = traceId
+    config.headers['X-Request-Id'] = requestId
+
+    // Логирование запроса (только в development)
+    if (import.meta.env.DEV) {
+      console.log({
+        trace_id: traceId,
+        request_id: requestId,
+        method: config.method?.toUpperCase(),
+        url: config.url,
+        baseURL: config.baseURL,
+      })
+    }
+
+    return config
+  },
+  (error) => {
+    return Promise.reject(error)
+  }
+)
+
 // Обработка ошибок и автоматическое обновление токена
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config
+    const traceId = error.config?.headers?.['X-Trace-Id'] as string | undefined
+    const requestId = error.config?.headers?.['X-Request-Id'] as string | undefined
+
+    // Логирование ошибки
+    console.error({
+      trace_id: traceId,
+      request_id: requestId,
+      error: error.message,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      url: error.config?.url,
+      method: error.config?.method?.toUpperCase(),
+    })
 
     // Если получили 401 и это не повторный запрос
     if (error.response?.status === 401 && !originalRequest._retry) {
@@ -234,6 +278,9 @@ export const telemetryApi = {
     // Для телеметрии используется прямой запрос к Experiment Service с токеном датчика
     // (не через Auth Proxy, так как это публичный endpoint)
     const EXPERIMENT_SERVICE_URL = import.meta.env.VITE_EXPERIMENT_SERVICE_URL || 'http://localhost:8002'
+    const requestId = generateRequestId()
+    const traceId = getTraceId()
+
     const response = await axios.post(
       `${EXPERIMENT_SERVICE_URL}/api/v1/telemetry`,
       data,
@@ -241,6 +288,8 @@ export const telemetryApi = {
         headers: {
           'Authorization': `Bearer ${sensorToken}`,
           'Content-Type': 'application/json',
+          'X-Trace-Id': traceId,
+          'X-Request-Id': requestId,
         },
       }
     )

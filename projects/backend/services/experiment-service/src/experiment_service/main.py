@@ -8,7 +8,12 @@ from aiohttp_cors import setup as cors_setup, ResourceOptions
 
 from experiment_service.api.router import setup_routes
 from experiment_service.db.pool import close_pool, init_pool
+from experiment_service.logging_config import configure_logging
+from experiment_service.middleware.trace import trace_middleware
 from experiment_service.settings import settings
+
+# Configure structured logging
+configure_logging()
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 OPENAPI_PATH = PROJECT_ROOT / "openapi" / "openapi.yaml"
@@ -24,6 +29,9 @@ async def openapi_spec(request: web.Request) -> web.StreamResponse:
 
 def create_app() -> web.Application:
     app = web.Application()
+
+    # Add trace middleware first (before other middleware)
+    app.middlewares.append(trace_middleware)
 
     # Configure CORS first, before adding routes
     cors = cors_setup(
