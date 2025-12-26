@@ -28,6 +28,7 @@ RUN poetry install --no-root
 # Copy source code
 COPY src ./src
 COPY bin ./bin
+COPY migrations ./migrations
 
 # Set PYTHONPATH to include src directory
 ENV PYTHONPATH=/app/src

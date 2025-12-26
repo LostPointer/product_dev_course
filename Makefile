@@ -286,3 +286,26 @@ dev-fix:
 # Алиас для запуска
 dev: dev-up
 
+# ============================================
+# Миграции базы данных
+# ============================================
+
+# Применение миграций auth-service
+auth-migrate:
+	@echo "Применение миграций auth-service..."
+	@docker-compose exec -T auth-service python -m bin.migrate --database-url "$${AUTH_DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/auth_db}" || \
+		docker-compose exec auth-service python -m bin.migrate --database-url "$${AUTH_DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/auth_db}"
+	@echo "✅ Миграции применены"
+
+# Создание базы данных auth_db (если не существует)
+auth-create-db:
+	@echo "Создание базы данных auth_db..."
+	@docker-compose exec -T postgres psql -U postgres -d postgres -c "SELECT 1 FROM pg_database WHERE datname = 'auth_db'" | grep -q 1 && \
+		echo "✅ База данных auth_db уже существует" || \
+		(docker-compose exec -T postgres psql -U postgres -d postgres -c "CREATE DATABASE auth_db;" && \
+		echo "✅ База данных auth_db создана")
+
+# Инициализация auth-service (создание БД + миграции)
+auth-init: auth-create-db auth-migrate
+	@echo "✅ Auth-service инициализирован"
+

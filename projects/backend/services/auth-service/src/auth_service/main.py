@@ -1,6 +1,11 @@
 """aiohttp application entrypoint."""
 from __future__ import annotations
 
+import asyncio
+import hashlib
+from pathlib import Path
+
+import asyncpg
 from aiohttp import web
 from aiohttp_cors import setup as cors_setup, ResourceOptions
 
@@ -14,6 +19,117 @@ async def healthcheck(request: web.Request) -> web.Response:
     return web.json_response(
         {"status": "ok", "service": settings.app_name, "env": settings.env}
     )
+
+
+async def ensure_schema_table(conn: asyncpg.Connection) -> None:
+    """Ensure schema_migrations table exists."""
+    await conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            version text PRIMARY KEY,
+            checksum text NOT NULL,
+            applied_at timestamptz NOT NULL DEFAULT now()
+        );
+        """
+    )
+
+
+async def apply_migrations_on_startup(_app: web.Application) -> None:
+    """Apply pending migrations on startup."""
+    # Try multiple possible paths for migrations directory
+    possible_paths = [
+        Path(__file__).resolve().parent.parent.parent / "migrations",  # /app/migrations in container
+        Path("/app/migrations"),  # Absolute path in container
+        Path(__file__).resolve().parent.parent.parent.parent / "migrations",  # Local development
+    ]
+
+    migrations_dir = None
+    for path in possible_paths:
+        if path.exists():
+            migrations_dir = path
+            break
+
+    if migrations_dir is None:
+        print(f"⚠️  Migrations directory not found. Tried: {possible_paths}, skipping migrations")
+        return
+
+    # Load migrations
+    migrations: dict[str, Path] = {}
+    for path in sorted(migrations_dir.glob("*.sql")):
+        version = path.stem
+        if version in migrations:
+            raise ValueError(f"Duplicate migration version detected: {version}")
+        migrations[version] = path
+
+    if not migrations:
+        print("⚠️  No migrations found, skipping")
+        return
+
+    # Connect to database with retry logic
+    max_retries = 5
+    retry_delay = 2
+    conn = None
+    for attempt in range(max_retries):
+        try:
+            conn = await asyncpg.connect(str(settings.database_url))
+            break
+        except asyncpg.exceptions.InvalidCatalogNameError as e:
+            if "does not exist" in str(e):
+                print(f"⚠️  Database does not exist yet (attempt {attempt + 1}/{max_retries})")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(retry_delay)
+                    continue
+                print("❌ Database does not exist. Please create it manually or restart PostgreSQL container.")
+                print(f"   You can create it with: make auth-create-db")
+                return
+            raise
+        except Exception as e:
+            print(f"⚠️  Database connection error (attempt {attempt + 1}/{max_retries}): {e}")
+            if attempt < max_retries - 1:
+                await asyncio.sleep(retry_delay)
+                continue
+            print("❌ Failed to connect to database after retries. Skipping migrations.")
+            return
+
+    if conn is None:
+        print("❌ Failed to establish database connection. Skipping migrations.")
+        return
+
+    try:
+        await ensure_schema_table(conn)
+        rows = await conn.fetch("SELECT version, checksum FROM schema_migrations")
+        applied = {row["version"]: row["checksum"] for row in rows}
+        pending = []
+
+        for version, path in migrations.items():
+            sql = path.read_text(encoding="utf-8")
+            checksum = hashlib.sha256(sql.encode("utf-8")).hexdigest()
+            if version in applied:
+                if applied[version] != checksum:
+                    raise RuntimeError(
+                        f"Checksum mismatch for {version}: "
+                        f"{applied[version]} (db) != {checksum} (file)"
+                    )
+                continue
+            pending.append((version, path, sql, checksum))
+
+        if not pending:
+            print("✅ No pending migrations.")
+            return
+
+        print(f"🔄 Applying {len(pending)} pending migration(s)...")
+        for version, path, sql, checksum in pending:
+            print(f"   Applying {path.name}...")
+            async with conn.transaction():
+                await conn.execute(sql)
+                await conn.execute(
+                    "INSERT INTO schema_migrations (version, checksum) VALUES ($1, $2)",
+                    version,
+                    checksum,
+                )
+        print(f"✅ Applied {len(pending)} migration(s).")
+    finally:
+        await conn.close()
 
 
 def create_app() -> web.Application:
@@ -38,8 +154,9 @@ def create_app() -> web.Application:
     app.router.add_get("/health", healthcheck)
     setup_routes(app)
 
-    # Setup database pool
+    # Setup database pool and migrations
     app.on_startup.append(init_pool)
+    app.on_startup.append(apply_migrations_on_startup)
     app.on_cleanup.append(close_pool)
 
     # Add CORS to all routes
