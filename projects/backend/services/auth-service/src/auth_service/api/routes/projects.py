@@ -33,7 +33,8 @@ async def get_user_id_from_token(request: web.Request) -> UUID:
     """Extract user ID from JWT token."""
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
-        raise AuthError("Unauthorized")
+        from auth_service.core.exceptions import InvalidCredentialsError
+        raise InvalidCredentialsError("Unauthorized")
 
     token = auth_header[7:]  # Remove "Bearer "
     pool = get_pool()

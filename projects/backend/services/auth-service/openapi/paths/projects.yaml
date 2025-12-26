@@ -1,0 +1,416 @@
+collection:
+  post:
+    summary: Create a new project
+    operationId: createProject
+    tags:
+      - projects
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas.yaml#/ProjectCreateRequest
+    responses:
+      '201':
+        description: Project created successfully
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Project
+      '400':
+        description: Invalid request data
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '401':
+        description: Unauthorized
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '500':
+        description: Internal server error
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+  get:
+    summary: List all projects for current user
+    operationId: listProjects
+    tags:
+      - projects
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: List of projects
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/ProjectListResponse
+      '401':
+        description: Unauthorized
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '500':
+        description: Internal server error
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+
+item:
+  get:
+    summary: Get project by ID
+    operationId: getProject
+    tags:
+      - projects
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: ../components/parameters.yaml#/ProjectId
+    responses:
+      '200':
+        description: Project details
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Project
+      '400':
+        description: Invalid project ID
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '401':
+        description: Unauthorized
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '403':
+        description: Access forbidden
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '404':
+        description: Project not found
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '500':
+        description: Internal server error
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+  put:
+    summary: Update project
+    operationId: updateProject
+    tags:
+      - projects
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: ../components/parameters.yaml#/ProjectId
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas.yaml#/ProjectUpdateRequest
+    responses:
+      '200':
+        description: Project updated successfully
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Project
+      '400':
+        description: Invalid request data
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '401':
+        description: Unauthorized
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '403':
+        description: Access forbidden
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '404':
+        description: Project not found
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '500':
+        description: Internal server error
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+  delete:
+    summary: Delete project
+    operationId: deleteProject
+    tags:
+      - projects
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: ../components/parameters.yaml#/ProjectId
+    responses:
+      '200':
+        description: Project deleted successfully
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/OkResponse
+      '400':
+        description: Invalid project ID
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '401':
+        description: Unauthorized
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '403':
+        description: Access forbidden
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '404':
+        description: Project not found
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '500':
+        description: Internal server error
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+
+members:
+  get:
+    summary: List project members
+    operationId: listProjectMembers
+    tags:
+      - projects
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: ../components/parameters.yaml#/ProjectId
+    responses:
+      '200':
+        description: List of project members
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/ProjectMemberListResponse
+      '400':
+        description: Invalid project ID
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '401':
+        description: Unauthorized
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '403':
+        description: Access forbidden
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '404':
+        description: Project not found
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '500':
+        description: Internal server error
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+  post:
+    summary: Add member to project
+    operationId: addProjectMember
+    tags:
+      - projects
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: ../components/parameters.yaml#/ProjectId
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas.yaml#/ProjectMemberAddRequest
+    responses:
+      '201':
+        description: Member added successfully
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/ProjectMember
+      '400':
+        description: Invalid request data
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '401':
+        description: Unauthorized
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '403':
+        description: Access forbidden
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '404':
+        description: Project or user not found
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '500':
+        description: Internal server error
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+
+memberItem:
+  delete:
+    summary: Remove member from project
+    operationId: removeProjectMember
+    tags:
+      - projects
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: ../components/parameters.yaml#/ProjectId
+      - $ref: ../components/parameters.yaml#/UserId
+    responses:
+      '200':
+        description: Member removed successfully
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/OkResponse
+      '400':
+        description: Invalid ID
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '401':
+        description: Unauthorized
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '403':
+        description: Access forbidden
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '404':
+        description: Project or member not found
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '500':
+        description: Internal server error
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+
+memberRole:
+  put:
+    summary: Update member role
+    operationId: updateProjectMemberRole
+    tags:
+      - projects
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: ../components/parameters.yaml#/ProjectId
+      - $ref: ../components/parameters.yaml#/UserId
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas.yaml#/ProjectMemberUpdateRequest
+    responses:
+      '200':
+        description: Member role updated successfully
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/ProjectMember
+      '400':
+        description: Invalid request data
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '401':
+        description: Unauthorized
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '403':
+        description: Access forbidden
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '404':
+        description: Project or member not found
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '500':
+        description: Internal server error
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+

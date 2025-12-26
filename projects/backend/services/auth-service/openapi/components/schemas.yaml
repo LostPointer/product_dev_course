@@ -1,0 +1,288 @@
+User:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+      description: User ID
+    username:
+      type: string
+      description: Username
+      example: "johndoe"
+    email:
+      type: string
+      format: email
+      description: User email
+      example: "john@example.com"
+    password_change_required:
+      type: boolean
+      description: Whether password change is required
+      default: false
+
+UserRegisterRequest:
+  type: object
+  required:
+    - username
+    - email
+    - password
+  properties:
+    username:
+      type: string
+      minLength: 3
+      maxLength: 50
+      description: Username (3-50 characters)
+      example: "johndoe"
+    email:
+      type: string
+      format: email
+      description: User email
+      example: "john@example.com"
+    password:
+      type: string
+      format: password
+      minLength: 8
+      maxLength: 100
+      description: Password (8-100 characters)
+      example: "securepass123"
+
+UserLoginRequest:
+  type: object
+  required:
+    - username
+    - password
+  properties:
+    username:
+      type: string
+      description: Username
+      example: "johndoe"
+    password:
+      type: string
+      format: password
+      description: Password
+      example: "securepass123"
+
+AuthTokensResponse:
+  type: object
+  properties:
+    access_token:
+      type: string
+      description: JWT access token
+      example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    refresh_token:
+      type: string
+      description: JWT refresh token
+      example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+AuthResponse:
+  type: object
+  properties:
+    user:
+      $ref: '#/User'
+    access_token:
+      type: string
+      description: JWT access token
+      example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    refresh_token:
+      type: string
+      description: JWT refresh token
+      example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+TokenRefreshRequest:
+  type: object
+  required:
+    - refresh_token
+  properties:
+    refresh_token:
+      type: string
+      description: Refresh token
+      example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+PasswordChangeRequest:
+  type: object
+  required:
+    - old_password
+    - new_password
+  properties:
+    old_password:
+      type: string
+      format: password
+      description: Current password
+      example: "oldpass123"
+    new_password:
+      type: string
+      format: password
+      minLength: 8
+      maxLength: 100
+      description: New password (8-100 characters)
+      example: "newpass123"
+
+Project:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+      description: Project ID
+    name:
+      type: string
+      description: Project name
+      example: "My Project"
+    description:
+      type: string
+      nullable: true
+      description: Project description
+      example: "A sample project"
+    owner_id:
+      type: string
+      format: uuid
+      description: Owner user ID
+    created_at:
+      type: string
+      format: date-time
+      description: Creation timestamp
+    updated_at:
+      type: string
+      format: date-time
+      description: Last update timestamp
+
+ProjectCreateRequest:
+  type: object
+  required:
+    - name
+  properties:
+    name:
+      type: string
+      minLength: 1
+      maxLength: 200
+      description: Project name
+      example: "My Project"
+    description:
+      type: string
+      maxLength: 1000
+      nullable: true
+      description: Project description
+      example: "A sample project"
+
+ProjectUpdateRequest:
+  type: object
+  properties:
+    name:
+      type: string
+      minLength: 1
+      maxLength: 200
+      nullable: true
+      description: Project name
+      example: "Updated Project Name"
+    description:
+      type: string
+      maxLength: 1000
+      nullable: true
+      description: Project description
+      example: "Updated description"
+
+ProjectListResponse:
+  type: object
+  properties:
+    projects:
+      type: array
+      items:
+        $ref: '#/Project'
+
+ProjectMember:
+  type: object
+  properties:
+    project_id:
+      type: string
+      format: uuid
+      description: Project ID
+    user_id:
+      type: string
+      format: uuid
+      description: User ID
+    role:
+      type: string
+      enum:
+        - owner
+        - editor
+        - viewer
+      description: Member role
+      example: "editor"
+    created_at:
+      type: string
+      format: date-time
+      description: When member was added
+    username:
+      type: string
+      nullable: true
+      description: Username (populated when listing members)
+      example: "johndoe"
+
+ProjectMemberAddRequest:
+  type: object
+  required:
+    - user_id
+    - role
+  properties:
+    user_id:
+      type: string
+      format: uuid
+      description: User ID to add as member
+    role:
+      type: string
+      enum:
+        - owner
+        - editor
+        - viewer
+      description: Member role
+      example: "editor"
+
+ProjectMemberUpdateRequest:
+  type: object
+  required:
+    - role
+  properties:
+    role:
+      type: string
+      enum:
+        - owner
+        - editor
+        - viewer
+      description: New member role
+      example: "editor"
+
+ProjectMemberListResponse:
+  type: object
+  properties:
+    members:
+      type: array
+      items:
+        $ref: '#/ProjectMember'
+
+Error:
+  type: object
+  properties:
+    error:
+      type: string
+      description: Error message
+      example: "Invalid credentials"
+
+HealthResponse:
+  type: object
+  properties:
+    status:
+      type: string
+      example: "ok"
+    service:
+      type: string
+      example: "auth-service"
+    env:
+      type: string
+      example: "development"
+
+OkResponse:
+  type: object
+  properties:
+    ok:
+      type: boolean
+      example: true
+

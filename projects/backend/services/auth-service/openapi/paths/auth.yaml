@@ -1,0 +1,196 @@
+register:
+  post:
+    summary: Register a new user
+    operationId: register
+    tags:
+      - auth
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas.yaml#/UserRegisterRequest
+    responses:
+      '201':
+        description: User registered successfully
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/AuthResponse
+      '400':
+        description: Invalid request data
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '409':
+        description: User already exists
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '500':
+        description: Internal server error
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+
+login:
+  post:
+    summary: Login user
+    operationId: login
+    tags:
+      - auth
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas.yaml#/UserLoginRequest
+    responses:
+      '200':
+        description: Login successful
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/AuthResponse
+      '400':
+        description: Invalid request data
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '401':
+        description: Invalid credentials
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '500':
+        description: Internal server error
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+
+refresh:
+  post:
+    summary: Refresh access token
+    operationId: refreshToken
+    tags:
+      - auth
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas.yaml#/TokenRefreshRequest
+    responses:
+      '200':
+        description: Tokens refreshed successfully
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/AuthTokensResponse
+      '400':
+        description: Invalid request data
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '401':
+        description: Invalid or expired refresh token
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '500':
+        description: Internal server error
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+
+logout:
+  post:
+    summary: Logout user
+    operationId: logout
+    tags:
+      - auth
+    responses:
+      '200':
+        description: Logout successful
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/OkResponse
+
+me:
+  get:
+    summary: Get current user information
+    operationId: getCurrentUser
+    tags:
+      - auth
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: User information
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/User
+      '401':
+        description: Unauthorized
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '500':
+        description: Internal server error
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+
+changePassword:
+  post:
+    summary: Change user password
+    operationId: changePassword
+    tags:
+      - auth
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas.yaml#/PasswordChangeRequest
+    responses:
+      '200':
+        description: Password changed successfully
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/User
+      '400':
+        description: Invalid request data
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '401':
+        description: Unauthorized or invalid old password
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+      '500':
+        description: Internal server error
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas.yaml#/Error
+

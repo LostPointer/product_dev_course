@@ -1,0 +1,86 @@
+openapi: 3.1.0
+info:
+  title: Auth Service API
+  version: 0.1.0
+  description: Authentication and project management service for Experiment Tracking Platform
+servers:
+- url: http://localhost:8001
+tags:
+- name: auth
+  description: Authentication endpoints
+- name: projects
+  description: Project management endpoints
+- name: health
+  description: Health check endpoints
+paths:
+  /health:
+    $ref: ./paths/health.yaml
+  /auth/register:
+    $ref: ./paths/auth.yaml#/register
+  /auth/login:
+    $ref: ./paths/auth.yaml#/login
+  /auth/refresh:
+    $ref: ./paths/auth.yaml#/refresh
+  /auth/logout:
+    $ref: ./paths/auth.yaml#/logout
+  /auth/me:
+    $ref: ./paths/auth.yaml#/me
+  /auth/change-password:
+    $ref: ./paths/auth.yaml#/changePassword
+  /projects:
+    $ref: ./paths/projects.yaml#/collection
+  /projects/{project_id}:
+    $ref: ./paths/projects.yaml#/item
+  /projects/{project_id}/members:
+    $ref: ./paths/projects.yaml#/members
+  /projects/{project_id}/members/{user_id}:
+    $ref: ./paths/projects.yaml#/memberItem
+  /projects/{project_id}/members/{user_id}/role:
+    $ref: ./paths/projects.yaml#/memberRole
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    ProjectId:
+      $ref: ./components/parameters.yaml#/ProjectId
+    UserId:
+      $ref: ./components/parameters.yaml#/UserId
+  schemas:
+    User:
+      $ref: ./components/schemas.yaml#/User
+    UserRegisterRequest:
+      $ref: ./components/schemas.yaml#/UserRegisterRequest
+    UserLoginRequest:
+      $ref: ./components/schemas.yaml#/UserLoginRequest
+    AuthTokensResponse:
+      $ref: ./components/schemas.yaml#/AuthTokensResponse
+    AuthResponse:
+      $ref: ./components/schemas.yaml#/AuthResponse
+    TokenRefreshRequest:
+      $ref: ./components/schemas.yaml#/TokenRefreshRequest
+    PasswordChangeRequest:
+      $ref: ./components/schemas.yaml#/PasswordChangeRequest
+    Project:
+      $ref: ./components/schemas.yaml#/Project
+    ProjectCreateRequest:
+      $ref: ./components/schemas.yaml#/ProjectCreateRequest
+    ProjectUpdateRequest:
+      $ref: ./components/schemas.yaml#/ProjectUpdateRequest
+    ProjectListResponse:
+      $ref: ./components/schemas.yaml#/ProjectListResponse
+    ProjectMember:
+      $ref: ./components/schemas.yaml#/ProjectMember
+    ProjectMemberAddRequest:
+      $ref: ./components/schemas.yaml#/ProjectMemberAddRequest
+    ProjectMemberUpdateRequest:
+      $ref: ./components/schemas.yaml#/ProjectMemberUpdateRequest
+    ProjectMemberListResponse:
+      $ref: ./components/schemas.yaml#/ProjectMemberListResponse
+    Error:
+      $ref: ./components/schemas.yaml#/Error
+    HealthResponse:
+      $ref: ./components/schemas.yaml#/HealthResponse
+
