@@ -1,8 +1,8 @@
 .PHONY: test test-backend test-frontend type-check backend-install frontend-install
 .PHONY: backend-install
-.PHONY: logs logs-follow logs-service logs-proxy logs-errors
+.PHONY: logs logs-follow logs-service logs-proxy logs-auth-service logs-errors
 .PHONY: logs-stack logs-stack-up logs-stack-down logs-stack-restart
-.PHONY: dev dev-up dev-down dev-restart
+.PHONY: dev dev-up dev-down dev-restart dev-logs dev-fix grafana-reset-password
 
 BACKEND_DIR := projects/backend/services/experiment-service
 FRONTEND_DIR := projects/frontend/apps/experiment-portal
@@ -127,6 +127,9 @@ logs-service:
 logs-proxy:
 	docker-compose logs -f --tail=100 auth-proxy
 
+logs-auth-service:
+	docker-compose logs -f --tail=100 auth-service
+
 logs-portal:
 	docker-compose logs -f --tail=100 experiment-portal
 
@@ -167,6 +170,20 @@ logs-stack-restart: logs-stack-down logs-stack-up
 
 # Алиас для запуска
 logs-stack: logs-stack-up
+
+# Сброс пароля администратора Grafana
+grafana-reset-password:
+	@echo "Сброс пароля администратора Grafana..."
+	@echo "Используется пароль из переменной GRAFANA_ADMIN_PASSWORD (по умолчанию: admin)"
+	@if [ -f docker-compose.override.yml ]; then \
+		docker-compose exec -T grafana grafana cli admin reset-admin-password "$${GRAFANA_ADMIN_PASSWORD:-admin}" 2>&1 | grep -E "(Admin password|successfully|error)" || true; \
+	else \
+		docker-compose -f docker-compose.yml -f docker-compose.logging.yml exec -T grafana grafana cli admin reset-admin-password "$${GRAFANA_ADMIN_PASSWORD:-admin}" 2>&1 | grep -E "(Admin password|successfully|error)" || true; \
+	fi
+	@echo ""
+	@echo "✅ Пароль администратора Grafana сброшен!"
+	@echo "👤 Логин: admin"
+	@echo "🔑 Пароль: $${GRAFANA_ADMIN_PASSWORD:-admin}"
 
 # ============================================
 # Локальная отладка (Frontend + Backend + Auth Service + Auth Proxy + Grafana)
@@ -210,7 +227,12 @@ dev-up:
 	@echo "👤 Grafana логин: admin"
 	@echo "🔑 Grafana пароль: admin (или значение из GRAFANA_ADMIN_PASSWORD в .env)"
 	@echo ""
-	@echo "Для просмотра логов: make logs-service, make logs-portal или make logs-stack"
+	@echo "Для просмотра логов всех dev-сервисов: make dev-logs"
+	@echo "Для просмотра логов конкретного сервиса: make logs-service, make logs-proxy, make logs-auth-service, make logs-portal, make logs-postgres"
+	@echo "Для просмотра логов через Grafana: make logs-stack"
+	@echo ""
+	@echo "⚠️  Если возникла ошибка 'ContainerConfig', выполните: make dev-fix"
+	@echo "⚠️  Если не получается войти в Grafana, выполните: make grafana-reset-password"
 
 # Остановка фронтенда, бэкенда, auth-service, auth-proxy и Grafana
 dev-down:
@@ -224,6 +246,42 @@ dev-down:
 
 # Перезапуск фронтенда, бэкенда, auth-service, auth-proxy и Grafana
 dev-restart: dev-down dev-up
+
+# Просмотр логов всех dev-сервисов
+dev-logs:
+	@echo "Просмотр логов всех dev-сервисов (Ctrl+C для выхода)"
+	@if [ -f docker-compose.override.yml ]; then \
+		docker-compose logs -f --tail=50 postgres auth-service experiment-service auth-proxy experiment-portal loki grafana; \
+	else \
+		docker-compose -f docker-compose.yml -f docker-compose.logging.yml logs -f --tail=50 postgres auth-service experiment-service auth-proxy experiment-portal loki grafana; \
+	fi
+
+# Исправление ошибки ContainerConfig (удаление проблемных контейнеров и пересоздание)
+dev-fix:
+	@echo "Исправление ошибки ContainerConfig..."
+	@echo "Остановка всех dev-сервисов..."
+	@if [ -f docker-compose.override.yml ]; then \
+		docker-compose stop postgres auth-service experiment-service auth-proxy experiment-portal loki grafana 2>/dev/null || true; \
+	else \
+		docker-compose -f docker-compose.yml -f docker-compose.logging.yml stop postgres auth-service experiment-service auth-proxy experiment-portal loki grafana 2>/dev/null || true; \
+	fi
+	@echo "Удаление проблемных контейнеров..."
+	@docker ps -a --filter "name=experiment-service" --format "{{.ID}}" | xargs -r docker rm -f 2>/dev/null || true
+	@docker ps -a --filter "name=auth-service" --format "{{.ID}}" | xargs -r docker rm -f 2>/dev/null || true
+	@docker ps -a --filter "name=auth-proxy" --format "{{.ID}}" | xargs -r docker rm -f 2>/dev/null || true
+	@docker ps -a --filter "name=experiment-portal" --format "{{.ID}}" | xargs -r docker rm -f 2>/dev/null || true
+	@docker ps -a --filter "name=grafana" --format "{{.ID}}" | xargs -r docker rm -f 2>/dev/null || true
+	@docker ps -a --filter "name=loki" --format "{{.ID}}" | xargs -r docker rm -f 2>/dev/null || true
+	@echo "Удаление контейнеров с префиксом проекта..."
+	@if [ -f docker-compose.override.yml ]; then \
+		docker-compose rm -f postgres auth-service experiment-service auth-proxy experiment-portal loki grafana 2>/dev/null || true; \
+	else \
+		docker-compose -f docker-compose.yml -f docker-compose.logging.yml rm -f postgres auth-service experiment-service auth-proxy experiment-portal loki grafana 2>/dev/null || true; \
+	fi
+	@echo "Очистка неиспользуемых образов..."
+	@docker image prune -f >/dev/null 2>&1 || true
+	@echo "✅ Очистка завершена. Запускаю сервисы заново..."
+	@$(MAKE) dev-up
 
 # Алиас для запуска
 dev: dev-up
