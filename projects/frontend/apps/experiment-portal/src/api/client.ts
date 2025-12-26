@@ -15,6 +15,9 @@ import type {
   SensorsListResponse,
   SensorRegisterResponse,
   SensorTokenResponse,
+  CaptureSession,
+  CaptureSessionCreate,
+  CaptureSessionsListResponse,
 } from '../types'
 
 // API работает через Auth Proxy, который автоматически добавляет токен из куки
@@ -182,6 +185,36 @@ export const sensorsApi = {
   rotateToken: async (id: string, params?: { project_id?: string }): Promise<SensorTokenResponse> => {
     const response = await apiClient.post(`/api/v1/sensors/${id}/rotate-token`, {}, { params })
     return response.data
+  },
+}
+
+// Capture Sessions API
+export const captureSessionsApi = {
+  list: async (runId: string, params?: {
+    page?: number
+    page_size?: number
+  }): Promise<CaptureSessionsListResponse> => {
+    const response = await apiClient.get(`/api/v1/runs/${runId}/capture-sessions`, { params })
+    return response.data
+  },
+
+  get: async (runId: string, sessionId: string): Promise<CaptureSession> => {
+    const response = await apiClient.get(`/api/v1/runs/${runId}/capture-sessions/${sessionId}`)
+    return response.data
+  },
+
+  create: async (runId: string, data: CaptureSessionCreate, params?: { project_id?: string }): Promise<CaptureSession> => {
+    const response = await apiClient.post(`/api/v1/runs/${runId}/capture-sessions`, data, { params })
+    return response.data
+  },
+
+  stop: async (runId: string, sessionId: string): Promise<CaptureSession> => {
+    const response = await apiClient.post(`/api/v1/runs/${runId}/capture-sessions/${sessionId}/stop`)
+    return response.data
+  },
+
+  delete: async (runId: string, sessionId: string): Promise<void> => {
+    await apiClient.delete(`/api/v1/runs/${runId}/capture-sessions/${sessionId}`)
   },
 }
 

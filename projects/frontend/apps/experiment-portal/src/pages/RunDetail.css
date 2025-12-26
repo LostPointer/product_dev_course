@@ -53,3 +53,88 @@
   line-height: 1.5;
 }
 
+.capture-sessions-section {
+  margin-top: 24px;
+  max-width: 1000px;
+}
+
+.capture-sessions-section .card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.capture-sessions-section .card-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.sessions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.session-card {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 16px;
+  background-color: #fff;
+}
+
+.session-card.active {
+  border-color: #007bff;
+  background-color: #f0f8ff;
+}
+
+.session-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.session-header h4 {
+  margin: 0 8px 0 0;
+  font-size: 16px;
+  font-weight: 600;
+  display: inline-block;
+}
+
+.session-header>div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.session-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.session-info .info-row {
+  display: flex;
+  gap: 8px;
+}
+
+.session-info .info-row strong {
+  min-width: 100px;
+  color: #666;
+}
+
+.session-info .info-row span {
+  color: #333;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: #666;
+}
+
+.empty-state p {
+  margin-bottom: 16px;
+}

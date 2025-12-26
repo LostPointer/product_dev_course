@@ -162,3 +162,37 @@ export interface SensorsListResponse {
   page_size: number
 }
 
+/** Типы для Capture Sessions */
+
+export type CaptureSessionStatus = 'draft' | 'running' | 'failed' | 'succeeded' | 'archived' | 'backfilling'
+
+export interface CaptureSession {
+  id: string
+  run_id: string
+  project_id: string
+  ordinal_number: number
+  started_at?: string | null
+  stopped_at?: string | null
+  status: CaptureSessionStatus
+  initiated_by?: string | null
+  notes?: string | null
+  archived: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface CaptureSessionCreate {
+  project_id: string
+  run_id: string
+  ordinal_number: number
+  status?: CaptureSessionStatus
+  notes?: string
+}
+
+export interface CaptureSessionsListResponse {
+  capture_sessions: CaptureSession[]
+  total: number
+  page?: number
+  page_size?: number
+}
+
