@@ -16,3 +16,4 @@ function InfoRow({ label, value, mono = false }: InfoRowProps) {
 }
 
 export default InfoRow
+

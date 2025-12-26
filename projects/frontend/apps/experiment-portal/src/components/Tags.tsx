@@ -21,3 +21,4 @@ function Tags({ tags }: TagsProps) {
 }
 
 export default Tags
+

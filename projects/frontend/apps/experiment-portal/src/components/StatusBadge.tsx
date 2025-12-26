@@ -2,11 +2,21 @@ import './StatusBadge.css'
 
 interface StatusBadgeProps {
   status: string
-  variant?: 'experiment' | 'run'
+  variant?: 'experiment' | 'run' | 'sensor'
 }
 
 function StatusBadge({ status, variant = 'experiment' }: StatusBadgeProps) {
   const getStatusBadge = (status: string) => {
+    if (variant === 'sensor') {
+      const badges: Record<string, string> = {
+        registering: 'badge-secondary',
+        active: 'badge-success',
+        inactive: 'badge-warning',
+        archived: 'badge-secondary',
+      }
+      return badges[status] || 'badge-secondary'
+    }
+
     const badges: Record<string, string> = {
       created: 'badge-secondary',
       running: 'badge-info',
@@ -24,6 +34,16 @@ function StatusBadge({ status, variant = 'experiment' }: StatusBadgeProps) {
         running: 'Выполняется',
         completed: 'Завершен',
         failed: 'Ошибка',
+      }
+      return texts[status] || status
+    }
+
+    if (variant === 'sensor') {
+      const texts: Record<string, string> = {
+        registering: 'Регистрация',
+        active: 'Активен',
+        inactive: 'Неактивен',
+        archived: 'Архивирован',
       }
       return texts[status] || status
     }
@@ -46,3 +66,4 @@ function StatusBadge({ status, variant = 'experiment' }: StatusBadgeProps) {
 }
 
 export default StatusBadge
+

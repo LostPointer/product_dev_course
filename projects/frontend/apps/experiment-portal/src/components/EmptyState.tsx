@@ -13,3 +13,4 @@ function EmptyState({ message }: EmptyStateProps) {
 }
 
 export default EmptyState
+

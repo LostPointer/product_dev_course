@@ -9,3 +9,4 @@ function Loading({ message = 'Загрузка...' }: LoadingProps) {
 }
 
 export default Loading
+

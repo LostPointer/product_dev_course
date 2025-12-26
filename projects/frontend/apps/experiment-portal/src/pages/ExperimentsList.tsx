@@ -10,6 +10,7 @@ import EmptyState from '../components/EmptyState'
 import Pagination from '../components/Pagination'
 import Tags from '../components/Tags'
 import PageHeader from '../components/PageHeader'
+import Filters from '../components/Filters'
 import './ExperimentsList.css'
 
 function ExperimentsList() {
@@ -58,51 +59,56 @@ function ExperimentsList() {
         }
       />
 
-      <div className="filters card">
-        <div className="filters-grid">
-          <div className="form-group">
-            <label>Поиск</label>
-            <input
-              type="text"
-              placeholder="Название, описание..."
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value)
-                setPage(1)
-              }}
-            />
-          </div>
-          <div className="form-group">
-            <label>Project ID</label>
-            <input
-              type="text"
-              placeholder="UUID проекта"
-              value={projectId}
-              onChange={(e) => {
-                setProjectId(e.target.value)
-                setPage(1)
-              }}
-            />
-          </div>
-          <div className="form-group">
-            <label>Статус</label>
-            <select
-              value={status}
-              onChange={(e) => {
-                setStatus(e.target.value)
-                setPage(1)
-              }}
-            >
-              <option value="">Все</option>
-              <option value="created">Создан</option>
-              <option value="running">Выполняется</option>
-              <option value="completed">Завершен</option>
-              <option value="failed">Ошибка</option>
-              <option value="archived">Архивирован</option>
-            </select>
-          </div>
-        </div>
-      </div>
+      <Filters
+        fields={[
+          {
+            id: 'search',
+            label: 'Поиск',
+            type: 'text',
+            value: searchQuery,
+            onChange: (value) => {
+              setSearchQuery(value)
+              setPage(1)
+            },
+            placeholder: 'Название, описание...',
+          },
+          {
+            id: 'project_id',
+            label: 'Project ID',
+            type: 'text',
+            value: projectId,
+            onChange: (value) => {
+              setProjectId(value)
+              setPage(1)
+            },
+            placeholder: 'UUID проекта',
+          },
+          {
+            id: 'status',
+            label: 'Статус',
+            type: 'select',
+            value: status,
+            onChange: (value) => {
+              setStatus(value)
+              setPage(1)
+            },
+            options: [
+              { value: '', label: 'Все' },
+              { value: 'created', label: 'Создан' },
+              { value: 'running', label: 'Выполняется' },
+              { value: 'completed', label: 'Завершен' },
+              { value: 'failed', label: 'Ошибка' },
+              { value: 'archived', label: 'Архивирован' },
+            ],
+          },
+        ]}
+        onReset={() => {
+          setSearchQuery('')
+          setProjectId('')
+          setStatus('')
+          setPage(1)
+        }}
+      />
 
       {data && (
         <>

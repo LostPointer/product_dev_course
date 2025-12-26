@@ -35,3 +35,4 @@ function Pagination({ currentPage, totalPages, onPageChange }: PaginationProps) 
 }
 
 export default Pagination
+

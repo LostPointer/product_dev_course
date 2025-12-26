@@ -3,6 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { sensorsApi } from '../api/client'
 import type { SensorCreate, SensorRegisterResponse } from '../types'
+import Error from '../components/Error'
+import FormGroup from '../components/FormGroup'
+import FormActions from '../components/FormActions'
+import TokenDisplay from '../components/TokenDisplay'
 import './CreateSensor.css'
 
 function CreateSensor() {
@@ -43,34 +47,16 @@ function CreateSensor() {
         })
     }
 
-    const handleCopyToken = () => {
-        if (createMutation.data?.token) {
-            navigator.clipboard.writeText(createMutation.data.token)
-            alert('Токен скопирован в буфер обмена')
-        }
-    }
-
     if (showToken && createMutation.data) {
         return (
             <div className="create-sensor">
                 <div className="token-display card">
                     <h2>Датчик успешно зарегистрирован!</h2>
-                    <p className="warning">
-                        ⚠️ Сохраните токен сейчас! Он больше не будет показан.
-                    </p>
-                    <div className="token-box">
-                        <label>Токен датчика:</label>
-                        <div className="token-value">
-                            <code>{createMutation.data.token}</code>
-                            <button
-                                type="button"
-                                className="btn btn-secondary btn-sm"
-                                onClick={handleCopyToken}
-                            >
-                                Копировать
-                            </button>
-                        </div>
-                    </div>
+                    <TokenDisplay
+                        token={createMutation.data.token}
+                        warning="⚠️ Сохраните токен сейчас! Он больше не будет показан."
+                        showCloseButton={false}
+                    />
                     <p className="redirect-info">
                         Через несколько секунд вы будете перенаправлены на страницу датчика...
                     </p>
@@ -90,13 +76,14 @@ function CreateSensor() {
         <div className="create-sensor">
             <h2>Зарегистрировать датчик</h2>
 
-            {error && <div className="error">{error}</div>}
+            {error && <Error message={error} />}
 
             <form onSubmit={handleSubmit} className="sensor-form card">
-                <div className="form-group">
-                    <label htmlFor="project_id">
-                        Project ID <span className="required">*</span>
-                    </label>
+                <FormGroup
+                    label="Project ID"
+                    htmlFor="project_id"
+                    required
+                >
                     <input
                         id="project_id"
                         type="text"
@@ -107,12 +94,13 @@ function CreateSensor() {
                         required
                         placeholder="UUID проекта"
                     />
-                </div>
+                </FormGroup>
 
-                <div className="form-group">
-                    <label htmlFor="sensor_name">
-                        Название <span className="required">*</span>
-                    </label>
+                <FormGroup
+                    label="Название"
+                    htmlFor="sensor_name"
+                    required
+                >
                     <input
                         id="sensor_name"
                         type="text"
@@ -121,12 +109,13 @@ function CreateSensor() {
                         required
                         placeholder="Например: Датчик температуры #1"
                     />
-                </div>
+                </FormGroup>
 
-                <div className="form-group">
-                    <label htmlFor="sensor_type">
-                        Тип датчика <span className="required">*</span>
-                    </label>
+                <FormGroup
+                    label="Тип датчика"
+                    htmlFor="sensor_type"
+                    required
+                >
                     <select
                         id="sensor_type"
                         value={formData.type}
@@ -142,12 +131,14 @@ function CreateSensor() {
                         <option value="humidity">Влажность</option>
                         <option value="other">Другое</option>
                     </select>
-                </div>
+                </FormGroup>
 
-                <div className="form-group">
-                    <label htmlFor="input_unit">
-                        Входная единица измерения <span className="required">*</span>
-                    </label>
+                <FormGroup
+                    label="Входная единица измерения"
+                    htmlFor="input_unit"
+                    required
+                    hint="Единица измерения сырых данных от датчика"
+                >
                     <input
                         id="input_unit"
                         type="text"
@@ -158,15 +149,14 @@ function CreateSensor() {
                         required
                         placeholder="Например: V (вольты), mV, ADC"
                     />
-                    <small className="form-hint">
-                        Единица измерения сырых данных от датчика
-                    </small>
-                </div>
+                </FormGroup>
 
-                <div className="form-group">
-                    <label htmlFor="display_unit">
-                        Единица отображения <span className="required">*</span>
-                    </label>
+                <FormGroup
+                    label="Единица отображения"
+                    htmlFor="display_unit"
+                    required
+                    hint="Единица измерения для отображения в интерфейсе"
+                >
                     <input
                         id="display_unit"
                         type="text"
@@ -177,13 +167,12 @@ function CreateSensor() {
                         required
                         placeholder="Например: °C, Pa, Hz"
                     />
-                    <small className="form-hint">
-                        Единица измерения для отображения в интерфейсе
-                    </small>
-                </div>
+                </FormGroup>
 
-                <div className="form-group">
-                    <label htmlFor="calibration_notes">Заметки по калибровке</label>
+                <FormGroup
+                    label="Заметки по калибровке"
+                    htmlFor="calibration_notes"
+                >
                     <textarea
                         id="calibration_notes"
                         value={formData.calibration_notes}
@@ -193,24 +182,17 @@ function CreateSensor() {
                         placeholder="Дополнительная информация о калибровке датчика..."
                         rows={3}
                     />
-                </div>
+                </FormGroup>
 
-                <div className="form-actions">
-                    <button
-                        type="button"
-                        className="btn btn-secondary"
-                        onClick={() => navigate('/sensors')}
-                    >
-                        Отмена
-                    </button>
-                    <button
-                        type="submit"
-                        className="btn btn-primary"
-                        disabled={createMutation.isPending}
-                    >
-                        {createMutation.isPending ? 'Регистрация...' : 'Зарегистрировать датчик'}
-                    </button>
-                </div>
+                <FormActions
+                    onCancel={() => navigate('/sensors')}
+                    submitLabel={
+                        createMutation.isPending
+                            ? 'Регистрация...'
+                            : 'Зарегистрировать датчик'
+                    }
+                    isSubmitting={createMutation.isPending}
+                />
             </form>
         </div>
     )
