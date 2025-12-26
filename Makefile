@@ -15,6 +15,7 @@ OPENAPI_SPEC := openapi/openapi.yaml
 # Many setups (pyenv, asdf) expose Python via shims in $PATH only in interactive shells.
 PYTHON ?= python3.14
 NODE ?= node
+FRONTEND_NODE_IMAGE ?= node:24-alpine
 
 test: type-check test-backend test-frontend
 
@@ -45,15 +46,27 @@ backend-install:
 frontend-install:
 	@cd $(FRONTEND_DIR) && \
 		if ! command -v "$(NODE)" >/dev/null 2>&1; then \
+			if command -v docker >/dev/null 2>&1; then \
+				echo "⚠️  Не найден Node.js локально — запускаю npm ci в Docker ($(FRONTEND_NODE_IMAGE))."; \
+				docker run --rm -v "$$(pwd)":/repo -w /repo/$(FRONTEND_DIR) $(FRONTEND_NODE_IMAGE) sh -lc "npm ci --no-audit --no-fund --loglevel=error"; \
+				exit 0; \
+			fi; \
 			echo "❌ Не найден Node.js (пробовал: $(NODE))."; \
 			echo "   Фронтенд требует Node.js 24 (LTS) или новее."; \
 			echo "   Установите Node LTS и повторите, или укажите бинарник: make NODE=/path/to/node test-frontend"; \
+			echo "   Альтернатива: установите Docker и используйте 'make test-frontend-docker'."; \
 			exit 1; \
 		fi; \
 		if ! "$(NODE)" -e 'const [maj]=process.versions.node.split(\".\"); process.exit(Number(maj) >= 24 ? 0 : 1)' >/dev/null 2>&1; then \
+			if command -v docker >/dev/null 2>&1; then \
+				echo "⚠️  Node.js слишком старый: $$($(NODE) -v 2>&1) — запускаю npm ci в Docker ($(FRONTEND_NODE_IMAGE))."; \
+				docker run --rm -v "$$(pwd)":/repo -w /repo/$(FRONTEND_DIR) $(FRONTEND_NODE_IMAGE) sh -lc "npm ci --no-audit --no-fund --loglevel=error"; \
+				exit 0; \
+			fi; \
 			echo "❌ Node.js слишком старый: $$($(NODE) -v 2>&1)"; \
 			echo "   Фронтенд требует Node.js 24 (LTS) или новее."; \
 			echo "   Подсказка: если используете nvm — выполните: nvm install --lts && nvm use --lts"; \
+			echo "   Альтернатива: установите Docker и используйте 'make test-frontend-docker'."; \
 			exit 1; \
 		fi; \
 		npm ci --no-audit --no-fund --loglevel=error
@@ -65,7 +78,22 @@ test-backend: backend-install
 	@cd $(BACKEND_DIR) && poetry run pytest
 
 test-frontend: frontend-install
-	@cd $(FRONTEND_DIR) && npm run test
+	@cd $(FRONTEND_DIR) && \
+		if command -v "$(NODE)" >/dev/null 2>&1 && "$(NODE)" -e 'const [maj]=process.versions.node.split(\".\"); process.exit(Number(maj) >= 24 ? 0 : 1)' >/dev/null 2>&1; then \
+			npm run test; \
+			exit 0; \
+		fi; \
+		if command -v docker >/dev/null 2>&1; then \
+			echo "⚠️  Запускаю frontend тесты в Docker ($(FRONTEND_NODE_IMAGE))."; \
+			docker run --rm -v "$$(pwd)":/repo -w /repo/$(FRONTEND_DIR) $(FRONTEND_NODE_IMAGE) sh -lc "npm ci --no-audit --no-fund --loglevel=error && npm run test"; \
+			exit 0; \
+		fi; \
+		echo "❌ Нужен Node.js 24+ или Docker для запуска frontend тестов."; \
+		exit 1
+
+.PHONY: test-frontend-docker
+test-frontend-docker:
+	@docker run --rm -v "$$(pwd)":/repo -w /repo/$(FRONTEND_DIR) $(FRONTEND_NODE_IMAGE) sh -lc "npm ci --no-audit --no-fund --loglevel=error && npm run test"
 
 .PHONY: generate-sdk
 generate-sdk:

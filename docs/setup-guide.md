@@ -327,6 +327,24 @@ sudo apt install nodejs -y
 # Скачать с nodejs.org
 ```
 
+### Альтернатива: установка Node.js через nvm (рекомендуется для разработки)
+
+Если хотите легко переключаться между версиями Node (например, под разные проекты), используйте `nvm`.
+
+```bash
+# Установка nvm
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+
+# Подключение nvm в текущей сессии (без перезапуска терминала)
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+
+# Установка и выбор последней LTS-версии Node
+nvm install --lts
+nvm use --lts
+node -v
+```
+
 ### Быстрая настройка TypeScript проекта
 
 ```bash
