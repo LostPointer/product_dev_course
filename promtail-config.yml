@@ -55,33 +55,41 @@ scrape_configs:
         action: labeldrop
     pipeline_stages:
       # Парсим JSON логи Docker (обертка Docker)
+      # Формат: {"log":"{...}","stream":"stdout","time":"..."}
       - json:
           expressions:
             docker_log: log
             stream: stream
-      # Пытаемся распарсить JSON из сообщения лога (структурированные логи приложения)
-      # docker_log содержит JSON строку от structlog
+      # Извлекаем trace_id и request_id через regex из JSON строки
+      # Это более надежно работает с вложенными JSON строками
+      # Используем именованные группы Go regex синтаксиса
+      - regex:
+          expression: '"trace_id"\s*:\s*"(?P<trace_id>[a-f0-9\-]+)"'
+          source: docker_log
+      - regex:
+          expression: '"request_id"\s*:\s*"(?P<request_id>[a-f0-9\-]+)"'
+          source: docker_log
+      # Пытаемся также распарсить JSON для других полей (опционально)
       - json:
           expressions:
-            trace_id: trace_id
-            request_id: request_id
             level: level
             event: event
             message: message
-            service: service
+            msg: msg
             method: method
+            url: url
             path: path
+            statusCode: statusCode
             status_code: status_code
             error: error
             error_type: error_type
           source: docker_log
-      # Извлекаем сообщение лога для отображения
+      # Извлекаем сообщение лога для отображения (оставляем оригинальный JSON)
       - output:
           source: docker_log
       # Извлекаем trace_id и request_id как labels для фильтрации в Grafana
-      # Используем только если они есть (необязательные labels)
+      # Labels создаются только если поля существуют и не пустые
+      # Важно: эти labels опциональные, базовые labels (container, job, service) остаются
       - labels:
           trace_id:
           request_id:
-          level:
-          service:
