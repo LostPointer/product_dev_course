@@ -196,3 +196,25 @@ export interface CaptureSessionsListResponse {
   page_size?: number
 }
 
+/** Типы для телеметрии */
+
+export interface TelemetryReading {
+  timestamp: string
+  raw_value: number
+  physical_value?: number
+  meta: Record<string, any>
+}
+
+export interface TelemetryIngest {
+  sensor_id: string
+  run_id?: string
+  capture_session_id?: string
+  meta?: Record<string, any>
+  readings: TelemetryReading[]
+}
+
+export interface TelemetryIngestResponse {
+  status: 'accepted'
+  accepted: number
+}
+

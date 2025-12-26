@@ -1,0 +1,289 @@
+import { useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
+import { telemetryApi } from '../api/client'
+import type { TelemetryIngest } from '../types'
+import './TestTelemetryModal.css'
+
+interface TestTelemetryModalProps {
+    sensorId: string
+    sensorToken?: string | null
+    isOpen: boolean
+    onClose: () => void
+}
+
+function TestTelemetryModal({ sensorId, sensorToken, isOpen, onClose }: TestTelemetryModalProps) {
+    const [token, setToken] = useState(sensorToken || '')
+    const [runId, setRunId] = useState('')
+    const [captureSessionId, setCaptureSessionId] = useState('')
+    const [metaJson, setMetaJson] = useState('{}')
+    const [readingsJson, setReadingsJson] = useState('')
+    const [error, setError] = useState<string | null>(null)
+    const [success, setSuccess] = useState<string | null>(null)
+
+    const ingestMutation = useMutation({
+        mutationFn: (data: TelemetryIngest) => {
+            if (!token) {
+                throw new Error('Токен датчика обязателен')
+            }
+            return telemetryApi.ingest(data, token)
+        },
+        onSuccess: (response) => {
+            setSuccess(`Телеметрия успешно отправлена. Принято записей: ${response.accepted}`)
+            setError(null)
+            // Очищаем форму через 2 секунды
+            setTimeout(() => {
+                setRunId('')
+                setCaptureSessionId('')
+                setMetaJson('{}')
+                setReadingsJson('')
+                setSuccess(null)
+            }, 2000)
+        },
+        onError: (err: any) => {
+            setError(err.response?.data?.error || err.message || 'Ошибка отправки телеметрии')
+            setSuccess(null)
+        },
+    })
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault()
+        setError(null)
+        setSuccess(null)
+
+        if (!token.trim()) {
+            setError('Токен датчика обязателен')
+            return
+        }
+
+        // Парсим JSON для meta
+        let meta: Record<string, any> = {}
+        if (metaJson.trim()) {
+            try {
+                meta = JSON.parse(metaJson)
+            } catch (err) {
+                setError('Ошибка в формате JSON для meta')
+                return
+            }
+        }
+
+        // Парсим JSON для readings
+        let readings: any[] = []
+        if (readingsJson.trim()) {
+            try {
+                readings = JSON.parse(readingsJson)
+                if (!Array.isArray(readings)) {
+                    setError('readings должен быть массивом')
+                    return
+                }
+                // Валидация readings
+                for (const reading of readings) {
+                    if (!reading.timestamp || typeof reading.raw_value !== 'number') {
+                        setError('Каждый reading должен содержать timestamp и raw_value')
+                        return
+                    }
+                }
+            } catch (err) {
+                setError('Ошибка в формате JSON для readings')
+                return
+            }
+        } else {
+            // Если readings не указаны, создаем один тестовый reading
+            readings = [
+                {
+                    timestamp: new Date().toISOString(),
+                    raw_value: Math.random() * 100,
+                    meta: {
+                        signal: 'test.signal',
+                    },
+                },
+            ]
+        }
+
+        const data: TelemetryIngest = {
+            sensor_id: sensorId,
+            run_id: runId.trim() || undefined,
+            capture_session_id: captureSessionId.trim() || undefined,
+            meta: Object.keys(meta).length > 0 ? meta : undefined,
+            readings,
+        }
+
+        ingestMutation.mutate(data)
+    }
+
+    const handleClose = () => {
+        if (!ingestMutation.isPending) {
+            setError(null)
+            setSuccess(null)
+            setRunId('')
+            setCaptureSessionId('')
+            setMetaJson('{}')
+            setReadingsJson('')
+            onClose()
+        }
+    }
+
+    const fillExample = () => {
+        setReadingsJson(JSON.stringify(
+            [
+                {
+                    timestamp: new Date().toISOString(),
+                    raw_value: 25.5,
+                    physical_value: 25.5,
+                    meta: {
+                        signal: 'temperature.c',
+                    },
+                },
+                {
+                    timestamp: new Date().toISOString(),
+                    raw_value: 1013.25,
+                    physical_value: 1013.25,
+                    meta: {
+                        signal: 'pressure.hpa',
+                    },
+                },
+            ],
+            null,
+            2
+        ))
+        setMetaJson(JSON.stringify(
+            {
+                test: true,
+                source: 'ui',
+            },
+            null,
+            2
+        ))
+    }
+
+    if (!isOpen) {
+        return null
+    }
+
+    return (
+        <div className="modal-overlay" onClick={handleClose}>
+            <div className="modal-content telemetry-modal" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">
+                    <h2>Тестовая отправка телеметрии</h2>
+                    <button
+                        type="button"
+                        className="modal-close"
+                        onClick={handleClose}
+                        disabled={ingestMutation.isPending}
+                    >
+                        ×
+                    </button>
+                </div>
+
+                <form onSubmit={handleSubmit} className="modal-form">
+                    {error && <div className="error">{error}</div>}
+                    {success && <div className="success">{success}</div>}
+
+                    <div className="form-group">
+                        <label htmlFor="telemetry_token">
+                            Токен датчика <span className="required">*</span>
+                        </label>
+                        <input
+                            id="telemetry_token"
+                            type="text"
+                            value={token}
+                            onChange={(e) => setToken(e.target.value)}
+                            required
+                            placeholder="Введите токен датчика"
+                            disabled={ingestMutation.isPending || !!sensorToken}
+                        />
+                        {sensorToken && (
+                            <small className="form-hint">
+                                Используется токен из контекста датчика
+                            </small>
+                        )}
+                    </div>
+
+                    <div className="form-group">
+                        <label htmlFor="telemetry_run_id">Run ID (опционально)</label>
+                        <input
+                            id="telemetry_run_id"
+                            type="text"
+                            value={runId}
+                            onChange={(e) => setRunId(e.target.value)}
+                            placeholder="UUID запуска"
+                            disabled={ingestMutation.isPending}
+                        />
+                    </div>
+
+                    <div className="form-group">
+                        <label htmlFor="telemetry_capture_session_id">Capture Session ID (опционально)</label>
+                        <input
+                            id="telemetry_capture_session_id"
+                            type="text"
+                            value={captureSessionId}
+                            onChange={(e) => setCaptureSessionId(e.target.value)}
+                            placeholder="UUID capture session"
+                            disabled={ingestMutation.isPending}
+                        />
+                    </div>
+
+                    <div className="form-group">
+                        <label htmlFor="telemetry_meta">Meta (JSON, опционально)</label>
+                        <textarea
+                            id="telemetry_meta"
+                            value={metaJson}
+                            onChange={(e) => setMetaJson(e.target.value)}
+                            placeholder='{"key": "value"}'
+                            rows={4}
+                            disabled={ingestMutation.isPending}
+                        />
+                        <small className="form-hint">
+                            Метаданные для всего пакета телеметрии
+                        </small>
+                    </div>
+
+                    <div className="form-group">
+                        <label htmlFor="telemetry_readings">
+                            Readings (JSON массив) <span className="required">*</span>
+                        </label>
+                        <textarea
+                            id="telemetry_readings"
+                            value={readingsJson}
+                            onChange={(e) => setReadingsJson(e.target.value)}
+                            placeholder='[{"timestamp": "2024-01-01T00:00:00Z", "raw_value": 25.5, "meta": {"signal": "test.signal"}}]'
+                            rows={8}
+                            disabled={ingestMutation.isPending}
+                        />
+                        <small className="form-hint">
+                            Массив readings. Если пусто, будет создан один тестовый reading.
+                            <button
+                                type="button"
+                                className="btn-link"
+                                onClick={fillExample}
+                                disabled={ingestMutation.isPending}
+                            >
+                                Заполнить примером
+                            </button>
+                        </small>
+                    </div>
+
+                    <div className="modal-actions">
+                        <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={handleClose}
+                            disabled={ingestMutation.isPending}
+                        >
+                            Отмена
+                        </button>
+                        <button
+                            type="submit"
+                            className="btn btn-primary"
+                            disabled={ingestMutation.isPending}
+                        >
+                            {ingestMutation.isPending ? 'Отправка...' : 'Отправить телеметрию'}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    )
+}
+
+export default TestTelemetryModal
+

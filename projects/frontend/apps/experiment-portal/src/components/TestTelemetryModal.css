@@ -1,0 +1,37 @@
+.telemetry-modal {
+    max-width: 700px;
+}
+
+.telemetry-modal .form-group textarea {
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+}
+
+.telemetry-modal .btn-link {
+    background: none;
+    border: none;
+    color: #007bff;
+    cursor: pointer;
+    text-decoration: underline;
+    padding: 0;
+    margin-left: 8px;
+    font-size: 12px;
+}
+
+.telemetry-modal .btn-link:hover:not(:disabled) {
+    color: #0056b3;
+}
+
+.telemetry-modal .btn-link:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.telemetry-modal .success {
+    background-color: #d4edda;
+    color: #155724;
+    padding: 12px 16px;
+    border-radius: 4px;
+    margin-bottom: 20px;
+    font-size: 14px;
+}

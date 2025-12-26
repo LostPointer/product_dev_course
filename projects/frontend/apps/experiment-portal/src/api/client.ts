@@ -18,6 +18,8 @@ import type {
   CaptureSession,
   CaptureSessionCreate,
   CaptureSessionsListResponse,
+  TelemetryIngest,
+  TelemetryIngestResponse,
 } from '../types'
 
 // API работает через Auth Proxy, который автоматически добавляет токен из куки
@@ -215,6 +217,26 @@ export const captureSessionsApi = {
 
   delete: async (runId: string, sessionId: string): Promise<void> => {
     await apiClient.delete(`/api/v1/runs/${runId}/capture-sessions/${sessionId}`)
+  },
+}
+
+// Telemetry API
+export const telemetryApi = {
+  ingest: async (data: TelemetryIngest, sensorToken: string): Promise<TelemetryIngestResponse> => {
+    // Для телеметрии используется прямой запрос к Experiment Service с токеном датчика
+    // (не через Auth Proxy, так как это публичный endpoint)
+    const EXPERIMENT_SERVICE_URL = import.meta.env.VITE_EXPERIMENT_SERVICE_URL || 'http://localhost:8002'
+    const response = await axios.post(
+      `${EXPERIMENT_SERVICE_URL}/api/v1/telemetry`,
+      data,
+      {
+        headers: {
+          'Authorization': `Bearer ${sensorToken}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    )
+    return response.data
   },
 }
 

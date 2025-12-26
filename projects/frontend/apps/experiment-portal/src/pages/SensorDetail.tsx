@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { sensorsApi } from '../api/client'
 import { format } from 'date-fns'
 import type { SensorStatus, SensorTokenResponse } from '../types'
+import TestTelemetryModal from '../components/TestTelemetryModal'
 import './SensorDetail.css'
 
 function SensorDetail() {
@@ -12,6 +13,7 @@ function SensorDetail() {
     const queryClient = useQueryClient()
     const [showToken, setShowToken] = useState(false)
     const [newToken, setNewToken] = useState<string | null>(null)
+    const [showTestTelemetryModal, setShowTestTelemetryModal] = useState(false)
 
     const { data: sensor, isLoading, error } = useQuery({
         queryKey: ['sensor', id],
@@ -86,6 +88,12 @@ function SensorDetail() {
                         <span className={`badge ${getStatusBadge(sensor.status)}`}>
                             {getStatusText(sensor.status)}
                         </span>
+                        <button
+                            className="btn btn-primary"
+                            onClick={() => setShowTestTelemetryModal(true)}
+                        >
+                            Тестовая отправка
+                        </button>
                         <button
                             className="btn btn-secondary"
                             onClick={() => rotateTokenMutation.mutate()}
@@ -195,6 +203,15 @@ function SensorDetail() {
                     </div>
                 )}
             </div>
+
+            {id && (
+                <TestTelemetryModal
+                    sensorId={id}
+                    sensorToken={newToken || null}
+                    isOpen={showTestTelemetryModal}
+                    onClose={() => setShowTestTelemetryModal(false)}
+                />
+            )}
         </div>
     )
 }
