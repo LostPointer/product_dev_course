@@ -33,6 +33,8 @@ RUN poetry install --no-root
 
 # Copy source code
 COPY services/experiment-service/src ./src
+COPY services/experiment-service/bin ./bin
+COPY services/experiment-service/migrations ./migrations
 
 # Set PYTHONPATH to include src directory
 ENV PYTHONPATH=/app/src
