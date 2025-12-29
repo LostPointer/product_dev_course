@@ -124,6 +124,18 @@ CREATE TRIGGER sensors_set_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION set_updated_at();
 
+CREATE TABLE sensor_projects (
+    sensor_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (sensor_id, project_id),
+    FOREIGN KEY (sensor_id) REFERENCES sensors (id) ON DELETE CASCADE,
+    UNIQUE (sensor_id, project_id)
+);
+
+CREATE INDEX sensor_projects_project_idx ON sensor_projects (project_id);
+CREATE INDEX sensor_projects_sensor_idx ON sensor_projects (sensor_id);
+
 CREATE TABLE conversion_profiles (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     sensor_id uuid NOT NULL,

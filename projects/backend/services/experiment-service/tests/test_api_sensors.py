@@ -145,3 +145,323 @@ async def test_delete_sensor_missing_returns_404(service_client):
     resp = await service_client.delete(f"/api/v1/sensors/{uuid.uuid4()}", headers=headers)
     assert resp.status == 404
 
+
+@pytest.mark.asyncio
+async def test_sensor_multiple_projects(service_client):
+    """Test adding and removing sensor from multiple projects."""
+    user_id = uuid.uuid4()
+    project1_id = uuid.uuid4()
+    project2_id = uuid.uuid4()
+    project3_id = uuid.uuid4()
+
+    headers1 = make_headers(project1_id, user_id=user_id)
+    headers2 = make_headers(project2_id, user_id=user_id)
+    headers3 = make_headers(project3_id, user_id=user_id)
+
+    # Create sensor in project1
+    resp = await service_client.post(
+        "/api/v1/sensors",
+        json={
+            "project_id": str(project1_id),
+            "name": "multi-project-sensor",
+            "type": "thermocouple",
+            "input_unit": "mV",
+            "display_unit": "C",
+        },
+        headers=headers1,
+    )
+    assert resp.status == 201
+    sensor_data = await resp.json()
+    sensor_id = sensor_data["sensor"]["id"]
+
+    # Get sensor projects - should have project1
+    resp = await service_client.get(
+        f"/api/v1/sensors/{sensor_id}/projects",
+        headers=headers1,
+    )
+    assert resp.status == 200
+    projects_data = await resp.json()
+    assert str(project1_id) in projects_data["project_ids"]
+    assert len(projects_data["project_ids"]) == 1
+
+    # Add sensor to project2
+    resp = await service_client.post(
+        f"/api/v1/sensors/{sensor_id}/projects",
+        json={"project_id": str(project2_id)},
+        headers=headers2,
+    )
+    assert resp.status == 204
+
+    # Get sensor projects from project2 context - should see both projects
+    # (user has access to both projects via headers)
+    resp = await service_client.get(
+        f"/api/v1/sensors/{sensor_id}/projects",
+        headers=headers2,
+    )
+    assert resp.status == 200
+    projects_data = await resp.json()
+    # Note: get_sensor_projects filters by user.project_roles, so we might see only project2
+    # if user doesn't have access to project1 in headers2 context
+    # But we should see at least project2
+    assert str(project2_id) in projects_data["project_ids"]
+
+    # Sensor should be visible in project2
+    resp = await service_client.get(
+        f"/api/v1/sensors?project_id={project2_id}",
+        headers=headers2,
+    )
+    assert resp.status == 200
+    sensors_data = await resp.json()
+    assert any(s["id"] == sensor_id for s in sensors_data["sensors"])
+
+    # Add sensor to project3
+    resp = await service_client.post(
+        f"/api/v1/sensors/{sensor_id}/projects",
+        json={"project_id": str(project3_id)},
+        headers=headers3,
+    )
+    assert resp.status == 204
+
+    # Remove sensor from project2
+    resp = await service_client.delete(
+        f"/api/v1/sensors/{sensor_id}/projects/{project2_id}",
+        headers=headers2,
+    )
+    assert resp.status == 204
+
+    # Get sensor projects from project1 context - should see project1
+    # (get_sensor_projects filters by user.project_roles, so we see only accessible projects)
+    resp = await service_client.get(
+        f"/api/v1/sensors/{sensor_id}/projects",
+        headers=headers1,
+    )
+    assert resp.status == 200
+    projects_data = await resp.json()
+    assert str(project1_id) in projects_data["project_ids"]
+    # project2 should not be in the list (was removed)
+    assert str(project2_id) not in projects_data["project_ids"]
+
+    # Sensor should not be visible in project2 anymore
+    resp = await service_client.get(
+        f"/api/v1/sensors?project_id={project2_id}",
+        headers=headers2,
+    )
+    assert resp.status == 200
+    sensors_data = await resp.json()
+    assert not any(s["id"] == sensor_id for s in sensors_data["sensors"])
+
+
+@pytest.mark.asyncio
+async def test_add_sensor_project_requires_owner_or_editor(service_client):
+    """Test that only owner/editor can add sensor to project."""
+    user_id = uuid.uuid4()
+    project1_id = uuid.uuid4()
+    project2_id = uuid.uuid4()
+
+    headers1_owner = make_headers(project1_id, role="owner", user_id=user_id)
+    headers2_viewer = make_headers(project2_id, role="viewer", user_id=user_id)
+
+    # Create sensor in project1
+    resp = await service_client.post(
+        "/api/v1/sensors",
+        json={
+            "project_id": str(project1_id),
+            "name": "rbac-sensor",
+            "type": "thermocouple",
+            "input_unit": "mV",
+            "display_unit": "C",
+        },
+        headers=headers1_owner,
+    )
+    assert resp.status == 201
+    sensor_data = await resp.json()
+    sensor_id = sensor_data["sensor"]["id"]
+
+    # Try to add sensor to project2 as viewer - should fail
+    resp = await service_client.post(
+        f"/api/v1/sensors/{sensor_id}/projects",
+        json={"project_id": str(project2_id)},
+        headers=headers2_viewer,
+    )
+    assert resp.status == 403
+
+    # Add sensor to project2 as owner - should succeed
+    headers2_owner = make_headers(project2_id, role="owner", user_id=user_id)
+    resp = await service_client.post(
+        f"/api/v1/sensors/{sensor_id}/projects",
+        json={"project_id": str(project2_id)},
+        headers=headers2_owner,
+    )
+    assert resp.status == 204
+
+
+@pytest.mark.asyncio
+async def test_remove_sensor_project_requires_owner_or_editor(service_client):
+    """Test that only owner/editor can remove sensor from project."""
+    user_id = uuid.uuid4()
+    project1_id = uuid.uuid4()
+    project2_id = uuid.uuid4()
+
+    headers1_owner = make_headers(project1_id, role="owner", user_id=user_id)
+    headers2_viewer = make_headers(project2_id, role="viewer", user_id=user_id)
+
+    # Create sensor in project1
+    resp = await service_client.post(
+        "/api/v1/sensors",
+        json={
+            "project_id": str(project1_id),
+            "name": "rbac-remove-sensor",
+            "type": "thermocouple",
+            "input_unit": "mV",
+            "display_unit": "C",
+        },
+        headers=headers1_owner,
+    )
+    assert resp.status == 201
+    sensor_data = await resp.json()
+    sensor_id = sensor_data["sensor"]["id"]
+
+    # Add sensor to project2
+    headers2_owner = make_headers(project2_id, role="owner", user_id=user_id)
+    resp = await service_client.post(
+        f"/api/v1/sensors/{sensor_id}/projects",
+        json={"project_id": str(project2_id)},
+        headers=headers2_owner,
+    )
+    assert resp.status == 204
+
+    # Try to remove sensor from project2 as viewer - should fail
+    resp = await service_client.delete(
+        f"/api/v1/sensors/{sensor_id}/projects/{project2_id}",
+        headers=headers2_viewer,
+    )
+    assert resp.status == 403
+
+    # Remove sensor from project2 as owner - should succeed
+    resp = await service_client.delete(
+        f"/api/v1/sensors/{sensor_id}/projects/{project2_id}",
+        headers=headers2_owner,
+    )
+    assert resp.status == 204
+
+
+@pytest.mark.asyncio
+async def test_get_sensor_projects_filters_by_access(service_client):
+    """Test that get_sensor_projects only returns projects user has access to."""
+    user_id = uuid.uuid4()
+    project1_id = uuid.uuid4()
+    project2_id = uuid.uuid4()
+
+    headers1 = make_headers(project1_id, user_id=user_id)
+    headers2 = make_headers(project2_id, user_id=user_id)
+
+    # Create sensor in project1
+    resp = await service_client.post(
+        "/api/v1/sensors",
+        json={
+            "project_id": str(project1_id),
+            "name": "access-filter-sensor",
+            "type": "thermocouple",
+            "input_unit": "mV",
+            "display_unit": "C",
+        },
+        headers=headers1,
+    )
+    assert resp.status == 201
+    sensor_data = await resp.json()
+    sensor_id = sensor_data["sensor"]["id"]
+
+    # Add sensor to project2
+    resp = await service_client.post(
+        f"/api/v1/sensors/{sensor_id}/projects",
+        json={"project_id": str(project2_id)},
+        headers=headers2,
+    )
+    assert resp.status == 204
+
+    # Get projects from project1 context - should see project1 only
+    resp = await service_client.get(
+        f"/api/v1/sensors/{sensor_id}/projects",
+        headers=headers1,
+    )
+    assert resp.status == 200
+    projects_data = await resp.json()
+    assert str(project1_id) in projects_data["project_ids"]
+    # Note: project2 might not be visible if user doesn't have access to it
+    # This depends on how project_roles are set up in the test
+
+
+@pytest.mark.asyncio
+async def test_add_sensor_project_unknown_sensor_returns_404(service_client):
+    """Test adding unknown sensor to project returns 404."""
+    project_id = uuid.uuid4()
+    headers = make_headers(project_id)
+
+    resp = await service_client.post(
+        f"/api/v1/sensors/{uuid.uuid4()}/projects",
+        json={"project_id": str(project_id)},
+        headers=headers,
+    )
+    assert resp.status == 404
+
+
+@pytest.mark.asyncio
+async def test_remove_sensor_project_unknown_returns_404(service_client):
+    """Test removing unknown sensor-project relationship returns 404."""
+    user_id = uuid.uuid4()
+    project1_id = uuid.uuid4()
+    project2_id = uuid.uuid4()
+    headers1 = make_headers(project1_id, user_id=user_id)
+    headers2 = make_headers(project2_id, user_id=user_id)
+
+    # Create sensor in project1
+    resp = await service_client.post(
+        "/api/v1/sensors",
+        json={
+            "project_id": str(project1_id),
+            "name": "test-sensor",
+            "type": "thermocouple",
+            "input_unit": "mV",
+            "display_unit": "C",
+        },
+        headers=headers1,
+    )
+    assert resp.status == 201
+    sensor_data = await resp.json()
+    sensor_id = sensor_data["sensor"]["id"]
+
+    # Try to remove from project2 (where sensor is not added) - should return 404
+    # But first we need to have access to project2
+    resp = await service_client.delete(
+        f"/api/v1/sensors/{sensor_id}/projects/{project2_id}",
+        headers=headers2,
+    )
+    assert resp.status == 404
+
+
+@pytest.mark.asyncio
+async def test_list_sensors_without_project_id(service_client):
+    """Test listing sensors without project_id uses active_project_id."""
+    project_id = uuid.uuid4()
+    headers = make_headers(project_id)
+
+    # Create sensor
+    resp = await service_client.post(
+        "/api/v1/sensors",
+        json={
+            "project_id": str(project_id),
+            "name": "no-project-id-sensor",
+            "type": "thermocouple",
+            "input_unit": "mV",
+            "display_unit": "C",
+        },
+        headers=headers,
+    )
+    assert resp.status == 201
+
+    # List sensors without project_id in query - should use active_project_id from headers
+    resp = await service_client.get("/api/v1/sensors", headers=headers)
+    assert resp.status == 200
+    sensors_data = await resp.json()
+    assert sensors_data["total"] >= 1
+

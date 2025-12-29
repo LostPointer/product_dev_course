@@ -77,13 +77,17 @@ async def require_current_user(request: web.Request) -> UserContext:
         except ValueError as exc:
             raise web.HTTPBadRequest(text=f"Invalid {PROJECT_ID_HEADER}") from exc
 
-    role = request.headers.get(PROJECT_ROLE_HEADER, "owner")
+    # Получаем роль из заголовка, если она установлена
+    # Если заголовок не установлен, role будет None, и мы не добавим проект в project_roles
+    # Это позволяет experiment-service проверить доступ через ensure_project_access
+    role = request.headers.get(PROJECT_ROLE_HEADER)
 
     # Если project_id передан, используем его как active_project_id
     # Если не передан, active_project_id будет None (будет установлен позже через resolve_project_id)
+    # Добавляем проект в project_roles только если роль была установлена
     return UserContext(
         user_id=user_id,
-        project_roles={project_id: role} if project_id else {},
+        project_roles={project_id: role} if (project_id and role) else {},
         active_project_id=project_id,  # Может быть None
     )
 

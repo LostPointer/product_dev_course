@@ -83,13 +83,27 @@ class SensorService:
 
     async def list_sensors(
         self,
-        project_id: UUID,
+        project_id: UUID | None = None,
         *,
         limit: int = 50,
         offset: int = 0,
     ) -> tuple[List[Sensor], int]:
         return await self._sensor_repository.list_by_project(
             project_id,
+            limit=limit,
+            offset=offset,
+        )
+
+    async def list_sensors_by_projects(
+        self,
+        project_ids: List[UUID],
+        *,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[List[Sensor], int]:
+        """List sensors that belong to any of the given projects."""
+        return await self._sensor_repository.list_by_projects(
+            project_ids,
             limit=limit,
             offset=offset,
         )
@@ -123,6 +137,26 @@ class SensorService:
             token_preview=token_preview,
         )
         return sensor, token
+
+    async def get_sensor_projects(self, sensor_id: UUID) -> List[UUID]:
+        """Get all project IDs associated with a sensor."""
+        return await self._sensor_repository.get_sensor_projects(sensor_id)
+
+    async def add_sensor_project(
+        self,
+        sensor_id: UUID,
+        project_id: UUID,
+    ) -> None:
+        """Add a sensor to a project."""
+        await self._sensor_repository.add_sensor_project(sensor_id, project_id)
+
+    async def remove_sensor_project(
+        self,
+        sensor_id: UUID,
+        project_id: UUID,
+    ) -> None:
+        """Remove a sensor from a project."""
+        await self._sensor_repository.remove_sensor_project(sensor_id, project_id)
 
 
 class ConversionProfileService:

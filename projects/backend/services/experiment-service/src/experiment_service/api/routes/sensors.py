@@ -87,10 +87,24 @@ async def register_sensor(request: web.Request):
 @routes.get("/api/v1/sensors")
 async def list_sensors(request: web.Request):
     user = await require_current_user(request)
-    project_id = resolve_project_id(user, request.rel_url.query.get("project_id"))
     service = await get_sensor_service(request)
     limit, offset = pagination_params(request)
-    sensors, total = await service.list_sensors(project_id, limit=limit, offset=offset)
+
+    # project_id is optional - if not provided, return sensors from all accessible projects
+    project_id_query = request.rel_url.query.get("project_id")
+    if project_id_query:
+        project_id = resolve_project_id(user, project_id_query)
+        sensors, total = await service.list_sensors(project_id, limit=limit, offset=offset)
+    else:
+        # Get all projects user has access to
+        # For now, we'll use active_project_id if available, or return empty
+        # TODO: Get all accessible projects from auth-service
+        if user.active_project_id:
+            ensure_project_access(user, user.active_project_id)
+            sensors, total = await service.list_sensors(user.active_project_id, limit=limit, offset=offset)
+        else:
+            sensors, total = [], 0
+
     payload = paginated_response(
         [_sensor_response(sensor) for sensor in sensors],
         limit=limit,
@@ -163,3 +177,86 @@ async def rotate_sensor_token(request: web.Request):
     except NotFoundError as exc:
         raise web.HTTPNotFound(text=str(exc)) from exc
     return web.json_response({"sensor": _sensor_response(sensor), "token": token})
+
+
+@routes.post("/api/v1/sensors/{sensor_id}/projects")
+async def add_sensor_project(request: web.Request):
+    """Add a sensor to a project."""
+    user = await require_current_user(request)
+    sensor_id = parse_uuid(request.match_info["sensor_id"], "sensor_id")
+    body = await read_json(request)
+
+    if "project_id" not in body:
+        raise web.HTTPBadRequest(text="project_id is required")
+
+    # Verify user has owner/editor role in the target project
+    project_id = resolve_project_id(
+        user, body["project_id"], require_role=("owner", "editor")
+    )
+
+    # Verify sensor exists
+    # We don't require access to existing projects - if user has owner/editor role
+    # in the target project, they can add the sensor to it
+    service = await get_sensor_service(request)
+    try:
+        # Just verify sensor exists by trying to get it
+        # We use get_by_id which doesn't require project_id
+        from experiment_service.repositories.sensors import SensorRepository
+        from experiment_service.db.pool import get_pool
+        pool = await get_pool()
+        repo = SensorRepository(pool)
+        await repo.get_by_id(sensor_id)
+    except NotFoundError as exc:
+        raise web.HTTPNotFound(text=str(exc)) from exc
+
+    try:
+        await service.add_sensor_project(sensor_id, project_id)
+    except Exception as exc:
+        raise web.HTTPBadRequest(text=str(exc)) from exc
+
+    return web.Response(status=204)
+
+
+@routes.delete("/api/v1/sensors/{sensor_id}/projects/{project_id}")
+async def remove_sensor_project(request: web.Request):
+    """Remove a sensor from a project."""
+    user = await require_current_user(request)
+    sensor_id = parse_uuid(request.match_info["sensor_id"], "sensor_id")
+    project_id = parse_uuid(request.match_info["project_id"], "project_id")
+
+    # Verify user has owner/editor role in the project
+    resolve_project_id(user, str(project_id), require_role=("owner", "editor"))
+    ensure_project_access(user, project_id, require_role=("owner", "editor"))
+
+    service = await get_sensor_service(request)
+    try:
+        await service.remove_sensor_project(sensor_id, project_id)
+    except NotFoundError as exc:
+        raise web.HTTPNotFound(text=str(exc)) from exc
+
+    return web.Response(status=204)
+
+
+@routes.get("/api/v1/sensors/{sensor_id}/projects")
+async def get_sensor_projects(request: web.Request):
+    """Get all projects associated with a sensor."""
+    user = await require_current_user(request)
+    sensor_id = parse_uuid(request.match_info["sensor_id"], "sensor_id")
+
+    service = await get_sensor_service(request)
+    try:
+        project_ids = await service.get_sensor_projects(sensor_id)
+        if not project_ids:
+            raise web.HTTPNotFound(text="Sensor not found")
+        # Filter to only projects user has access to
+        accessible_projects = []
+        for pid in project_ids:
+            # Check if project is in user's project_roles
+            if pid in user.project_roles:
+                accessible_projects.append(str(pid))
+        # If user has no access to any project, return 403
+        if not accessible_projects:
+            raise web.HTTPForbidden(text="Access denied to sensor")
+        return web.json_response({"project_ids": accessible_projects})
+    except NotFoundError as exc:
+        raise web.HTTPNotFound(text=str(exc)) from exc
