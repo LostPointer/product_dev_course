@@ -18,11 +18,14 @@ CLI/агент для отправки телеметрии в Experiment Servic
 
 ## Документация
 - `docs/ts.md` — краткое ТЗ и критерии приёмки (MVP).
-- `docs/interfaces_protocols.md` — протоколы: WebSocket (ESP32↔браузер) и UART кадры (ESP32↔STM32).
+- `docs/interfaces_protocols.md` — протоколы: WebSocket (ESP32↔браузер) и UART кадры (ESP32↔RP2040).
 - `docs/glossary_ru.md` — глоссарий терминов и сокращений (ESC, BEC, PWM, IMU и т.д.).
+- `docs/cpp_coding_style.md` — стиль кода для прошивок (C++): Google Style Guide, расширения `.hpp`, правила форматирования.
+- `docs/firmware_timing.md` — тайминги и частоты для прошивок.
 - (вне проекта) `docs/telemetry-rc-stm32.md` — рекомендации по формату телеметрии для Experiment Service, если будем экспортировать данные в ingest.
 
-## Планируемая структура (позже)
-- `firmware/stm32/` — прошивка STM32 (PWM, RC‑in, IMU, failsafe, UART протокол)
-- `firmware/esp32/` — прошивка ESP32 (AP + web UI + WS + UART мост)
+## Структура проекта
+- `firmware/rp2040/` — прошивка RP2040 (PWM, RC‑in, IMU, failsafe, UART протокол) — *в разработке*
+- `firmware/esp32/` — прошивка ESP32‑S3 (AP + web UI + WS + UART мост) — *в разработке*
 - `docs/` — спецификации и схемы
+  - `firmware_timing.md` — тайминги и частоты для прошивок

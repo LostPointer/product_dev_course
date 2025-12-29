@@ -553,10 +553,10 @@ const traceId = generateTraceId() // UUID v4
 apiClient.interceptors.request.use((config) => {
   // Генерируем request_id для каждого запроса
   const requestId = generateRequestId() // UUID v4
-  
+
   config.headers['X-Trace-Id'] = traceId
   config.headers['X-Request-Id'] = requestId
-  
+
   // Логирование запроса с trace_id и request_id
   console.log({
     trace_id: traceId,
@@ -564,7 +564,7 @@ apiClient.interceptors.request.use((config) => {
     method: config.method,
     url: config.url,
   })
-  
+
   return config
 })
 
@@ -574,7 +574,7 @@ apiClient.interceptors.response.use(
     // Логирование ошибки с trace_id и request_id
     const traceId = error.config?.headers?.['X-Trace-Id']
     const requestId = error.config?.headers?.['X-Request-Id']
-    
+
     console.error({
       trace_id: traceId,
       request_id: requestId,
@@ -582,7 +582,7 @@ apiClient.interceptors.response.use(
       status: error.response?.status,
       url: error.config?.url,
     })
-    
+
     return Promise.reject(error)
   }
 )
