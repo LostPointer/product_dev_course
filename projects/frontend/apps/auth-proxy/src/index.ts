@@ -432,14 +432,99 @@ async function buildServer(config: Config) {
         return null
     }
 
-    // Hook для извлечения project_id из body для POST/PUT/PATCH запросов
+    /**
+     * Проверяет членство пользователя в проекте через Auth Service
+     * и возвращает роль пользователя в проекте
+     */
+    async function checkProjectMembership(
+        projectId: string,
+        userId: string,
+        accessToken: string
+    ): Promise<string | null> {
+        try {
+            const response = await fetch(`${config.authUrl}/projects/${projectId}/members`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json',
+                },
+            })
+
+            if (!response.ok) {
+                if (response.status === 403 || response.status === 404) {
+                    return null // Пользователь не является членом проекта
+                }
+                app.log.warn({
+                    project_id: projectId,
+                    user_id: userId,
+                    status: response.status,
+                }, 'Failed to check project membership')
+                return null
+            }
+
+            const data = await response.json()
+            const members = data.members || []
+
+            // Ищем пользователя в списке членов проекта
+            const member = members.find((m: any) => m.user_id === userId)
+            return member?.role || null
+        } catch (error) {
+            app.log.error({
+                project_id: projectId,
+                user_id: userId,
+                error: error instanceof Error ? error.message : String(error),
+            }, 'Error checking project membership')
+            return null
+        }
+    }
+
+    // Hook для извлечения project_id из body или query для POST/PUT/PATCH запросов
+    // и проверки членства пользователя в проекте
     app.addHook('preHandler', async (request, reply) => {
-        // Для запросов к /api/* пытаемся извлечь project_id из body
-        if (request.url.startsWith('/api/') && request.body) {
-            const body = request.body as Record<string, unknown> | undefined
-            if (body?.project_id && typeof body.project_id === 'string') {
-                // Сохраняем project_id в request для использования в rewriteRequestHeaders
-                ; (request as any).bodyProjectId = body.project_id
+        // Для запросов к /api/* пытаемся извлечь project_id из body или query
+        if (request.url.startsWith('/api/')) {
+            let projectId: string | null = null
+
+            // Пытаемся получить project_id из body (для POST/PUT/PATCH)
+            if (request.body) {
+                const body = request.body as Record<string, unknown> | undefined
+                if (body?.project_id && typeof body.project_id === 'string') {
+                    projectId = body.project_id
+                        // Сохраняем project_id в request для использования в rewriteRequestHeaders
+                        ; (request as any).bodyProjectId = projectId
+                }
+            }
+
+            // Если не нашли в body, пытаемся получить из query параметров
+            if (!projectId) {
+                projectId = extractProjectId(request as FastifyRequest)
+            }
+
+            // Проверяем членство пользователя в проекте, если есть project_id и токен
+            if (projectId) {
+                const cookies = parseCookies(request.headers.cookie as string | undefined)
+                const access = cookies[config.accessCookieName]
+                if (access) {
+                    const decoded = decodeJWT(access)
+                    if (decoded?.user_id) {
+                        const role = await checkProjectMembership(
+                            projectId,
+                            decoded.user_id,
+                            access
+                        )
+                        if (role) {
+                            // Сохраняем роль в request для использования в rewriteRequestHeaders
+                            ; (request as any).projectRole = role
+                        } else {
+                            // Если пользователь не является членом проекта, логируем предупреждение
+                            app.log.warn({
+                                project_id: projectId,
+                                user_id: decoded.user_id,
+                                url: request.url,
+                            }, 'User is not a member of the project')
+                        }
+                    }
+                }
             }
         }
     })
@@ -510,18 +595,6 @@ async function buildServer(config: Config) {
 
                 return newHeaders
             },
-            // Временно убираем onResponse hook для диагностики проблемы с зависанием
-            // onResponse: (request, reply, res) => {
-            //     const fastifyReq = request as FastifyRequest
-            //     const statusCode = reply.statusCode || res.statusCode
-            //     const logger = (fastifyReq.log || app.log) as typeof app.log
-            //     logger.info({
-            //         method: request.method,
-            //         url: request.url,
-            //         status_code: statusCode,
-            //         upstream: config.authUrl,
-            //     }, 'Response received from Auth Service')
-            // },
         },
     })
 
@@ -596,8 +669,25 @@ async function buildServer(config: Config) {
                 // Если не найден, Experiment Service будет требовать его в query/body
                 if (projectId) {
                     newHeaders['X-Project-Id'] = projectId
-                    // По умолчанию роль owner, можно будет улучшить позже
-                    newHeaders['X-Project-Role'] = 'owner'
+                    // Используем роль из preHandler hook, если она была проверена
+                    // Иначе используем роль из заголовка или по умолчанию 'owner'
+                    // Важно: если проверка членства была выполнена и пользователь не является членом,
+                    // projectRole будет null, и мы не установим заголовок X-Project-Role
+                    const checkedRole = (req as any).projectRole
+                    const headerRole = req.headers['x-project-role'] as string | undefined
+                    // Устанавливаем роль только если она была проверена и найдена, или если она была в заголовке
+                    // Если проверка не была выполнена (checkedRole === undefined), используем значение по умолчанию
+                    if (checkedRole !== undefined) {
+                        // Проверка была выполнена
+                        if (checkedRole) {
+                            newHeaders['X-Project-Role'] = checkedRole
+                        }
+                        // Если checkedRole === null, пользователь не является членом проекта,
+                        // не устанавливаем заголовок X-Project-Role
+                    } else {
+                        // Проверка не была выполнена, используем роль из заголовка или по умолчанию
+                        newHeaders['X-Project-Role'] = headerRole || 'owner'
+                    }
                 }
 
                 // Логируем заголовки, которые отправляются (без чувствительных данных)
