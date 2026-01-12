@@ -64,7 +64,7 @@ class SingleLineFormatter(logging.Formatter):
 
 
 def configure_logging() -> None:
-    """Configure structlog for TSKV output suitable for Grafana/Loki/Promtail."""
+    """Configure structlog for TSKV output suitable for Grafana/Loki/Alloy."""
     # Configure standard logging to pass through to structlog
     # This ensures all logs (including aiohttp) go through structlog
     # Use a handler that ensures single-line output
@@ -86,7 +86,7 @@ def configure_logging() -> None:
     # Configure structlog with TSKV format (key=value)
     # Format: timestamp=2024-01-01T12:00:00Z level=INFO logger=service event=message trace_id=123 request_id=456 path=/api/v1
     # Values with spaces are automatically quoted: path="/api/v1/users"
-    # Promtail/Loki can easily parse this format and extract fields as labels
+    # Alloy/Loki can easily parse this format and extract fields as labels
     structlog.configure(
         processors=[
             # Merge context variables (trace_id, request_id, etc.)
@@ -106,7 +106,7 @@ def configure_logging() -> None:
             # and before KeyValueRenderer
             replace_newlines_processor,
             # KeyValueRenderer outputs key=value format (space-separated)
-            # This format is easier for Promtail to parse than JSON
+            # This format is easier for Alloy to parse than JSON
             # Values with spaces are automatically quoted
             structlog.processors.KeyValueRenderer(
                 key_order=["timestamp", "level", "logger", "event", "message"],

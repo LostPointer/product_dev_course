@@ -9,6 +9,9 @@ datasources:
     editable: true
     jsonData:
       maxLines: 1000
+      # Grafana автоматически обнаружит все labels из Loki
+      # Новые labels (level, path, logger, event, method, status_code, error_type, trace_id, request_id)
+      # будут доступны в фильтрах после поступления новых логов
       derivedFields:
         - datasourceUid: loki
           matcherRegex: "trace_id=(\\w+)"

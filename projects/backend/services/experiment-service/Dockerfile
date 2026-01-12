@@ -27,6 +27,9 @@ COPY common ./common
 # Copy dependency files (for better layer caching)
 COPY services/experiment-service/pyproject.toml services/experiment-service/README.md ./
 
+# Fix path to backend-common in pyproject.toml (relative path changes after copying to /app)
+RUN sed -i 's|path = "../../common"|path = "./common"|g' pyproject.toml
+
 # Install dependencies (including dev dependencies for hot-reload support)
 # In production, this can be optimized by using --no-dev flag
 RUN poetry install --no-root

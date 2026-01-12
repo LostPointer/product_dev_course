@@ -2,6 +2,8 @@
 
 Этот проект использует Grafana Loki для централизованного сбора и просмотра логов всех сервисов через веб-интерфейс.
 
+📖 **Подробное описание потока логов**: [docs/logging-flow.md](docs/logging-flow.md) - как логи попадают из сервисов в Grafana
+
 ## Быстрый старт
 
 ### Запуск стека логирования
@@ -112,6 +114,80 @@ curl "http://localhost:3100/loki/api/v1/labels"
 {request_id="660e8400-e29b-41d4-a716-446655440001"}
 ```
 
+### Фильтрация по HTTP методу
+```
+{method="GET"}
+```
+
+```
+{method="POST"}
+```
+
+### Фильтрация по HTTP статус коду
+```
+{status_code="200"}
+```
+
+```
+{status_code=~"4.."}  # Все 4xx ошибки
+```
+
+```
+{status_code=~"5.."}  # Все 5xx ошибки
+```
+
+### Фильтрация по типу события (event)
+```
+{event="Incoming request"}
+```
+
+```
+{event="Request completed"}
+```
+
+```
+{event=~".*error.*"}  # Все события с "error" в названии
+```
+
+### Фильтрация по логгеру (модулю)
+```
+{logger="auth_service.main"}
+```
+
+```
+{logger=~".*middleware.*"}  # Все логи из middleware
+```
+
+### Фильтрация по типу ошибки
+```
+{error_type="HTTPException"}
+```
+
+```
+{error_type="ValueError"}
+```
+
+### Комплексные примеры фильтрации
+```
+# Все POST запросы с ошибками
+{method="POST", status_code=~"4..|5.."}
+```
+
+```
+# Все ошибки в auth-service
+{service="auth-service", level="ERROR"}
+```
+
+```
+# Все запросы к конкретному endpoint с определенным статусом
+{path="/api/users", status_code="404"}
+```
+
+```
+# Все логи определенного события в конкретном сервисе
+{service="experiment-service", event="experiment_created"}
+```
+
 ## Компоненты стека
 
 ### Loki
@@ -119,10 +195,10 @@ curl "http://localhost:3100/loki/api/v1/labels"
 - API: http://localhost:3100
 - Конфигурация: `infrastructure/logging/loki-config.yml`
 
-### Promtail
+### Alloy
 - Сборщик логов из Docker контейнеров
 - Автоматически обнаруживает контейнеры через Docker socket
-- Конфигурация: `infrastructure/logging/promtail-config.yml`
+- Конфигурация: `infrastructure/logging/alloy.river`
 
 ### Grafana
 - Веб-интерфейс для визуализации
@@ -164,16 +240,14 @@ GRAFANA_ADMIN_PASSWORD=admin
 GRAFANA_ANONYMOUS_ENABLED=false
 ```
 
-### Фильтрация логов в Promtail
+### Фильтрация логов в Alloy
 
-По умолчанию Promtail собирает логи только контейнеров проекта `product_dev_course`.
+По умолчанию Alloy собирает логи только контейнеров проекта `product_dev_course`.
 
-Чтобы собирать логи всех контейнеров, удалите или закомментируйте строки 33-35 в `infrastructure/logging/promtail-config.yml`:
+Чтобы собирать логи всех контейнеров, измените фильтр в `infrastructure/logging/alloy.river`:
 
-```yaml
-# - source_labels: ['__meta_docker_container_label_com_docker_compose_project']
-#   regex: 'product_dev_course'
-#   action: keep
+```river
+// Удалите или закомментируйте фильтр по проекту в discovery.docker.containers
 ```
 
 ## Хранение данных
@@ -191,14 +265,14 @@ cd infrastructure/logging && docker-compose -f docker-compose.yml down -v
 
 ### Логи не появляются в Grafana
 
-1. Проверьте, что Promtail запущен:
+1. Проверьте, что Alloy запущен:
    ```bash
-   cd infrastructure/logging && docker-compose -f docker-compose.yml ps promtail
+   cd infrastructure/logging && docker-compose -f docker-compose.yml ps alloy
    ```
 
-2. Проверьте логи Promtail:
+2. Проверьте логи Alloy:
    ```bash
-   cd infrastructure/logging && docker-compose -f docker-compose.yml logs promtail
+   cd infrastructure/logging && docker-compose -f docker-compose.yml logs alloy
    ```
 
 3. Проверьте, что Loki доступен:
@@ -227,4 +301,4 @@ cd infrastructure/logging && docker-compose -f docker-compose.yml down -v
 
 - [Grafana Loki Documentation](https://grafana.com/docs/loki/latest/)
 - [LogQL Query Language](https://grafana.com/docs/loki/latest/logql/)
-- [Promtail Configuration](https://grafana.com/docs/loki/latest/clients/promtail/configuration/)
+- [Grafana Alloy Documentation](https://grafana.com/docs/alloy/latest/)

@@ -1,0 +1,177 @@
+// Grafana Alloy конфигурация для сбора логов из Docker контейнеров
+// Alloy использует язык River для конфигурации
+
+// Компонент для отправки логов в Loki
+loki.write "loki" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
+
+// Компонент для обнаружения Docker контейнеров
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+  refresh_interval = "5s"
+
+  // Фильтруем только контейнеры проекта product_dev_course
+  filter {
+    name   = "label"
+    values = ["com.docker.compose.project=product_dev_course"]
+  }
+}
+
+// Компонент для сбора логов из Docker контейнеров
+loki.source.docker "docker_logs" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.docker.containers.targets
+  forward_to = [loki.relabel.docker_labels.receiver]
+}
+
+// Компонент для relabeling меток Docker
+loki.relabel "docker_labels" {
+  forward_to = [loki.process.docker_logs.receiver]
+
+  // Добавляем job label
+  rule {
+    target_label = "job"
+    replacement  = "docker"
+  }
+
+  // Извлекаем service из меток Docker
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+
+  // Извлекаем project из меток Docker
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "project"
+  }
+
+  // Извлекаем container name
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+    replacement   = "${1}"
+  }
+
+  // Используем короткий container ID как fallback, если container name не найден
+  rule {
+    source_labels = ["__meta_docker_container_id"]
+    regex         = "(.{12}).*"
+    target_label  = "container"
+    replacement   = "${1}"
+    action        = "replace"
+  }
+}
+
+// Компонент для обработки логов (парсинг и добавление labels)
+loki.process "docker_logs" {
+  forward_to = [loki.write.loki.receiver]
+
+  // Извлекаем service из TSKV (чтобы можно было фильтровать в Loki по {service="..."}
+  // Пример: service='experiment-service'
+  stage.regex {
+    expression = ` service='(?P<service>[^']+)'`
+  }
+  stage.labels {
+    values = {
+      service = "service",
+    }
+  }
+
+  // Извлекаем поля из TSKV формата и добавляем как labels
+  // Формат: timestamp='...' level='warning' path='/api/v1/...' и т.д.
+
+  // Извлекаем level
+  stage.regex {
+    expression = ` level='(?P<level>[^']+)'`
+  }
+  stage.labels {
+    values = {
+      level = "level",
+    }
+  }
+
+  // Извлекаем path
+  stage.regex {
+    expression = ` path='(?P<path>[^']+)'`
+  }
+  stage.labels {
+    values = {
+      path = "path",
+    }
+  }
+
+  // Извлекаем trace_id
+  stage.regex {
+    expression = ` trace_id='(?P<trace_id>[^']+)'`
+  }
+  stage.labels {
+    values = {
+      trace_id = "trace_id",
+    }
+  }
+
+  // Извлекаем request_id
+  stage.regex {
+    expression = ` request_id='(?P<request_id>[^']+)'`
+  }
+  stage.labels {
+    values = {
+      request_id = "request_id",
+    }
+  }
+
+  // Извлекаем logger
+  stage.regex {
+    expression = ` logger='(?P<logger>[^']+)'`
+  }
+  stage.labels {
+    values = {
+      logger = "logger",
+    }
+  }
+
+  // Извлекаем event
+  stage.regex {
+    expression = ` event='(?P<event>[^']+)'`
+  }
+  stage.labels {
+    values = {
+      event = "event",
+    }
+  }
+
+  // Извлекаем method
+  stage.regex {
+    expression = ` method='(?P<method>[^']+)'`
+  }
+  stage.labels {
+    values = {
+      method = "method",
+    }
+  }
+
+  // Извлекаем status_code (может быть без кавычек)
+  stage.regex {
+    expression = ` status_code=(?P<status_code>[^\s]+)`
+  }
+  stage.labels {
+    values = {
+      status_code = "status_code",
+    }
+  }
+
+  // Извлекаем error_type
+  stage.regex {
+    expression = ` error_type='(?P<error_type>[^']+)'`
+  }
+  stage.labels {
+    values = {
+      error_type = "error_type",
+    }
+  }
+}

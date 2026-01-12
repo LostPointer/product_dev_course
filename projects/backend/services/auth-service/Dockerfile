@@ -24,6 +24,9 @@ COPY common ./common
 # Copy dependency files (for better layer caching)
 COPY services/auth-service/pyproject.toml services/auth-service/README.md ./
 
+# Fix path to backend-common in pyproject.toml (relative path changes after copying to /app)
+RUN sed -i 's|path = "../../common"|path = "./common"|g' pyproject.toml
+
 # Install dependencies
 RUN poetry install --no-root
 

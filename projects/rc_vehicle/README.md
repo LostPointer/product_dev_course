@@ -25,6 +25,7 @@ CLI/агент для отправки телеметрии в Experiment Servic
 - `docs/glossary_ru.md` — глоссарий терминов и сокращений (ESC, BEC, PWM, IMU и т.д.).
 - `docs/cpp_coding_style.md` — стиль кода для прошивок (C++): Google Style Guide, расширения `.hpp`, правила форматирования.
 - `docs/firmware_timing.md` — тайминги и частоты для прошивок.
+- `docs/stabilization/` — документация системы стабилизации (роудмап разработки).
 - (вне проекта) `docs/telemetry-rc-stm32.md` — рекомендации по формату телеметрии для Experiment Service, если будем экспортировать данные в ingest.
 
 ## Структура проекта
