@@ -734,6 +734,17 @@ export async function buildServer(config: Config) {
                     has_project_id: !!newHeaders['X-Project-Id'],
                 }, 'Request headers prepared for Experiment Service')
 
+                // Явное debug-логирование X-Project-* для удобной отладки RBAC
+                // (значения не считаются секретами, но логируем только их, без токена/кук)
+                app.log.debug({
+                    method: req.method,
+                    url: req.url,
+                    x_project_id: newHeaders['X-Project-Id'] || undefined,
+                    x_project_role: newHeaders['X-Project-Role'] || undefined,
+                    has_x_project_id: !!newHeaders['X-Project-Id'],
+                    has_x_project_role: !!newHeaders['X-Project-Role'],
+                }, 'Auth proxy X-Project-* headers')
+
                 return newHeaders
             },
             // Не используем onResponse hook, так как он может блокировать передачу ответа клиенту
