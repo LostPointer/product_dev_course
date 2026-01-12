@@ -23,11 +23,14 @@
 
 ## Схемы и данные
 - `experiment-service-db-schema.md` — схема БД Experiment Service.
+- `telemetry-storage-timescaledb.md` — хранение телеметрии датчиков в TimescaleDB (hypertable, индексы, retention/compression).
 
 ## Roadmap
 - `experiment-service-roadmap.md` — план развития Experiment Service.
 
 ## Архитектурные решения (ADR)
 - `adr/` — журнал архитектурных решений (Architecture Decision Records).
+- `adr/001-auth-proxy-fastify.md` — Auth Proxy / BFF на Fastify.
+- `adr/002-timescaledb-telemetry.md` — TimescaleDB для хранения телеметрии датчиков.
 
 
