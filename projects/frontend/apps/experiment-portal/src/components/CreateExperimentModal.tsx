@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { experimentsApi, projectsApi } from '../api/client'
@@ -10,13 +10,14 @@ import './CreateRunModal.css'
 interface CreateExperimentModalProps {
     isOpen: boolean
     onClose: () => void
+    defaultProjectId?: string
 }
 
-function CreateExperimentModal({ isOpen, onClose }: CreateExperimentModalProps) {
+function CreateExperimentModal({ isOpen, onClose, defaultProjectId }: CreateExperimentModalProps) {
     const navigate = useNavigate()
     const queryClient = useQueryClient()
     const [formData, setFormData] = useState<ExperimentCreate>({
-        project_id: '',
+        project_id: defaultProjectId || '',
         name: '',
         description: '',
         experiment_type: '',
@@ -43,6 +44,19 @@ function CreateExperimentModal({ isOpen, onClose }: CreateExperimentModalProps) 
             setError(err.response?.data?.error || 'Ошибка создания эксперимента')
         },
     })
+
+    // Если проект выбран в фильтрах списка, проставляем его в форме при открытии модалки.
+    useEffect(() => {
+        if (!isOpen) return
+        if (!defaultProjectId) return
+
+        setFormData((prev) => {
+            // Не перетираем выбор пользователя, если он уже выбрал проект в модалке
+            if (prev.project_id) return prev
+            return { ...prev, project_id: defaultProjectId }
+        })
+        setActiveProjectId(defaultProjectId)
+    }, [isOpen, defaultProjectId])
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault()
@@ -75,7 +89,7 @@ function CreateExperimentModal({ isOpen, onClose }: CreateExperimentModalProps) 
     const handleClose = () => {
         if (!createMutation.isPending) {
             setFormData({
-                project_id: '',
+                project_id: defaultProjectId || '',
                 name: '',
                 description: '',
                 experiment_type: '',

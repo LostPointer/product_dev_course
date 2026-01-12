@@ -199,6 +199,7 @@ function ExperimentsList() {
       <CreateExperimentModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
+        defaultProjectId={projectId}
       />
 
       {typeof document !== 'undefined' &&
