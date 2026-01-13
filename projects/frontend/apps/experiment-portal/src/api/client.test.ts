@@ -43,6 +43,10 @@ Object.defineProperty(window, 'location', {
 // Импортируем после мока
 import { experimentsApi, runsApi } from './client'
 
+const requestInterceptor = mockAxiosInstance.interceptors.request.use.mock.calls[0]?.[0] as
+    | ((cfg: any) => any)
+    | undefined
+
 // Сохраняем количество вызовов interceptor ДО первого beforeEach
 // Interceptor устанавливается при импорте модуля client.ts
 const initialInterceptorCallCount = mockAxiosInstance.interceptors.response.use.mock.calls.length
@@ -235,6 +239,15 @@ describe('API Client', () => {
                 })
                 expect(result).toEqual(mockResponse.data)
             })
+        })
+    })
+
+    describe('csrf', () => {
+        it('adds X-CSRF-Token for state-changing requests when csrf_token cookie exists', () => {
+            document.cookie = 'csrf_token=csrf123'
+            expect(requestInterceptor).toBeDefined()
+            const cfg = requestInterceptor!({ method: 'post', headers: {}, url: '/api/v1/experiments' })
+            expect(cfg.headers['X-CSRF-Token']).toBe('csrf123')
         })
     })
 

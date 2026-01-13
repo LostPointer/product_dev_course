@@ -33,6 +33,7 @@ import type {
 import { generateRequestId } from '../utils/uuid'
 import { getTraceId } from '../utils/trace'
 import { getActiveProjectId } from '../utils/activeProject'
+import { getCsrfToken } from '../utils/csrf'
 
 // API работает через Auth Proxy, который автоматически добавляет токен из куки
 const AUTH_PROXY_URL = import.meta.env.VITE_AUTH_PROXY_URL || 'http://localhost:8080'
@@ -127,8 +128,18 @@ apiClient.interceptors.request.use(
     config.headers['X-Trace-Id'] = traceId
     config.headers['X-Request-Id'] = requestId
 
+    // CSRF (double-submit cookie) for cookie-authenticated, state-changing requests.
+    const method = (config.method || 'get').toUpperCase()
+    const isStateChanging = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)
+    if (isStateChanging) {
+      const csrf = getCsrfToken()
+      if (csrf) {
+        config.headers['X-CSRF-Token'] = csrf
+      }
+    }
+
     // Логирование запроса (только в development)
-    if (import.meta.env.DEV) {
+    if (import.meta.env.DEV && import.meta.env.MODE !== 'test') {
       console.log({
         trace_id: traceId,
         request_id: requestId,

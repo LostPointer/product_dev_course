@@ -3,6 +3,7 @@ import axios from 'axios'
 import type { User, LoginRequest, AuthResponse } from '../types'
 import { generateRequestId } from '../utils/uuid'
 import { getTraceId } from '../utils/trace'
+import { getCsrfToken } from '../utils/csrf'
 
 // Auth Proxy работает на другом порту
 const AUTH_PROXY_URL = import.meta.env.VITE_AUTH_PROXY_URL || 'http://localhost:8080'
@@ -26,8 +27,19 @@ authClient.interceptors.request.use(
         config.headers['X-Trace-Id'] = traceId
         config.headers['X-Request-Id'] = requestId
 
+        // CSRF (double-submit cookie) for cookie-authenticated, state-changing requests.
+        // auth-proxy excludes /auth/login and /auth/refresh, but we can still attach token safely.
+        const method = (config.method || 'get').toUpperCase()
+        const isStateChanging = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)
+        if (isStateChanging) {
+            const csrf = getCsrfToken()
+            if (csrf) {
+                config.headers['X-CSRF-Token'] = csrf
+            }
+        }
+
         // Логирование запроса (только в development)
-        if (import.meta.env.DEV) {
+        if (import.meta.env.DEV && import.meta.env.MODE !== 'test') {
             console.log({
                 trace_id: traceId,
                 request_id: requestId,

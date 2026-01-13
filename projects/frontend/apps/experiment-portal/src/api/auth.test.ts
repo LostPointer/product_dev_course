@@ -30,6 +30,10 @@ vi.mock('axios', () => {
 // Импортируем после мока
 import { authApi } from './auth'
 
+const requestInterceptor = mockAxiosInstance.interceptors.request.use.mock.calls[0]?.[0] as
+    | ((cfg: any) => any)
+    | undefined
+
 describe('authApi', () => {
     beforeEach(() => {
         vi.clearAllMocks()
@@ -108,6 +112,15 @@ describe('authApi', () => {
             mockAxiosInstance.get.mockRejectedValueOnce(error)
 
             await expect(authApi.me()).rejects.toEqual(error)
+        })
+    })
+
+    describe('csrf', () => {
+        it('adds X-CSRF-Token for state-changing requests when csrf_token cookie exists', () => {
+            document.cookie = 'csrf_token=csrf123'
+            expect(requestInterceptor).toBeDefined()
+            const cfg = requestInterceptor!({ method: 'post', headers: {}, url: '/auth/logout' })
+            expect(cfg.headers['X-CSRF-Token']).toBe('csrf123')
         })
     })
 })
