@@ -117,6 +117,20 @@ export function setAuthCookies(
 export function clearAuthCookies(reply: FastifyReply, cfg: Config) {
     reply.clearCookie(cfg.accessCookieName, { path: '/' })
     reply.clearCookie(cfg.refreshCookieName, { path: '/' })
+    reply.clearCookie('csrf_token', { path: '/' })
+}
+
+function setCsrfCookie(reply: FastifyReply, cfg: Config) {
+    // Double-submit cookie: client must echo cookie value in X-CSRF-Token header.
+    // Cookie must NOT be HttpOnly (frontend reads it).
+    reply.setCookie('csrf_token', generateUUID(), {
+        httpOnly: false,
+        secure: cfg.cookieSecure,
+        sameSite: cfg.cookieSameSite,
+        domain: cfg.cookieDomain,
+        path: '/',
+        maxAge: cfg.refreshTtlSec,
+    })
 }
 
 /**
@@ -247,6 +261,35 @@ export async function buildServer(config: Config) {
         request.log.info(logData, 'Request completed')
     })
 
+    // CSRF protection for cookie-authenticated, state-changing requests (double-submit cookie).
+    // Exclusions:
+    //  - /auth/login and /auth/refresh: no CSRF cookie yet
+    //  - /api/v1/telemetry/*: auth is via Authorization sensor token (not cookies)
+    app.addHook('preHandler', async (request, reply) => {
+        const method = (request.method || '').toUpperCase()
+        const isStateChanging = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)
+        if (!isStateChanging) return
+
+        const url = request.url || ''
+        if (url === '/health') return
+        if (url.startsWith('/auth/login') || url.startsWith('/auth/refresh')) return
+        if (url.startsWith('/api/v1/telemetry')) return
+
+        const hasSessionCookie = Boolean(
+            request.cookies?.[config.accessCookieName] || request.cookies?.[config.refreshCookieName]
+        )
+        if (!hasSessionCookie) return
+
+        const csrfCookie = request.cookies?.csrf_token
+        const hdr = request.headers['x-csrf-token'] as string | string[] | undefined
+        const csrfHeader = Array.isArray(hdr) ? hdr[0] : hdr
+
+        if (!csrfCookie || !csrfHeader || csrfCookie !== csrfHeader) {
+            reply.status(403).send({ error: 'CSRF token missing or invalid' })
+            return
+        }
+    })
+
     // Логирование ответов от проксированных запросов через отдельный hook
     // Это нужно, так как onResponse в http-proxy может блокировать ответ
     app.addHook('onSend', async (request, reply) => {
@@ -298,6 +341,7 @@ export async function buildServer(config: Config) {
         }
 
         setAuthCookies(reply, config, data)
+        setCsrfCookie(reply, config)
 
         const { access_token, refresh_token, ...rest } = data
         return rest
@@ -340,6 +384,7 @@ export async function buildServer(config: Config) {
         }
 
         setAuthCookies(reply, config, data)
+        setCsrfCookie(reply, config)
         const { access_token, refresh_token, ...rest } = data
         return rest
     })
