@@ -215,6 +215,29 @@ export async function buildServer(config: Config) {
     await app.register(cors, {
         origin: config.corsOrigins,
         credentials: true,
+        // IMPORTANT:
+        // Portal (http://localhost:3000) делает state-changing запросы (PUT/PATCH/DELETE) через auth-proxy.
+        // Браузер отправляет CORS preflight (OPTIONS) и требует, чтобы Access-Control-Allow-Methods
+        // включал нужный метод, иначе запрос блокируется (например, PATCH).
+        methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+        allowedHeaders: [
+            'Accept',
+            'Accept-Language',
+            'Content-Language',
+            'Content-Type',
+            'Authorization',
+            // tracing
+            'X-Trace-Id',
+            'X-Request-Id',
+            // CSRF (double-submit)
+            'X-CSRF-Token',
+            // debug/project context headers (may be used by clients/tools)
+            'X-Project-Id',
+            'X-Project-Role',
+            'X-User-Id',
+        ],
+        // Expose some headers for debugging (optional).
+        exposedHeaders: ['X-Trace-Id', 'X-Request-Id'],
     })
 
     await app.register(rateLimit, {
