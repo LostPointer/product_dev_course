@@ -134,6 +134,57 @@ async def test_experiment_run_capture_flow(service_client):
 
 
 @pytest.mark.asyncio
+async def test_capture_session_cannot_be_deleted_while_active(service_client):
+    project_id = uuid.uuid4()
+    headers = make_headers(project_id)
+
+    resp = await service_client.post(
+        "/api/v1/experiments",
+        json={"project_id": str(project_id), "name": "Experiment Active Delete"},
+        headers=headers,
+    )
+    assert resp.status == 201
+    experiment_id = (await resp.json())["id"]
+
+    resp = await service_client.post(
+        f"/api/v1/experiments/{experiment_id}/runs",
+        json={"name": "Run for active session"},
+        headers=headers,
+    )
+    assert resp.status == 201
+    run_id = (await resp.json())["id"]
+
+    resp = await service_client.post(
+        f"/api/v1/runs/{run_id}/capture-sessions",
+        json={"ordinal_number": 1, "status": "running"},
+        headers=headers,
+    )
+    assert resp.status == 201
+    session_id = (await resp.json())["id"]
+
+    # Cannot delete while running
+    resp = await service_client.delete(
+        f"/api/v1/runs/{run_id}/capture-sessions/{session_id}",
+        headers=headers,
+    )
+    assert resp.status == 400
+
+    # Stop (becomes final) then delete should work
+    resp = await service_client.post(
+        f"/api/v1/runs/{run_id}/capture-sessions/{session_id}/stop",
+        json={"status": "succeeded"},
+        headers=headers,
+    )
+    assert resp.status == 200
+
+    resp = await service_client.delete(
+        f"/api/v1/runs/{run_id}/capture-sessions/{session_id}",
+        headers=headers,
+    )
+    assert resp.status == 204
+
+
+@pytest.mark.asyncio
 async def test_batch_update_invalid_run_ids(service_client):
     project_id = uuid.uuid4()
     headers = make_headers(project_id)

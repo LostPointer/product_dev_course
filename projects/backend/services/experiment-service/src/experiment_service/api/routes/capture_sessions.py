@@ -151,4 +151,6 @@ async def delete_capture_session(request: web.Request):
         await service.delete_session(project_id, session_id)
     except NotFoundError as exc:
         raise web.HTTPNotFound(text=str(exc)) from exc
+    except InvalidStatusTransitionError as exc:
+        raise web.HTTPBadRequest(text=str(exc)) from exc
     return web.Response(status=204)

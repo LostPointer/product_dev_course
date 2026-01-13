@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import List
 from uuid import UUID
 
+from experiment_service.core.exceptions import InvalidStatusTransitionError
 from experiment_service.core.exceptions import ScopeMismatchError
 from experiment_service.domain.dto import (
     CaptureSessionCreateDTO,
@@ -60,5 +61,10 @@ class CaptureSessionService:
         return await self._repository.update(project_id, capture_session_id, updates)
 
     async def delete_session(self, project_id: UUID, capture_session_id: UUID) -> None:
+        session = await self._repository.get(project_id, capture_session_id)
+        if session.status in (CaptureSessionStatus.RUNNING, CaptureSessionStatus.BACKFILLING):
+            raise InvalidStatusTransitionError(
+                "Cannot delete capture session while it is active"
+            )
         await self._repository.delete(project_id, capture_session_id)
 
