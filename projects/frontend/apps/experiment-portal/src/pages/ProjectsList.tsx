@@ -4,14 +4,18 @@ import { useQuery } from '@tanstack/react-query'
 import { projectsApi } from '../api/client'
 import { authApi } from '../api/auth'
 import { Loading, Error, EmptyState, PageHeader } from '../components/common'
-import CreateProjectModal from '../components/CreateProjectModal'
+import ProjectModal from '../components/ProjectModal'
 import ProjectMembersModal from '../components/ProjectMembersModal'
 import './ProjectsList.css'
 
 function ProjectsList() {
-    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
     const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
     const [selectedProjectOwnerId, setSelectedProjectOwnerId] = useState<string | null>(null)
+    const [projectModal, setProjectModal] = useState<{
+        isOpen: boolean
+        mode: 'create' | 'view' | 'edit'
+        projectId?: string
+    }>({ isOpen: false, mode: 'create' })
     const { data, isLoading, error, isError, status } = useQuery({
         queryKey: ['projects'],
         queryFn: async () => {
@@ -52,6 +56,14 @@ function ProjectsList() {
         setSelectedProjectOwnerId(null)
     }
 
+    const openCreateProject = () => setProjectModal({ isOpen: true, mode: 'create' })
+    const openProject = (projectId: string, ownerId: string) => {
+        // Пока в списке у нас есть только owner_id; если владелец — даём edit, иначе view.
+        const mode = currentUser?.id === ownerId ? 'edit' : 'view'
+        setProjectModal({ isOpen: true, mode, projectId })
+    }
+    const closeProjectModal = () => setProjectModal((prev) => ({ ...prev, isOpen: false }))
+
     const isProjectOwner = (projectOwnerId: string) => {
         return currentUser?.id === projectOwnerId
     }
@@ -76,7 +88,7 @@ function ProjectsList() {
                         action={
                             <button
                                 className="btn btn-primary"
-                                onClick={() => setIsCreateModalOpen(true)}
+                                onClick={openCreateProject}
                             >
                                 Создать проект
                             </button>
@@ -87,7 +99,7 @@ function ProjectsList() {
                         <EmptyState message="У вас пока нет проектов">
                             <button
                                 className="btn btn-primary"
-                                onClick={() => setIsCreateModalOpen(true)}
+                                onClick={openCreateProject}
                             >
                                 Создать первый проект
                             </button>
@@ -101,15 +113,26 @@ function ProjectsList() {
                                 >
                                     <div className="project-card-header">
                                         <h3>{project.name}</h3>
-                                        {isProjectOwner(project.owner_id) && (
+                                        <div className="project-card-actions">
                                             <button
                                                 className="btn btn-sm btn-secondary"
-                                                onClick={() => handleManageMembers(project.id, project.owner_id)}
-                                                title="Управление участниками"
+                                                onClick={() => openProject(project.id, project.owner_id)}
+                                                title={isProjectOwner(project.owner_id) ? 'Просмотр и редактирование' : 'Просмотр'}
+                                                aria-label="Открыть проект"
                                             >
-                                                👥
+                                                {isProjectOwner(project.owner_id) ? '✏️' : 'ℹ️'}
                                             </button>
-                                        )}
+                                            {isProjectOwner(project.owner_id) && (
+                                                <button
+                                                    className="btn btn-sm btn-secondary"
+                                                    onClick={() => handleManageMembers(project.id, project.owner_id)}
+                                                    title="Управление участниками"
+                                                    aria-label="Управление участниками"
+                                                >
+                                                    👥
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                     {project.description && (
                                         <p className="project-description">{project.description}</p>
@@ -126,9 +149,11 @@ function ProjectsList() {
                 </>
             )}
 
-            <CreateProjectModal
-                isOpen={isCreateModalOpen}
-                onClose={() => setIsCreateModalOpen(false)}
+            <ProjectModal
+                isOpen={projectModal.isOpen}
+                onClose={closeProjectModal}
+                mode={projectModal.mode}
+                projectId={projectModal.projectId}
             />
 
             {selectedProjectId && selectedProjectOwnerId && (
@@ -144,7 +169,7 @@ function ProjectsList() {
                 createPortal(
                     <button
                         className="fab"
-                        onClick={() => setIsCreateModalOpen(true)}
+                        onClick={openCreateProject}
                         title="Создать проект"
                         aria-label="Создать проект"
                     >

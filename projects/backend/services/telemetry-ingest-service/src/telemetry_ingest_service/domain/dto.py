@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, conlist
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class TelemetryReadingDTO(BaseModel):
@@ -27,5 +27,6 @@ class TelemetryIngestDTO(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
 
     # MVP limits: max 10k readings per request
-    readings: conlist(TelemetryReadingDTO, min_length=1, max_length=10_000)
+    # mypy-friendly constraints for Pydantic v2
+    readings: list[TelemetryReadingDTO] = Field(min_length=1, max_length=10_000)
 

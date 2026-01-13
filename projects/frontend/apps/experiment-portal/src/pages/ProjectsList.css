@@ -24,14 +24,25 @@
 }
 
 .project-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
     margin-bottom: 1rem;
 }
 
 .project-card-header h3 {
     margin: 0;
+    min-width: 0;
     font-size: 1.25rem;
     font-weight: 600;
     color: var(--primary-color, #007bff);
+}
+
+.project-card-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-shrink: 0;
 }
 
 .project-description {
