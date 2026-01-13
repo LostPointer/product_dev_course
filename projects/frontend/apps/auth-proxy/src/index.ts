@@ -710,7 +710,10 @@ export async function buildServer(config: Config) {
         http2: false,
         replyOptions: {
             rewriteRequestHeaders: (req, headers) => {
-                // Keep client Authorization header (sensor token), do NOT inject auth-service cookie token.
+                // Telemetry endpoints:
+                //  - POST /api/v1/telemetry: requires sensor token (Authorization: Bearer <sensor_token>)
+                //  - GET  /api/v1/telemetry/stream: can be accessed either via sensor token OR via user session
+                //    (we inject user's access token if client didn't provide Authorization)
                 const traceId = normalizeUUID(req.headers['x-trace-id'] as string) || generateUUID()
                 const outgoingHeaders = getOutgoingRequestHeaders(traceId)
 
@@ -722,6 +725,18 @@ export async function buildServer(config: Config) {
 
                 newHeaders['X-Trace-Id'] = outgoingHeaders['X-Trace-Id']
                 newHeaders['X-Request-Id'] = outgoingHeaders['X-Request-Id']
+
+                const url = String(req.url || '')
+                const isTelemetryStream = url.startsWith('/api/v1/telemetry/stream')
+
+                // If stream request has no Authorization, use session cookie access token
+                if (isTelemetryStream && !newHeaders['authorization']) {
+                    const cookies = parseCookies(req.headers.cookie as string | undefined)
+                    const access = cookies[config.accessCookieName]
+                    if (access) {
+                        newHeaders['authorization'] = `Bearer ${access}`
+                    }
+                }
 
                 // Ensure no cookie is forwarded to telemetry ingest service
                 delete newHeaders['cookie']
