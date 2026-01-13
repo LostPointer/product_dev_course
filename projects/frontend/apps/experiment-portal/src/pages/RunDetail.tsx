@@ -123,6 +123,12 @@ function RunDetail() {
     return <ErrorComponent message="Запуск не найден" />
   }
 
+  // UI note:
+  // Backend позволяет создавать capture sessions, даже если run ещё в статусе draft.
+  // Поэтому разрешаем "Старт/Стоп отсчёта" для draft+running (а не только running),
+  // иначе ручной сценарий ломается без отдельной кнопки "Start run".
+  const canManageSessions = run.status === 'draft' || run.status === 'running'
+
   return (
     <div className="run-detail">
       <div className="run-header card">
@@ -138,7 +144,7 @@ function RunDetail() {
           </div>
           <div className="header-actions">
             <StatusBadge status={run.status} statusMap={runStatusMap} />
-            {run.status === 'running' && (
+            {canManageSessions && (
               <>
                 {!activeSession ? (
                   <button
@@ -164,6 +170,10 @@ function RunDetail() {
                     {stopSessionMutation.isPending ? 'Остановка...' : 'Стоп отсчёта'}
                   </button>
                 )}
+              </>
+            )}
+            {run.status === 'running' && (
+              <>
                 <button
                   className="btn btn-success"
                   onClick={() => completeMutation.mutate()}
@@ -253,7 +263,7 @@ function RunDetail() {
           <Loading message="Загрузка сессий..." />
         ) : sessions.length === 0 ? (
           <EmptyState message="Сессии отсчёта отсутствуют">
-            {run.status === 'running' && !activeSession && experiment && (
+            {canManageSessions && !activeSession && experiment && (
               <button
                 className="btn btn-primary"
                 onClick={() => {
