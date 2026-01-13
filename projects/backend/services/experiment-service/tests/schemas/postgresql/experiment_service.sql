@@ -8,6 +8,7 @@ DROP TABLE IF EXISTS telemetry_records CASCADE;
 DROP TABLE IF EXISTS request_idempotency CASCADE;
 DROP TABLE IF EXISTS artifacts CASCADE;
 DROP TABLE IF EXISTS capture_session_events CASCADE;
+DROP TABLE IF EXISTS run_events CASCADE;
 DROP TABLE IF EXISTS webhook_deliveries CASCADE;
 DROP TABLE IF EXISTS webhook_subscriptions CASCADE;
 DROP TABLE IF EXISTS capture_sessions CASCADE;
@@ -208,6 +209,20 @@ CREATE TABLE capture_session_events (
 );
 
 CREATE INDEX capture_session_events_session_idx ON capture_session_events (capture_session_id, created_at DESC);
+
+-- Migration: 005_run_events.sql
+CREATE TABLE run_events (
+    id bigserial PRIMARY KEY,
+    run_id uuid NOT NULL,
+    event_type text NOT NULL,
+    actor_id uuid NOT NULL,
+    actor_role text NOT NULL,
+    payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    FOREIGN KEY (run_id) REFERENCES runs (id) ON DELETE CASCADE
+);
+
+CREATE INDEX run_events_run_idx ON run_events (run_id, created_at DESC);
 
 -- Migration: 004_webhooks.sql
 CREATE TABLE webhook_subscriptions (

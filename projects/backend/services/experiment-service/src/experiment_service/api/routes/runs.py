@@ -27,6 +27,7 @@ from experiment_service.services.dependencies import (
     get_idempotency_service,
     get_experiment_service,
     get_run_service,
+    get_run_event_service,
     get_webhook_service,
     require_current_user,
     resolve_project_id,
@@ -41,6 +42,8 @@ routes = web.RouteTableDef()
 EVENT_RUN_STARTED = "run.started"
 EVENT_RUN_FINISHED = "run.finished"
 EVENT_RUN_ARCHIVED = "run.archived"
+EVENT_RUN_STATUS_CHANGED = "run.status_changed"
+EVENT_RUN_TAGS_UPDATED = "run.tags_updated"
 
 
 def _run_response(run: Run) -> dict:
@@ -156,6 +159,12 @@ async def update_run(request: web.Request):
     except ValidationError as exc:
         raise web.HTTPBadRequest(text=exc.json()) from exc
     service = await get_run_service(request)
+    before = None
+    if dto.status is not None:
+        try:
+            before = await service.get_run(project_id, run_id)
+        except NotFoundError as exc:
+            raise web.HTTPNotFound(text=str(exc)) from exc
     try:
         run = await service.update_run(project_id, run_id, dto)
     except InvalidStatusTransitionError as exc:
@@ -163,6 +172,19 @@ async def update_run(request: web.Request):
     except NotFoundError as exc:
         raise web.HTTPNotFound(text=str(exc)) from exc
     if dto.status is not None:
+        actor_role = user.project_roles.get(project_id)
+        if actor_role and before is not None:
+            audit = await get_run_event_service(request)
+            await audit.record_event(
+                run_id=run.id,
+                event_type=EVENT_RUN_STATUS_CHANGED,
+                actor_id=user.user_id,
+                actor_role=actor_role,
+                payload={
+                    "from": before.status.value,
+                    "to": run.status.value,
+                },
+            )
         event_type: str | None = None
         if dto.status == RunStatus.RUNNING:
             event_type = EVENT_RUN_STARTED
@@ -203,12 +225,34 @@ async def batch_update_status(request: web.Request):
         raise web.HTTPBadRequest(text="Invalid status value") from exc
     run_ids = [parse_uuid(value, "run_id") for value in run_ids_raw]
     service = await get_run_service(request)
+    actor_role = user.project_roles.get(project_id)
+    before_status: dict[UUID, str] = {}
+    if actor_role:
+        for rid in run_ids:
+            try:
+                current = await service.get_run(project_id, rid)
+            except NotFoundError as exc:
+                raise web.HTTPNotFound(text=str(exc)) from exc
+            before_status[rid] = current.status.value
     try:
         updated_runs = await service.batch_update_status(project_id, run_ids, status)
     except InvalidStatusTransitionError as exc:
         raise web.HTTPBadRequest(text=str(exc)) from exc
     except NotFoundError as exc:
         raise web.HTTPNotFound(text=str(exc)) from exc
+    if actor_role:
+        audit = await get_run_event_service(request)
+        for run in updated_runs:
+            old = before_status.get(run.id)
+            if old is None:
+                continue
+            await audit.record_event(
+                run_id=run.id,
+                event_type=EVENT_RUN_STATUS_CHANGED,
+                actor_id=user.user_id,
+                actor_role=actor_role,
+                payload={"from": old, "to": run.status.value},
+            )
     event_type: str | None = None
     if status == RunStatus.RUNNING:
         event_type = EVENT_RUN_STARTED
@@ -301,4 +345,46 @@ async def bulk_update_tags(request: web.Request):
     except NotFoundError as exc:
         raise web.HTTPNotFound(text=str(exc)) from exc
 
+    actor_role = user.project_roles.get(project_id)
+    if actor_role:
+        audit = await get_run_event_service(request)
+        for run in updated:
+            await audit.record_event(
+                run_id=run.id,
+                event_type=EVENT_RUN_TAGS_UPDATED,
+                actor_id=user.user_id,
+                actor_role=actor_role,
+                payload={
+                    "set_tags": _normalize_tags(set_tags_raw) if has_set else None,
+                    "add_tags": _normalize_tags(add_tags_raw) if not has_set else None,
+                    "remove_tags": _normalize_tags(remove_tags_raw) if not has_set else None,
+                },
+            )
+
     return web.json_response({"runs": [_run_response(run) for run in updated]})
+
+
+@routes.get("/api/v1/runs/{run_id}/events")
+async def list_run_events(request: web.Request):
+    user = await require_current_user(request)
+    project_id = resolve_project_id(user, request.rel_url.query.get("project_id"))
+    ensure_project_access(user, project_id)
+    run_id = parse_uuid(request.match_info["run_id"], "run_id")
+    run_service = await get_run_service(request)
+    try:
+        run = await run_service.get_run(project_id, run_id)
+    except NotFoundError as exc:
+        raise web.HTTPNotFound(text=str(exc)) from exc
+    ensure_project_access(user, run.project_id)
+
+    audit = await get_run_event_service(request)
+    limit, offset = pagination_params(request)
+    events, total = await audit.list_events(run_id, limit=limit, offset=offset)
+    payload = paginated_response(
+        [evt.model_dump(mode="json") for evt in events],
+        limit=limit,
+        offset=offset,
+        key="events",
+        total=total,
+    )
+    return web.json_response(payload)

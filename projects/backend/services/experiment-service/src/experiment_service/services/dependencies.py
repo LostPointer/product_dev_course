@@ -15,6 +15,7 @@ from experiment_service.repositories import (
     ConversionProfileRepository,
     ExperimentRepository,
     RunMetricsRepository,
+    RunEventRepository,
     RunRepository,
     SensorRepository,
     TelemetryRepository,
@@ -27,6 +28,7 @@ from experiment_service.services import (
     ConversionProfileService,
     ExperimentService,
     MetricsService,
+    RunEventService,
     RunService,
     SensorService,
     TelemetryService,
@@ -41,6 +43,7 @@ TService = TypeVar("TService")
 
 _EXPERIMENT_SERVICE_KEY = "experiment_service"
 _RUN_SERVICE_KEY = "run_service"
+_RUN_EVENT_SERVICE_KEY = "run_event_service"
 _CAPTURE_SERVICE_KEY = "capture_session_service"
 _CAPTURE_EVENT_SERVICE_KEY = "capture_session_event_service"
 _WEBHOOK_SERVICE_KEY = "webhook_service"
@@ -163,6 +166,15 @@ async def get_run_service(request: web.Request) -> RunService:
         return RunService(run_repo, experiment_repo, capture_repo)
 
     return await _get_or_create_service(request, _RUN_SERVICE_KEY, builder)
+
+
+async def get_run_event_service(request: web.Request) -> RunEventService:
+    async def builder(_: web.Request) -> RunEventService:
+        pool = await get_pool()
+        repo = RunEventRepository(pool)
+        return RunEventService(repo)
+
+    return await _get_or_create_service(request, _RUN_EVENT_SERVICE_KEY, builder)
 
 
 async def get_capture_session_service(request: web.Request) -> CaptureSessionService:

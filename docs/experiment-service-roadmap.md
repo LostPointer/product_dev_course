@@ -59,9 +59,11 @@
     - `capture_session.created` и `capture_session.stopped` (на create/stop capture session).
     - `run.started`, `run.finished`, `run.archived` (на `PATCH /api/v1/runs/{id}` и `POST /api/v1/runs:batch-status`).
   - ⚠️ Delivery гарантии: best-effort, at-least-once; retry с backoff до `webhook_max_attempts`. Расширенные политики (DLQ, дедупликация, rate limit per target) — в backlog.
-- **Аудит-лог действий пользователей:** ⚠️ Частично реализовано. Таблица `capture_session_events` используется для аудита старт/стоп capture-сессий с фиксацией `actor_id` и `actor_role`.
+- **Аудит-лог действий пользователей:** ⚠️ Частично реализовано. Таблица `capture_session_events` используется для аудита старт/стоп capture-сессий с фиксацией `actor_id` и `actor_role`. Добавлен audit log для `Run` (таблица `run_events`).
   - ✅ Запись событий на `POST /api/v1/runs/{run_id}/capture-sessions` (`capture_session.created`) и `POST /api/v1/runs/{run_id}/capture-sessions/{session_id}/stop` (`capture_session.stopped`).
   - ✅ Чтение событий: `GET /api/v1/runs/{run_id}/capture-sessions/{session_id}/events` (доступно viewer+).
+  - ✅ Запись событий `Run`: смена статуса (`run.status_changed`) и bulk tags (`run.tags_updated`).
+  - ✅ Чтение событий `Run`: `GET /api/v1/runs/{run_id}/events` (доступно viewer+).
   - ❌ Полный audit trail по остальным сущностям/операциям (runs/experiments/sensors/artifacts), а также гарантии неизменяемости/retention — в backlog.
 - **Догрузка данных после завершения (late/backfill ingest):** ❌ Не реализовано. Нужна возможность добавлять телеметрию в `capture_session` **после** завершения эксперимента (например, часть данных копится на устройстве и выгружается только в конце). Требуется:
   - принять batched-данные с timestamp’ами «из прошлого» и привязкой к `run_id`/`capture_session_id`;

@@ -151,3 +151,13 @@ class CaptureSessionEvent(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
 
+
+class RunEvent(BaseModel):
+    id: int
+    run_id: UUID
+    event_type: str
+    actor_id: UUID
+    actor_role: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+
