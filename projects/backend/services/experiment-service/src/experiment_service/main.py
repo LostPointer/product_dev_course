@@ -16,6 +16,7 @@ from backend_common.middleware.trace import create_trace_middleware
 from experiment_service.api.router import setup_routes
 from backend_common.db.pool import close_pool_service as close_pool, init_pool_service
 from experiment_service.settings import settings
+from experiment_service.webhooks_dispatcher import start_webhook_dispatcher, stop_webhook_dispatcher
 
 
 async def init_pool(_app: Any = None) -> None:
@@ -195,6 +196,8 @@ def create_app() -> web.Application:
     setup_routes(app)
     app.on_startup.append(init_pool)
     app.on_startup.append(apply_migrations_on_startup)
+    app.on_startup.append(start_webhook_dispatcher)
+    app.on_cleanup.append(stop_webhook_dispatcher)
     app.on_cleanup.append(close_pool)
 
     # Add CORS to all routes

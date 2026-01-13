@@ -21,6 +21,7 @@ from experiment_service.services.dependencies import (
     get_capture_session_event_service,
     get_idempotency_service,
     get_run_service,
+    get_webhook_service,
     require_current_user,
     resolve_project_id,
 )
@@ -112,6 +113,18 @@ async def create_capture_session(request: web.Request):
                 "notes": session.notes,
             },
         )
+        webhooks = await get_webhook_service(request)
+        await webhooks.emit(
+            project_id=project_id,
+            event_type=EVENT_CREATED,
+            payload={
+                "run_id": str(run_id),
+                "capture_session_id": str(session.id),
+                "ordinal_number": session.ordinal_number,
+                "status": session.status.value,
+                "notes": session.notes,
+            },
+        )
     response_payload = _session_response(session)
     if idempotency_key:
         try:
@@ -164,6 +177,19 @@ async def stop_capture_session(request: web.Request):
             actor_role=actor_role,
             payload={
                 "run_id": str(run_id),
+                "status": session.status.value,
+                "stopped_at": session.stopped_at.isoformat() if session.stopped_at else None,
+                "archived": session.archived,
+                "notes": session.notes,
+            },
+        )
+        webhooks = await get_webhook_service(request)
+        await webhooks.emit(
+            project_id=project_id,
+            event_type=EVENT_STOPPED,
+            payload={
+                "run_id": str(run_id),
+                "capture_session_id": str(session.id),
                 "status": session.status.value,
                 "stopped_at": session.stopped_at.isoformat() if session.stopped_at else None,
                 "archived": session.archived,

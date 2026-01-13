@@ -7,6 +7,7 @@ from experiment_service.services.metrics import MetricsService
 from experiment_service.services.runs import RunService
 from experiment_service.services.sensors import ConversionProfileService, SensorService
 from experiment_service.services.telemetry import TelemetryService
+from experiment_service.services.webhooks import WebhookService
 
 __all__ = [
     "ExperimentService",
@@ -17,5 +18,6 @@ __all__ = [
     "ConversionProfileService",
     "TelemetryService",
     "MetricsService",
+    "WebhookService",
 ]
 

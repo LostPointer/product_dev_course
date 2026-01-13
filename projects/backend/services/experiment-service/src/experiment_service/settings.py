@@ -27,6 +27,11 @@ class Settings(BaseServiceSettings):
 
     otel_exporter_endpoint: AnyHttpUrl | None = None
 
+    # Webhooks (MVP)
+    webhook_dispatch_interval_seconds: float = 0.2
+    webhook_request_timeout_seconds: float = 3.0
+    webhook_max_attempts: int = 5
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -19,6 +19,7 @@ from experiment_service.repositories import (
     SensorRepository,
     TelemetryRepository,
 )
+from experiment_service.repositories.webhooks import WebhookDeliveryRepository, WebhookSubscriptionRepository
 from experiment_service.repositories.idempotency import IdempotencyRepository
 from experiment_service.services import (
     CaptureSessionService,
@@ -29,6 +30,7 @@ from experiment_service.services import (
     RunService,
     SensorService,
     TelemetryService,
+    WebhookService,
 )
 from experiment_service.services.idempotency import (
     IDEMPOTENCY_HEADER,
@@ -41,6 +43,7 @@ _EXPERIMENT_SERVICE_KEY = "experiment_service"
 _RUN_SERVICE_KEY = "run_service"
 _CAPTURE_SERVICE_KEY = "capture_session_service"
 _CAPTURE_EVENT_SERVICE_KEY = "capture_session_event_service"
+_WEBHOOK_SERVICE_KEY = "webhook_service"
 _IDEMPOTENCY_SERVICE_KEY = "idempotency_service"
 _SENSOR_SERVICE_KEY = "sensor_service"
 _PROFILE_SERVICE_KEY = "conversion_profile_service"
@@ -179,6 +182,16 @@ async def get_capture_session_event_service(request: web.Request) -> CaptureSess
         return CaptureSessionEventService(repo)
 
     return await _get_or_create_service(request, _CAPTURE_EVENT_SERVICE_KEY, builder)
+
+
+async def get_webhook_service(request: web.Request) -> WebhookService:
+    async def builder(_: web.Request) -> WebhookService:
+        pool = await get_pool()
+        subs_repo = WebhookSubscriptionRepository(pool)
+        deliveries_repo = WebhookDeliveryRepository(pool)
+        return WebhookService(subs_repo, deliveries_repo)
+
+    return await _get_or_create_service(request, _WEBHOOK_SERVICE_KEY, builder)
 
 
 async def get_idempotency_service(request: web.Request) -> IdempotencyService:

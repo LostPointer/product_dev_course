@@ -53,7 +53,12 @@
   - ✅ **Инвариант 1:** нельзя перевести `Run` в `succeeded/failed/archived`, если есть активные `CaptureSession` (`draft/running/backfilling`); применяется в `PATCH /api/v1/runs/{id}` и `POST /api/v1/runs:batch-status`.
   - ✅ **Инвариант 2:** нельзя удалить `Sensor`, если он участвует в активных `CaptureSession` (через `run_sensors → capture_sessions`).
   - ✅ **Инвариант 3:** нельзя удалить `CaptureSession`, если она активна (`running/backfilling`); удаление допустимо после завершения.
-- **Webhook-триггеры:** ❌ Не реализовано. Webhook-триггеры `run.started`, `run.finished`, `capture.started`, `capture.completed` отсутствуют. Требуется реализация системы webhooks.
+- **Webhook-триггеры:** ⚠️ Частично реализовано. Добавлена система webhooks на базе outbox (`webhook_deliveries`) + подписок (`webhook_subscriptions`) и фонового dispatcher’а.
+  - ✅ CRUD подписок: `GET/POST/DELETE /api/v1/webhooks` (owner/editor для записи; viewer+ для чтения).
+  - ✅ Триггеры:
+    - `capture_session.created` и `capture_session.stopped` (на create/stop capture session).
+    - `run.started`, `run.finished`, `run.archived` (на `PATCH /api/v1/runs/{id}` и `POST /api/v1/runs:batch-status`).
+  - ⚠️ Delivery гарантии: best-effort, at-least-once; retry с backoff до `webhook_max_attempts`. Расширенные политики (DLQ, дедупликация, rate limit per target) — в backlog.
 - **Аудит-лог действий пользователей:** ⚠️ Частично реализовано. Таблица `capture_session_events` используется для аудита старт/стоп capture-сессий с фиксацией `actor_id` и `actor_role`.
   - ✅ Запись событий на `POST /api/v1/runs/{run_id}/capture-sessions` (`capture_session.created`) и `POST /api/v1/runs/{run_id}/capture-sessions/{session_id}/stop` (`capture_session.stopped`).
   - ✅ Чтение событий: `GET /api/v1/runs/{run_id}/capture-sessions/{session_id}/events` (доступно viewer+).

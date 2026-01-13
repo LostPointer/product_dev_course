@@ -27,6 +27,7 @@ from experiment_service.services.dependencies import (
     get_idempotency_service,
     get_experiment_service,
     get_run_service,
+    get_webhook_service,
     require_current_user,
     resolve_project_id,
 )
@@ -36,6 +37,10 @@ from experiment_service.services.idempotency import (
 )
 
 routes = web.RouteTableDef()
+
+EVENT_RUN_STARTED = "run.started"
+EVENT_RUN_FINISHED = "run.finished"
+EVENT_RUN_ARCHIVED = "run.archived"
 
 
 def _run_response(run: Run) -> dict:
@@ -157,6 +162,25 @@ async def update_run(request: web.Request):
         raise web.HTTPBadRequest(text=str(exc)) from exc
     except NotFoundError as exc:
         raise web.HTTPNotFound(text=str(exc)) from exc
+    if dto.status is not None:
+        event_type: str | None = None
+        if dto.status == RunStatus.RUNNING:
+            event_type = EVENT_RUN_STARTED
+        elif dto.status in (RunStatus.SUCCEEDED, RunStatus.FAILED):
+            event_type = EVENT_RUN_FINISHED
+        elif dto.status == RunStatus.ARCHIVED:
+            event_type = EVENT_RUN_ARCHIVED
+        if event_type:
+            webhooks = await get_webhook_service(request)
+            await webhooks.emit(
+                project_id=project_id,
+                event_type=event_type,
+                payload={
+                    "run_id": str(run.id),
+                    "experiment_id": str(run.experiment_id),
+                    "status": run.status.value,
+                },
+            )
     return web.json_response(_run_response(run))
 
 
@@ -185,6 +209,25 @@ async def batch_update_status(request: web.Request):
         raise web.HTTPBadRequest(text=str(exc)) from exc
     except NotFoundError as exc:
         raise web.HTTPNotFound(text=str(exc)) from exc
+    event_type: str | None = None
+    if status == RunStatus.RUNNING:
+        event_type = EVENT_RUN_STARTED
+    elif status in (RunStatus.SUCCEEDED, RunStatus.FAILED):
+        event_type = EVENT_RUN_FINISHED
+    elif status == RunStatus.ARCHIVED:
+        event_type = EVENT_RUN_ARCHIVED
+    if event_type:
+        webhooks = await get_webhook_service(request)
+        for run in updated_runs:
+            await webhooks.emit(
+                project_id=project_id,
+                event_type=event_type,
+                payload={
+                    "run_id": str(run.id),
+                    "experiment_id": str(run.experiment_id),
+                    "status": run.status.value,
+                },
+            )
     response_runs = [_run_response(run) for run in updated_runs]
     return web.json_response({"runs": response_runs})
 
