@@ -46,7 +46,8 @@
 - **OpenAPI v1:** ✅ Реализовано. OpenAPI спецификация в `experiment-service/openapi/`, генерация client SDK через `openapi-generator-cli 7.17`.
 
 ### 2. Runs & Capture Management (итерации 3‑4)
-- **Массовые операции:** ✅ Частично реализовано. Batch-update статусов запусков реализовано в `POST /api/v1/runs:batch-status` (`experiment-service/api/routes/runs.py:161`). Bulk tagging не реализовано.
+- **Массовые операции:** ✅ Реализовано. Batch-update статусов запусков реализовано в `POST /api/v1/runs:batch-status` (`experiment-service/api/routes/runs.py:161`). Bulk tagging реализовано (см. пункт ниже).
+- **Bulk tagging:** ✅ Реализовано. Добавлен endpoint `POST /api/v1/runs:bulk-tags` (операции `add_tags`/`remove_tags` или `set_tags` для списка `run_ids`), с проверкой ролей owner/editor и project scoping.
 - **Расширенная сущность CaptureSession:** ✅ Реализовано. Несколько сессий на один запуск, статусная машина `draft/running/failed/succeeded/archived/backfilling`, порядковые номера (`ordinal_number`) и связь с Telemetry Ingest по `capture_session_id`. Реализовано в `experiment-service/migrations/001_initial_schema.sql:149` и `experiment-service/services/capture_sessions.py`.
 - **Контроль доменных инвариантов:** ⚠️ Частично реализовано. Валидация переходов статусов реализована в `experiment-service/services/state_machine.py`. Проверки инвариантов (нельзя архивировать запуск при активных capture session, нельзя удалить датчик с активными сессиями) не реализованы на уровне бизнес-логики.
 - **Webhook-триггеры:** ❌ Не реализовано. Webhook-триггеры `run.started`, `run.finished`, `capture.started`, `capture.completed` отсутствуют. Требуется реализация системы webhooks.

@@ -268,4 +268,3 @@ async def test_batch_update_status_rejects_invalid_status_value(service_client):
         headers=headers,
     )
     assert resp.status == 400
-

@@ -183,3 +183,75 @@ async def batch_update_status(request: web.Request):
         raise web.HTTPNotFound(text=str(exc)) from exc
     response_runs = [_run_response(run) for run in updated_runs]
     return web.json_response({"runs": response_runs})
+
+
+@routes.post("/api/v1/runs:bulk-tags")
+async def bulk_update_tags(request: web.Request):
+    """
+    Bulk tag operations for runs within a project.
+
+    Body:
+      - run_ids: [uuid, ...] (required)
+      - set_tags: [str, ...] (optional, may be empty to clear)
+      - add_tags: [str, ...] (optional)
+      - remove_tags: [str, ...] (optional)
+
+    Exactly one mode:
+      - set_tags
+      - add/remove (at least one non-empty)
+    """
+    user = await require_current_user(request)
+    project_id = resolve_project_id(
+        user, request.rel_url.query.get("project_id"), require_role=("owner", "editor")
+    )
+    body = await read_json(request)
+
+    run_ids_raw = body.get("run_ids")
+    if not isinstance(run_ids_raw, list) or not run_ids_raw:
+        raise web.HTTPBadRequest(text="run_ids must be a non-empty list")
+    run_ids = [parse_uuid(value, "run_id") for value in run_ids_raw]
+
+    def _normalize_tags(raw: object) -> list[str]:
+        if raw is None:
+            return []
+        if not isinstance(raw, list):
+            raise web.HTTPBadRequest(text="tags must be a list")
+        tags: list[str] = []
+        for item in raw:
+            if not isinstance(item, str):
+                raise web.HTTPBadRequest(text="tags must be a list of strings")
+            t = item.strip()
+            if t:
+                tags.append(t)
+        # de-dup but keep stable order for user input
+        return list(dict.fromkeys(tags))
+
+    set_tags_raw = body.get("set_tags", None)
+    add_tags_raw = body.get("add_tags", None)
+    remove_tags_raw = body.get("remove_tags", None)
+
+    has_set = set_tags_raw is not None
+    has_add = add_tags_raw is not None
+    has_remove = remove_tags_raw is not None
+
+    if has_set and (has_add or has_remove):
+        raise web.HTTPBadRequest(text="set_tags cannot be combined with add_tags/remove_tags")
+
+    service = await get_run_service(request)
+    try:
+        if has_set:
+            updated = await service.bulk_update_tags(
+                project_id, run_ids, set_tags=_normalize_tags(set_tags_raw)
+            )
+        else:
+            add_tags = _normalize_tags(add_tags_raw)
+            remove_tags = _normalize_tags(remove_tags_raw)
+            if not add_tags and not remove_tags:
+                raise web.HTTPBadRequest(text="add_tags or remove_tags is required")
+            updated = await service.bulk_update_tags(
+                project_id, run_ids, add_tags=add_tags, remove_tags=remove_tags
+            )
+    except NotFoundError as exc:
+        raise web.HTTPNotFound(text=str(exc)) from exc
+
+    return web.json_response({"runs": [_run_response(run) for run in updated]})

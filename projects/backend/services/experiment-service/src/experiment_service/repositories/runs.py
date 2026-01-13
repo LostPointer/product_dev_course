@@ -243,3 +243,65 @@ class RunRepository(BaseRepository):
                 raise NotFoundError("One or more runs not found")
             return [self._to_model(record) for record in records]
 
+    async def bulk_update_tags(
+        self,
+        project_id: UUID,
+        run_ids: list[UUID],
+        *,
+        add_tags: list[str] | None = None,
+        remove_tags: list[str] | None = None,
+        set_tags: list[str] | None = None,
+    ) -> List[Run]:
+        if not run_ids:
+            return []
+
+        # De-duplicate while preserving order (mostly for len-check semantics)
+        uniq_ids: list[UUID] = list(dict.fromkeys(run_ids))
+
+        async with self._pool.acquire() as conn, conn.transaction():
+            if set_tags is not None:
+                records = await conn.fetch(
+                    """
+                    UPDATE runs
+                    SET tags = $3::text[], updated_at = now()
+                    WHERE project_id = $1 AND id = ANY($2::uuid[])
+                    RETURNING *
+                    """,
+                    project_id,
+                    uniq_ids,
+                    set_tags,
+                )
+            else:
+                add_tags = add_tags or []
+                remove_tags = remove_tags or []
+                records = await conn.fetch(
+                    """
+                    UPDATE runs
+                    SET tags = (
+                        SELECT COALESCE(array_agg(t ORDER BY t), '{}'::text[])
+                        FROM (
+                            SELECT DISTINCT t
+                            FROM (
+                                SELECT t
+                                FROM unnest(runs.tags) AS t
+                                WHERE NOT (t = ANY($4::text[]))
+                                UNION ALL
+                                SELECT t
+                                FROM unnest($3::text[]) AS t
+                            ) u
+                        ) d
+                    ),
+                    updated_at = now()
+                    WHERE project_id = $1 AND id = ANY($2::uuid[])
+                    RETURNING *
+                    """,
+                    project_id,
+                    uniq_ids,
+                    add_tags,
+                    remove_tags,
+                )
+
+            if len(records) != len(uniq_ids):
+                raise NotFoundError("One or more runs not found")
+
+            return [self._to_model(record) for record in records]

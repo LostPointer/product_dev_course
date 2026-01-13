@@ -42,6 +42,7 @@ class Run(BaseModel):
     git_sha: str | None = None
     env: str | None = None
     notes: str | None = None
+    tags: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
     status: RunStatus = RunStatus.DRAFT
     started_at: datetime | None = None

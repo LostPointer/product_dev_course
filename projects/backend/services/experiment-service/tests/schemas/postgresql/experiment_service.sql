@@ -2,6 +2,7 @@
 -- Run `poetry run python bin/export_schema.py` after editing migrations.
 
 BEGIN;
+DROP TABLE IF EXISTS sensor_projects CASCADE;
 DROP TABLE IF EXISTS run_metrics CASCADE;
 DROP TABLE IF EXISTS telemetry_records CASCADE;
 DROP TABLE IF EXISTS request_idempotency CASCADE;
@@ -41,6 +42,7 @@ CREATE TYPE run_status AS ENUM ('draft', 'running', 'failed', 'succeeded', 'arch
 CREATE TYPE capture_session_status AS ENUM ('draft', 'running', 'failed', 'succeeded', 'archived', 'backfilling');
 CREATE TYPE sensor_status AS ENUM ('registering', 'active', 'inactive', 'decommissioned');
 CREATE TYPE conversion_profile_status AS ENUM ('draft', 'active', 'scheduled', 'deprecated');
+CREATE TYPE telemetry_conversion_status AS ENUM ('raw_only', 'converted', 'client_provided', 'conversion_failed');
 
 CREATE TABLE experiments (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -123,18 +125,6 @@ CREATE TRIGGER sensors_set_updated_at
     BEFORE UPDATE ON sensors
     FOR EACH ROW
     EXECUTE FUNCTION set_updated_at();
-
-CREATE TABLE sensor_projects (
-    sensor_id uuid NOT NULL,
-    project_id uuid NOT NULL,
-    created_at timestamptz NOT NULL DEFAULT now(),
-    PRIMARY KEY (sensor_id, project_id),
-    FOREIGN KEY (sensor_id) REFERENCES sensors (id) ON DELETE CASCADE,
-    UNIQUE (sensor_id, project_id)
-);
-
-CREATE INDEX sensor_projects_project_idx ON sensor_projects (project_id);
-CREATE INDEX sensor_projects_sensor_idx ON sensor_projects (sensor_id);
 
 CREATE TABLE conversion_profiles (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -254,13 +244,6 @@ CREATE TABLE request_idempotency (
 
 CREATE INDEX request_idempotency_user_idx ON request_idempotency (user_id, created_at DESC);
 
-CREATE TYPE telemetry_conversion_status AS ENUM (
-    'raw_only',
-    'converted',
-    'client_provided',
-    'conversion_failed'
-);
-
 CREATE TABLE telemetry_records (
     id bigserial PRIMARY KEY,
     project_id uuid NOT NULL,
@@ -306,4 +289,59 @@ CREATE INDEX run_metrics_run_name_step_idx
 
 CREATE INDEX run_metrics_project_name_idx
     ON run_metrics (project_id, name);
+
+-- Migration: 002_sensor_projects_many_to_many.sql
+-- 002_sensor_projects_many_to_many.sql
+-- Migration to support many-to-many relationship between sensors and projects.
+-- This allows a sensor to be associated with multiple projects.
+
+
+-- Step 1: Create the sensor_projects junction table
+CREATE TABLE IF NOT EXISTS sensor_projects (
+    sensor_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (sensor_id, project_id),
+    FOREIGN KEY (sensor_id) REFERENCES sensors (id) ON DELETE CASCADE,
+    -- Note: project_id references auth_service.projects, but we can't add FK here
+    -- as it's in a different database. We rely on application-level validation.
+    UNIQUE (sensor_id, project_id)
+);
+
+-- Create indexes only if they don't exist
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'sensor_projects_project_idx') THEN
+        CREATE INDEX sensor_projects_project_idx ON sensor_projects (project_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'sensor_projects_sensor_idx') THEN
+        CREATE INDEX sensor_projects_sensor_idx ON sensor_projects (sensor_id);
+    END IF;
+END $$;
+
+-- Step 2: Migrate existing data from sensors.project_id to sensor_projects
+-- For each sensor, create a corresponding entry in sensor_projects
+INSERT INTO sensor_projects (sensor_id, project_id, created_at)
+SELECT id, project_id, created_at
+FROM sensors
+ON CONFLICT (sensor_id, project_id) DO NOTHING;
+
+-- Step 3: We keep sensors.project_id as NOT NULL for now to maintain backward compatibility
+-- with existing foreign keys. In a future migration, we could make it nullable or remove it
+-- after updating all dependent tables.
+
+-- Step 4: Add a comment explaining the dual structure during migration
+COMMENT ON TABLE sensor_projects IS 'Many-to-many relationship between sensors and projects. Each sensor can belong to multiple projects.';
+COMMENT ON COLUMN sensors.project_id IS 'Primary project for backward compatibility. All projects are tracked in sensor_projects table.';
+
+-- Migration: 003_add_run_tags.sql
+-- 003_add_run_tags.sql
+-- Add tags support for runs to enable bulk tagging operations.
+
+
+ALTER TABLE runs
+    ADD COLUMN IF NOT EXISTS tags text[] NOT NULL DEFAULT '{}'::text[];
+
+-- Optional: speed up tag filtering in future
+CREATE INDEX IF NOT EXISTS runs_tags_gin_idx ON runs USING gin (tags);
 COMMIT;

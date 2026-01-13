@@ -59,4 +59,3 @@ class ExperimentService:
 
     async def delete_experiment(self, project_id: UUID, experiment_id: UUID) -> None:
         await self._repository.delete(project_id, experiment_id)
-

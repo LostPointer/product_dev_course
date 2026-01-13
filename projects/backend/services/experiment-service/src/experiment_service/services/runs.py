@@ -67,3 +67,19 @@ class RunService:
             runs.append(current)
         return await self._repository.update_status_batch(project_id, run_ids, status)
 
+    async def bulk_update_tags(
+        self,
+        project_id: UUID,
+        run_ids: list[UUID],
+        *,
+        add_tags: list[str] | None = None,
+        remove_tags: list[str] | None = None,
+        set_tags: list[str] | None = None,
+    ) -> List[Run]:
+        return await self._repository.bulk_update_tags(
+            project_id,
+            run_ids,
+            add_tags=add_tags,
+            remove_tags=remove_tags,
+            set_tags=set_tags,
+        )
