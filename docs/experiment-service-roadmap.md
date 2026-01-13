@@ -106,3 +106,6 @@
 - **Artifact Service:** webhooks о смене статуса артефактов, ссылки на approved модели.
 - **API Gateway:** агрегированная выдача для внешних клиентов, rate limiting и аутентификация.
 - **Auth Proxy/BFF:** хранение access/refresh в HttpOnly куках, валидация сессии для фронта, проксирование `/api/*` и WS/SSE к Experiment Service (и далее к Gateway), нормализация ошибок, CORS/CSRF.
+
+### Прогресс: Telemetry Ingest (WS/SSE)
+- **SSE stream (MVP):** ✅ Реализовано в `telemetry-ingest-service`: `GET /api/v1/telemetry/stream?sensor_id=...&since_id=...` (SSE, auth по sensor token, polling по БД). WebSocket режим — в backlog.

@@ -185,6 +185,60 @@ async def test_ingest_rejects_too_large_meta_400(service_client, pgsql):
     assert resp.status == 400
 
 
+async def test_stream_requires_token_401(service_client):
+    resp = await service_client.get(
+        "/api/v1/telemetry/stream?sensor_id=00000000-0000-0000-0000-000000000000"
+    )
+    assert resp.status == 401
+
+
+async def test_stream_emits_inserted_records(service_client, pgsql):
+    project_id = uuid4()
+    sensor_id = uuid4()
+    run_id = uuid4()
+    capture_session_id = uuid4()
+    token = "test-token"
+
+    db_uri = pgsql["telemetry_ingest_service"].conninfo.get_uri()
+    await _seed(
+        db_uri=db_uri,
+        project_id=project_id,
+        sensor_id=sensor_id,
+        token=token,
+        run_id=run_id,
+        capture_session_id=capture_session_id,
+    )
+
+    conn = await asyncpg.connect(db_uri)
+    try:
+        await conn.execute(
+            """
+            INSERT INTO telemetry_records (
+                project_id, sensor_id, run_id, capture_session_id,
+                timestamp, raw_value, physical_value, meta, conversion_status
+            )
+            VALUES ($1, $2, $3, $4, now(), 1.23, NULL, '{}'::jsonb, 'raw_only')
+            """,
+            project_id,
+            sensor_id,
+            run_id,
+            capture_session_id,
+        )
+    finally:
+        await conn.close()
+
+    resp = await service_client.get(
+        f"/api/v1/telemetry/stream?sensor_id={sensor_id}&since_id=0&max_events=1&idle_timeout_seconds=5",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status == 200
+
+    # Read until we receive one SSE "data:" block
+    raw = await resp.content.readuntil(b"\n\n")
+    assert b"event: telemetry" in raw
+    assert b"data: " in raw
+
+
 async def test_ingest_invalid_token_401(service_client, pgsql):
     project_id = uuid4()
     sensor_id = uuid4()
