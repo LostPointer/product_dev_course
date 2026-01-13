@@ -5,7 +5,9 @@ import json
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
+import pytest
 import asyncpg
+from aiohttp import web
 
 
 def _token_hash(token: str) -> bytes:
@@ -234,6 +236,95 @@ async def test_stream_emits_inserted_records(service_client, pgsql):
     assert resp.status == 200
 
     # Read until we receive one SSE "data:" block
+    raw = await resp.content.readuntil(b"\n\n")
+    assert b"event: telemetry" in raw
+    assert b"data: " in raw
+
+
+@pytest.fixture
+async def fake_auth_service(aiohttp_server):
+    """
+    Minimal auth-service stub for telemetry stream user-auth tests.
+    Implements:
+      - GET /auth/me
+      - GET /projects/{project_id}/members
+    """
+    app = web.Application()
+
+    async def me(request: web.Request) -> web.Response:
+        auth = request.headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            return web.json_response({"error": "Unauthorized"}, status=401)
+        token = auth[7:].strip()
+        # accept any token that looks like a JWT
+        if token.count(".") != 2:
+            return web.json_response({"error": "Unauthorized"}, status=401)
+        return web.json_response({"id": "user-1", "username": "u1", "email": "u1@example.com"}, status=200)
+
+    async def members(request: web.Request) -> web.Response:
+        auth = request.headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            return web.json_response({"error": "Unauthorized"}, status=401)
+        return web.json_response(
+            {
+                "members": [
+                    {"user_id": "user-1", "role": "member"},
+                ]
+            },
+            status=200,
+        )
+
+    app.router.add_get("/auth/me", me)
+    app.router.add_get("/projects/{project_id}/members", members)
+    return await aiohttp_server(app)
+
+
+async def test_stream_user_token_allows_project_member(service_client, pgsql, fake_auth_service, monkeypatch):
+    from telemetry_ingest_service.settings import settings
+
+    project_id = uuid4()
+    sensor_id = uuid4()
+    run_id = uuid4()
+    capture_session_id = uuid4()
+    token = "sensor-token"
+
+    db_uri = pgsql["telemetry_ingest_service"].conninfo.get_uri()
+    await _seed(
+        db_uri=db_uri,
+        project_id=project_id,
+        sensor_id=sensor_id,
+        token=token,
+        run_id=run_id,
+        capture_session_id=capture_session_id,
+    )
+
+    conn = await asyncpg.connect(db_uri)
+    try:
+        await conn.execute(
+            """
+            INSERT INTO telemetry_records (
+                project_id, sensor_id, run_id, capture_session_id,
+                timestamp, raw_value, physical_value, meta, conversion_status
+            )
+            VALUES ($1, $2, $3, $4, now(), 1.23, NULL, '{}'::jsonb, 'raw_only')
+            """,
+            project_id,
+            sensor_id,
+            run_id,
+            capture_session_id,
+        )
+    finally:
+        await conn.close()
+
+    monkeypatch.setattr(settings, "auth_service_url", str(fake_auth_service.make_url("")).rstrip("/"))
+
+    # JWT-like token triggers user-auth path
+    user_jwt = "a.b.c"
+    resp = await service_client.get(
+        f"/api/v1/telemetry/stream?sensor_id={sensor_id}&since_id=0&max_events=1&idle_timeout_seconds=5",
+        headers={"Authorization": f"Bearer {user_jwt}"},
+    )
+    assert resp.status == 200
     raw = await resp.content.readuntil(b"\n\n")
     assert b"event: telemetry" in raw
     assert b"data: " in raw

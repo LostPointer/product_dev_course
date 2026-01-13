@@ -7,6 +7,7 @@ import time
 from datetime import datetime, timezone
 from uuid import UUID
 
+import aiohttp
 from aiohttp import web
 from pydantic import ValidationError
 
@@ -22,20 +23,20 @@ from backend_common.db.pool import get_pool_service as get_pool
 routes = web.RouteTableDef()
 
 
-def _extract_sensor_token(request: web.Request) -> str:
+def _extract_bearer_token(request: web.Request) -> str:
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
-        raise web.HTTPUnauthorized(reason="Sensor token is required")
+        raise web.HTTPUnauthorized(reason="Authorization token is required")
     token = auth_header[len("Bearer ") :].strip()
     if not token:
-        raise web.HTTPUnauthorized(reason="Sensor token is required")
+        raise web.HTTPUnauthorized(reason="Authorization token is required")
     return token
 
 
 @routes.post("/api/v1/telemetry")
 async def ingest_telemetry(request: web.Request) -> web.Response:
     """Public REST ingest endpoint for sensor telemetry."""
-    token = _extract_sensor_token(request)
+    token = _extract_bearer_token(request)
     body = await read_json(request)
     try:
         dto = TelemetryIngestDTO.model_validate(body)
@@ -64,6 +65,43 @@ def _parse_int(value: str | None, *, default: int) -> int:
         raise web.HTTPBadRequest(text="Invalid integer query param") from exc
 
 
+def _looks_like_jwt(token: str) -> bool:
+    # JWT is "header.payload.signature" (3 dot-separated parts)
+    return token.count(".") == 2
+
+
+async def _authorize_stream_user(*, token: str, project_id: UUID) -> None:
+    """
+    Validate that the bearer token belongs to a user that is a member of the given project.
+    Uses auth-service:
+      - GET /auth/me
+      - GET /projects/{project_id}/members
+    """
+    base = settings.auth_service_url.rstrip("/")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(f"{base}/auth/me", headers=headers) as resp:
+            if resp.status != 200:
+                raise web.HTTPUnauthorized(text="Unauthorized")
+            me = await resp.json()
+            user_id = me.get("id")
+            if not user_id:
+                raise web.HTTPUnauthorized(text="Unauthorized")
+
+        async with session.get(f"{base}/projects/{project_id}/members", headers=headers) as resp:
+            if resp.status == 403:
+                raise web.HTTPForbidden(text="Forbidden")
+            if resp.status == 404:
+                raise web.HTTPNotFound(text="Project not found")
+            if resp.status != 200:
+                raise web.HTTPBadGateway(text="Auth service error")
+            data = await resp.json()
+            members = data.get("members") or []
+            if not any(str(m.get("user_id")) == str(user_id) for m in members):
+                raise web.HTTPForbidden(text="Forbidden")
+
+
 @routes.get("/api/v1/telemetry/stream")
 async def telemetry_stream(request: web.Request) -> web.StreamResponse:
     """
@@ -75,7 +113,7 @@ async def telemetry_stream(request: web.Request) -> web.StreamResponse:
       - max_events (optional): stop after sending N events (useful for tests)
       - idle_timeout_seconds (optional, default 30): stop after N seconds without new data
     """
-    token = _extract_sensor_token(request)
+    token = _extract_bearer_token(request)
     sensor_id_raw = request.rel_url.query.get("sensor_id")
     if not sensor_id_raw:
         raise web.HTTPBadRequest(text="sensor_id is required")
@@ -90,16 +128,26 @@ async def telemetry_stream(request: web.Request) -> web.StreamResponse:
     idle_timeout = float(request.rel_url.query.get("idle_timeout_seconds", "30"))
 
     pool = await get_pool()
-    token_hash = hash_sensor_token(token)
     async with pool.acquire() as conn:
-        row = await conn.fetchrow(
-            "SELECT project_id FROM sensors WHERE id = $1 AND token_hash = $2",
-            sensor_id,
-            token_hash,
-        )
-        if row is None:
-            raise web.HTTPUnauthorized(text="Invalid sensor credentials")
-        project_id = row["project_id"]
+        if _looks_like_jwt(token):
+            row = await conn.fetchrow("SELECT project_id FROM sensors WHERE id = $1", sensor_id)
+            if row is None:
+                raise web.HTTPNotFound(text="Sensor not found")
+            project_id = row["project_id"]
+        else:
+            token_hash = hash_sensor_token(token)
+            row = await conn.fetchrow(
+                "SELECT project_id FROM sensors WHERE id = $1 AND token_hash = $2",
+                sensor_id,
+                token_hash,
+            )
+            if row is None:
+                raise web.HTTPUnauthorized(text="Invalid sensor credentials")
+            project_id = row["project_id"]
+
+    # If token is a user token, enforce membership in the sensor's project.
+    if _looks_like_jwt(token):
+        await _authorize_stream_user(token=token, project_id=project_id)
 
     resp = web.StreamResponse(
         status=200,
@@ -178,4 +226,3 @@ async def telemetry_stream(request: web.Request) -> web.StreamResponse:
         await resp.write(b"data: " + str(exc).encode("utf-8") + b"\n\n")
         return resp
     return resp
-
