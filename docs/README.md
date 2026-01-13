@@ -27,7 +27,7 @@
 - `telemetry-storage-timescaledb.md` — хранение телеметрии датчиков в TimescaleDB (hypertable, индексы, retention/compression).
 
 ## Roadmap
-- `experiment-service-roadmap.md` — план развития Experiment Service.
+- `experiment-tracking-status-and-roadmap.md` — единый статус и roadmap платформы (включая Experiment Service и Frontend).
 
 ## Архитектурные решения (ADR)
 - `adr/` — журнал архитектурных решений (Architecture Decision Records).

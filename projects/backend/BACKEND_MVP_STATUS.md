@@ -178,10 +178,10 @@
 
 ## 📚 Ссылки
 
-- **Frontend MVP Status:** `projects/frontend/MVP_STATUS.md`
+- **Frontend MVP Status:** `docs/experiment-tracking-status-and-roadmap.md` (раздел Frontend)
 - **Auth Service Status:** `projects/backend/AUTH_SERVICE_STATUS.md`
 - **Technical Spec:** `docs/experiment-tracking-ts.md`
-- **Roadmap:** `docs/experiment-service-roadmap.md`
+- **Roadmap:** `docs/experiment-tracking-status-and-roadmap.md` (раздел Experiment Service)
 - **Backend README:** `projects/backend/services/experiment-service/README.md`
 - **Auth Service README:** `projects/backend/services/auth-service/README.md`
 

@@ -1,6 +1,6 @@
 # Experiment Service
 
-Сервис реализует доменную часть Experiment Tracking Platform и соответствует требованиям из `docs/experiment-tracking-ts.md` и дорожной карте `docs/experiment-service-roadmap.md`. На текущей итерации доступны CRUD-операции для экспериментов, запусков и capture session, управление датчиками и профилями преобразования, а также вспомогательные механизмы (идемпотентность, пагинация, status machine).
+Сервис реализует доменную часть Experiment Tracking Platform и соответствует требованиям из `docs/experiment-tracking-ts.md` и текущему статусу/roadmap в `docs/experiment-tracking-status-and-roadmap.md`. На текущей итерации доступны CRUD-операции для экспериментов, запусков и capture session, управление датчиками и профилями преобразования, а также вспомогательные механизмы (идемпотентность, пагинация, status machine).
 
 ## Возможности
 
@@ -101,5 +101,5 @@ poetry run openapi-generator-cli generate \
 4. **Наблюдаемость и события:** Prometheus/OTel метрики, вебхуки `run.started/capture.completed`, очереди для API Gateway.
 5. **Документация:** синхронизация OpenAPI/AsyncAPI и обновление демо-сценариев `bin/demo_seed.py` (после реализации ingest).
 
-Сервис развивается итеративно; актуальный прогресс фиксируется в `docs/experiment-service-roadmap.md`.
+Сервис развивается итеративно; актуальный прогресс фиксируется в `docs/experiment-tracking-status-and-roadmap.md`.
 
