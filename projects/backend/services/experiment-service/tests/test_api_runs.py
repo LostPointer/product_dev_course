@@ -110,3 +110,68 @@ async def test_runs_bulk_tags_requires_owner_or_editor(service_client):
     )
     assert resp.status in (403, 404)
 
+
+@pytest.mark.asyncio
+async def test_run_cannot_finish_with_active_capture_sessions(service_client):
+    project_id = uuid.uuid4()
+    headers = make_headers(project_id)
+
+    # Create experiment
+    resp = await service_client.post(
+        "/api/v1/experiments",
+        json={"project_id": str(project_id), "name": "Experiment Invariants"},
+        headers=headers,
+    )
+    assert resp.status == 201
+    experiment_id = (await resp.json())["id"]
+
+    # Create run (draft)
+    resp = await service_client.post(
+        f"/api/v1/experiments/{experiment_id}/runs",
+        json={"name": "Run with capture"},
+        headers=headers,
+    )
+    assert resp.status == 201
+    run_id = (await resp.json())["id"]
+
+    # Move run to running (draft -> running is allowed)
+    resp = await service_client.patch(
+        f"/api/v1/runs/{run_id}",
+        json={"status": "running"},
+        headers=headers,
+    )
+    assert resp.status == 200
+
+    # Create active capture session
+    resp = await service_client.post(
+        f"/api/v1/runs/{run_id}/capture-sessions",
+        json={"ordinal_number": 1, "status": "running"},
+        headers=headers,
+    )
+    assert resp.status == 201
+    session_id = (await resp.json())["id"]
+
+    # Try to finish run while capture session is active -> 400
+    resp = await service_client.patch(
+        f"/api/v1/runs/{run_id}",
+        json={"status": "succeeded"},
+        headers=headers,
+    )
+    assert resp.status == 400
+
+    # Stop capture session -> succeeded
+    resp = await service_client.post(
+        f"/api/v1/runs/{run_id}/capture-sessions/{session_id}/stop",
+        json={"status": "succeeded"},
+        headers=headers,
+    )
+    assert resp.status == 200
+
+    # Now finishing run should work
+    resp = await service_client.patch(
+        f"/api/v1/runs/{run_id}",
+        json={"status": "succeeded"},
+        headers=headers,
+    )
+    assert resp.status == 200
+

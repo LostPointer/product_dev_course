@@ -4,10 +4,12 @@ from __future__ import annotations
 from typing import List
 from uuid import UUID
 
+from experiment_service.core.exceptions import InvalidStatusTransitionError
 from experiment_service.core.exceptions import ScopeMismatchError
 from experiment_service.domain.dto import RunCreateDTO, RunUpdateDTO
 from experiment_service.domain.enums import RunStatus
 from experiment_service.domain.models import Run
+from experiment_service.repositories.capture_sessions import CaptureSessionRepository
 from experiment_service.repositories.experiments import ExperimentRepository
 from experiment_service.repositories.runs import RunRepository
 from experiment_service.services.state_machine import validate_run_transition
@@ -16,9 +18,22 @@ from experiment_service.services.state_machine import validate_run_transition
 class RunService:
     """Coordinates run-related workflows."""
 
-    def __init__(self, repository: RunRepository, experiment_repository: ExperimentRepository):
+    def __init__(
+        self,
+        repository: RunRepository,
+        experiment_repository: ExperimentRepository,
+        capture_session_repository: CaptureSessionRepository,
+    ):
         self._repository = repository
         self._experiment_repository = experiment_repository
+        self._capture_session_repository = capture_session_repository
+
+    async def _ensure_no_active_capture_sessions(self, project_id: UUID, run_id: UUID) -> None:
+        has_active = await self._capture_session_repository.has_active_for_run(project_id, run_id)
+        if has_active:
+            raise InvalidStatusTransitionError(
+                "Cannot finish or archive run while capture sessions are active"
+            )
 
     async def create_run(self, data: RunCreateDTO) -> Run:
         experiment = await self._experiment_repository.get(data.project_id, data.experiment_id)
@@ -52,6 +67,8 @@ class RunService:
         current = await self._repository.get(project_id, run_id)
         if updates.status is not None:
             validate_run_transition(current.status, updates.status)
+            if updates.status in (RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.ARCHIVED):
+                await self._ensure_no_active_capture_sessions(project_id, run_id)
         return await self._repository.update(project_id, run_id, updates)
 
     async def delete_run(self, project_id: UUID, run_id: UUID) -> None:
@@ -64,6 +81,8 @@ class RunService:
         for run_id in run_ids:
             current = await self._repository.get(project_id, run_id)
             validate_run_transition(current.status, status)
+            if status in (RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.ARCHIVED):
+                await self._ensure_no_active_capture_sessions(project_id, run_id)
             runs.append(current)
         return await self._repository.update_status_batch(project_id, run_ids, status)
 

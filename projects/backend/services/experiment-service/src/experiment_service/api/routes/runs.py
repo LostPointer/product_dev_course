@@ -153,6 +153,8 @@ async def update_run(request: web.Request):
     service = await get_run_service(request)
     try:
         run = await service.update_run(project_id, run_id, dto)
+    except InvalidStatusTransitionError as exc:
+        raise web.HTTPBadRequest(text=str(exc)) from exc
     except NotFoundError as exc:
         raise web.HTTPNotFound(text=str(exc)) from exc
     return web.json_response(_run_response(run))
@@ -179,6 +181,8 @@ async def batch_update_status(request: web.Request):
     service = await get_run_service(request)
     try:
         updated_runs = await service.batch_update_status(project_id, run_ids, status)
+    except InvalidStatusTransitionError as exc:
+        raise web.HTTPBadRequest(text=str(exc)) from exc
     except NotFoundError as exc:
         raise web.HTTPNotFound(text=str(exc)) from exc
     response_runs = [_run_response(run) for run in updated_runs]

@@ -153,7 +153,8 @@ async def get_run_service(request: web.Request) -> RunService:
         pool = await get_pool()
         run_repo = RunRepository(pool)
         experiment_repo = ExperimentRepository(pool)
-        return RunService(run_repo, experiment_repo)
+        capture_repo = CaptureSessionRepository(pool)
+        return RunService(run_repo, experiment_repo, capture_repo)
 
     return await _get_or_create_service(request, _RUN_SERVICE_KEY, builder)
 

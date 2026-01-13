@@ -140,6 +140,25 @@ class CaptureSessionRepository(BaseRepository):
         )
         return int(record["total"]) if record else 0
 
+    async def has_active_for_run(self, project_id: UUID, run_id: UUID) -> bool:
+        """
+        Active capture sessions are those that can still produce data and should block
+        finishing/archiving the run.
+        """
+        record = await self._fetchrow(
+            """
+            SELECT 1
+            FROM capture_sessions
+            WHERE project_id = $1
+              AND run_id = $2
+              AND status IN ('draft', 'running', 'backfilling')
+            LIMIT 1
+            """,
+            project_id,
+            run_id,
+        )
+        return record is not None
+
     async def update(
         self,
         project_id: UUID,
