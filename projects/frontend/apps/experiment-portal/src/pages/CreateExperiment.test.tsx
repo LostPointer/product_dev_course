@@ -352,7 +352,7 @@ describe('CreateExperimentModal', () => {
             id: 'exp-123',
             project_id: 'project-1',
             name: 'New Experiment',
-            experiment_type: 'aerodynamics',
+            experiment_type: 'benchmark',
             status: 'draft' as const,
             tags: [],
             metadata: {},
@@ -368,7 +368,7 @@ describe('CreateExperimentModal', () => {
         })
         await user.selectOptions(screen.getByLabelText(/проект/i), 'project-1')
         await user.type(screen.getByPlaceholderText('Например: Аэродинамические испытания крыла'), 'New Experiment')
-        await user.selectOptions(screen.getByLabelText(/тип эксперимента/i), 'aerodynamics')
+        await user.selectOptions(screen.getByLabelText(/тип эксперимента/i), 'benchmark')
 
         const submitButton = screen.getByRole('button', { name: /создать эксперимент/i })
         await user.click(submitButton)
@@ -376,7 +376,7 @@ describe('CreateExperimentModal', () => {
         await waitFor(() => {
             expect(mockCreate).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    experiment_type: 'aerodynamics',
+                    experiment_type: 'benchmark',
                 })
             )
         })

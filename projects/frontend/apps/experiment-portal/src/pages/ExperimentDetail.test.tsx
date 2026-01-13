@@ -51,9 +51,9 @@ const mockExperiment = {
     project_id: 'project-1',
     name: 'Test Experiment',
     description: 'Test description',
-    experiment_type: 'aerodynamics',
+    experiment_type: 'benchmark',
     status: 'draft' as const,
-    tags: ['test', 'aerodynamics'],
+    tags: ['test', 'benchmark'],
     metadata: { key: 'value' },
     owner_id: 'user-1',
     created_at: '2024-01-01T00:00:00Z',
@@ -123,9 +123,9 @@ describe('ExperimentDetail', () => {
         await waitFor(() => {
             // Ищем теги по классу .tag, чтобы избежать конфликта с типом эксперимента
             const testTag = screen.getByText('test', { selector: '.tag' })
-            const aerodynamicsTag = screen.getByText('aerodynamics', { selector: '.tag' })
+            const benchmarkTag = screen.getByText('benchmark', { selector: '.tag' })
             expect(testTag).toBeInTheDocument()
-            expect(aerodynamicsTag).toBeInTheDocument()
+            expect(benchmarkTag).toBeInTheDocument()
         })
     })
 
@@ -227,9 +227,9 @@ describe('ExperimentDetail', () => {
 
         await waitFor(() => {
             expect(screen.getByText(/тип/i)).toBeInTheDocument()
-            // aerodynamics может быть и в типе, и в тегах, поэтому используем getAllByText
-            const aerodynamicsElements = screen.getAllByText('aerodynamics')
-            expect(aerodynamicsElements.length).toBeGreaterThan(0)
+            // benchmark может быть и в типе, и в тегах, поэтому используем getAllByText
+            const benchmarkElements = screen.getAllByText('benchmark')
+            expect(benchmarkElements.length).toBeGreaterThan(0)
         })
     })
 

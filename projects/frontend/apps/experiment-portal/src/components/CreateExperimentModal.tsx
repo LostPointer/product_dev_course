@@ -188,10 +188,11 @@ function CreateExperimentModal({ isOpen, onClose, defaultProjectId }: CreateExpe
                         disabled={createMutation.isPending}
                     >
                         <option value="">Выберите тип</option>
-                        <option value="aerodynamics">Аэродинамика</option>
-                        <option value="strength">Прочность</option>
-                        <option value="thermal">Термические</option>
-                        <option value="vibration">Вибрационные</option>
+                        <option value="baseline">Бейзлайн (контроль)</option>
+                        <option value="benchmark">Бенчмарк / сравнение</option>
+                        <option value="validation">Валидация / проверка</option>
+                        <option value="calibration">Калибровка</option>
+                        <option value="demo">Демо</option>
                         <option value="other">Другое</option>
                     </select>
                 </div>

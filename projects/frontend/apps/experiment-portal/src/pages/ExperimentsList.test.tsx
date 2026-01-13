@@ -36,9 +36,9 @@ const mockExperiment = {
     project_id: 'project-1',
     name: 'Test Experiment',
     description: 'Test description',
-    experiment_type: 'aerodynamics',
+    experiment_type: 'benchmark',
     status: 'draft' as const,
-    tags: ['test', 'aerodynamics'],
+    tags: ['test', 'benchmark'],
     metadata: {},
     owner_id: 'user-1',
     created_at: '2024-01-01T00:00:00Z',
@@ -466,8 +466,8 @@ describe('ExperimentsList', () => {
         await waitFor(() => {
             const tags = screen.getAllByText('test')
             expect(tags.length).toBeGreaterThan(0)
-            const aerodynamicsTags = screen.getAllByText('aerodynamics')
-            expect(aerodynamicsTags.length).toBeGreaterThan(0)
+            const benchmarkTags = screen.getAllByText('benchmark')
+            expect(benchmarkTags.length).toBeGreaterThan(0)
         })
     })
 
