@@ -11,7 +11,6 @@ from experiment_service.api.routes import (
     metrics,
     runs,
     sensors,
-    telemetry,
     webhooks,
 )
 
@@ -24,7 +23,6 @@ ROUTE_MODULES = [
     sensors,
     conversion_profiles,
     artifacts,
-    telemetry,
 ]
 
 

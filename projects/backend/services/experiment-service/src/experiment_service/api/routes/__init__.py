@@ -8,7 +8,6 @@ from . import (
     metrics,
     runs,
     sensors,
-    telemetry,
     webhooks,
 )
 
@@ -20,7 +19,6 @@ __all__ = [
     "metrics",
     "runs",
     "sensors",
-    "telemetry",
     "webhooks",
 ]
 
