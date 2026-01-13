@@ -44,7 +44,7 @@ async def test_storage_layer_crud(db_pool):
     sessions_repo = CaptureSessionRepository(db_pool)
 
     experiments_service = ExperimentService(experiments_repo)
-    runs_service = RunService(runs_repo, experiments_repo)
+    runs_service = RunService(runs_repo, experiments_repo, sessions_repo)
     sessions_service = CaptureSessionService(sessions_repo, runs_repo)
 
     project_id = uuid.uuid4()
