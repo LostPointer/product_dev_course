@@ -26,6 +26,12 @@ backend-project/frontend/.env
 backend-project/frontend/.env.local
 backend-project/frontend/.vite/
 
+# Frontend (general)
+**/node_modules/
+**/.vite/
+**/dist/
+**/dist-local/
+
 # IDE
 .vscode/
 .idea/
