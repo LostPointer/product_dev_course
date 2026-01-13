@@ -219,6 +219,8 @@ export interface TelemetryIngestResponse {
   accepted: number
 }
 
+export type { TelemetryStreamRecord } from './telemetry'
+
 /** Типы для проектов */
 
 export interface Project {

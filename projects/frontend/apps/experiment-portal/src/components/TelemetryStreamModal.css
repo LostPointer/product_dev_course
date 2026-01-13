@@ -1,0 +1,97 @@
+.telemetry-stream-modal {
+    max-width: 980px;
+}
+
+.telemetry-stream {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+    gap: 12px;
+}
+
+@media (max-width: 900px) {
+    .form-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.stream-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.stream-meta {
+    display: flex;
+    gap: 12px;
+    opacity: 0.9;
+    flex-wrap: wrap;
+}
+
+.sparkline-card {
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 10px;
+    padding: 12px;
+    background: var(--card-bg, #fff);
+}
+
+.sparkline-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.mode-toggle {
+    display: flex;
+    gap: 10px;
+    font-size: 13px;
+    opacity: 0.9;
+}
+
+.mode-toggle label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.sparkline-bg {
+    fill: rgba(15, 23, 42, 0.04);
+}
+
+.sparkline-path {
+    stroke: #2563eb;
+    stroke-width: 2;
+    fill: none;
+}
+
+.records {
+    border-top: 1px solid var(--border-color, #e5e7eb);
+    padding-top: 10px;
+}
+
+.records-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.record-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 6px 8px;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    border-radius: 8px;
+    background: rgba(15, 23, 42, 0.02);
+}
+
+.empty {
+    opacity: 0.7;
+}

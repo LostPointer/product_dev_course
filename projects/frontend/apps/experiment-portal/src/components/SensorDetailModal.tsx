@@ -4,6 +4,7 @@ import { sensorsApi, projectsApi } from '../api/client'
 import { format } from 'date-fns'
 import type { SensorTokenResponse } from '../types'
 import TestTelemetryModal from './TestTelemetryModal'
+import TelemetryStreamModal from './TelemetryStreamModal'
 import Modal from './Modal'
 import {
     StatusBadge,
@@ -25,6 +26,7 @@ function SensorDetailModal({ isOpen, onClose, sensorId }: SensorDetailModalProps
     const [showToken, setShowToken] = useState(false)
     const [newToken, setNewToken] = useState<string | null>(null)
     const [showTestTelemetryModal, setShowTestTelemetryModal] = useState(false)
+    const [showTelemetryStreamModal, setShowTelemetryStreamModal] = useState(false)
     const [showAddProjectModal, setShowAddProjectModal] = useState(false)
     const [selectedProjectId, setSelectedProjectId] = useState<string>('')
 
@@ -132,6 +134,13 @@ function SensorDetailModal({ isOpen, onClose, sensorId }: SensorDetailModalProps
                                     disabled={isPending}
                                 >
                                     Тестовая отправка
+                                </button>
+                                <button
+                                    className="btn btn-secondary btn-sm"
+                                    onClick={() => setShowTelemetryStreamModal(true)}
+                                    disabled={isPending}
+                                >
+                                    Live telemetry
                                 </button>
                                 <button
                                     className="btn btn-secondary btn-sm"
@@ -403,12 +412,20 @@ function SensorDetailModal({ isOpen, onClose, sensorId }: SensorDetailModalProps
 
             {/* Модальное окно для тестовой отправки телеметрии */}
             {sensorId && (
-                <TestTelemetryModal
-                    sensorId={sensorId}
-                    sensorToken={newToken || null}
-                    isOpen={showTestTelemetryModal}
-                    onClose={() => setShowTestTelemetryModal(false)}
-                />
+                <>
+                    <TestTelemetryModal
+                        sensorId={sensorId}
+                        sensorToken={newToken || null}
+                        isOpen={showTestTelemetryModal}
+                        onClose={() => setShowTestTelemetryModal(false)}
+                    />
+                    <TelemetryStreamModal
+                        sensorId={sensorId}
+                        sensorToken={newToken || null}
+                        isOpen={showTelemetryStreamModal}
+                        onClose={() => setShowTelemetryStreamModal(false)}
+                    />
+                </>
             )}
         </>
     )

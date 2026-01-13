@@ -389,6 +389,36 @@ export const telemetryApi = {
     )
     return response.data
   },
+
+  stream: async (
+    params: {
+      sensor_id: string
+      since_id?: number
+      max_events?: number
+      idle_timeout_seconds?: number
+    },
+    sensorToken: string
+  ): Promise<Response> => {
+    const TELEMETRY_INGEST_URL = import.meta.env.VITE_TELEMETRY_INGEST_URL || 'http://localhost:8003'
+    const url = new URL(`${TELEMETRY_INGEST_URL}/api/v1/telemetry/stream`)
+    url.searchParams.set('sensor_id', params.sensor_id)
+    if (typeof params.since_id === 'number') url.searchParams.set('since_id', String(params.since_id))
+    if (typeof params.max_events === 'number') url.searchParams.set('max_events', String(params.max_events))
+    if (typeof params.idle_timeout_seconds === 'number') {
+      url.searchParams.set('idle_timeout_seconds', String(params.idle_timeout_seconds))
+    }
+
+    const traceId = getTraceId()
+    const requestId = generateRequestId()
+    return await fetch(url.toString(), {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${sensorToken}`,
+        'X-Trace-Id': traceId,
+        'X-Request-Id': requestId,
+      },
+    })
+  },
 }
 
 // Projects API

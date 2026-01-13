@@ -5,6 +5,7 @@ import { sensorsApi, projectsApi } from '../api/client'
 import { format } from 'date-fns'
 import type { SensorTokenResponse } from '../types'
 import TestTelemetryModal from '../components/TestTelemetryModal'
+import TelemetryStreamModal from '../components/TelemetryStreamModal'
 import {
     StatusBadge,
     Loading,
@@ -21,6 +22,7 @@ function SensorDetail() {
     const [showToken, setShowToken] = useState(false)
     const [newToken, setNewToken] = useState<string | null>(null)
     const [showTestTelemetryModal, setShowTestTelemetryModal] = useState(false)
+    const [showTelemetryStreamModal, setShowTelemetryStreamModal] = useState(false)
     const [showAddProjectModal, setShowAddProjectModal] = useState(false)
     const [selectedProjectId, setSelectedProjectId] = useState<string>('')
 
@@ -34,7 +36,6 @@ function SensorDetail() {
     const {
         data: sensorProjectsData,
         isLoading: isLoadingProjects,
-        refetch: refetchProjects,
     } = useQuery({
         queryKey: ['sensor', id, 'projects'],
         queryFn: () => sensorsApi.getProjects(id!),
@@ -114,6 +115,12 @@ function SensorDetail() {
                             onClick={() => setShowTestTelemetryModal(true)}
                         >
                             Тестовая отправка
+                        </button>
+                        <button
+                            className="btn btn-secondary"
+                            onClick={() => setShowTelemetryStreamModal(true)}
+                        >
+                            Live telemetry
                         </button>
                         <button
                             className="btn btn-secondary"
@@ -381,12 +388,20 @@ function SensorDetail() {
             </div>
 
             {id && (
-                <TestTelemetryModal
-                    sensorId={id}
-                    sensorToken={newToken || null}
-                    isOpen={showTestTelemetryModal}
-                    onClose={() => setShowTestTelemetryModal(false)}
-                />
+                <>
+                    <TestTelemetryModal
+                        sensorId={id}
+                        sensorToken={newToken || null}
+                        isOpen={showTestTelemetryModal}
+                        onClose={() => setShowTestTelemetryModal(false)}
+                    />
+                    <TelemetryStreamModal
+                        sensorId={id}
+                        sensorToken={newToken || null}
+                        isOpen={showTelemetryStreamModal}
+                        onClose={() => setShowTelemetryStreamModal(false)}
+                    />
+                </>
             )}
         </div>
     )
