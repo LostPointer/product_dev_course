@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 
+import asyncpg
 import pytest
 
 from experiment_service.services.idempotency import IDEMPOTENCY_HEADER
@@ -144,6 +145,87 @@ async def test_delete_sensor_missing_returns_404(service_client):
 
     resp = await service_client.delete(f"/api/v1/sensors/{uuid.uuid4()}", headers=headers)
     assert resp.status == 404
+
+
+@pytest.mark.asyncio
+async def test_sensor_cannot_be_deleted_with_active_capture_sessions(service_client, pgsql):
+    project_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    headers = make_headers(project_id, user_id=user_id)
+
+    # Create experiment + run
+    resp = await service_client.post(
+        "/api/v1/experiments",
+        json={"project_id": str(project_id), "name": "Sensor invariants"},
+        headers=headers,
+    )
+    assert resp.status == 201
+    experiment_id = (await resp.json())["id"]
+
+    resp = await service_client.post(
+        f"/api/v1/experiments/{experiment_id}/runs",
+        json={"name": "Run with active capture"},
+        headers=headers,
+    )
+    assert resp.status == 201
+    run_id = (await resp.json())["id"]
+
+    # Create active capture session (running)
+    resp = await service_client.post(
+        f"/api/v1/runs/{run_id}/capture-sessions",
+        json={"ordinal_number": 1, "status": "running"},
+        headers=headers,
+    )
+    assert resp.status == 201
+    session_id = (await resp.json())["id"]
+
+    # Create sensor
+    resp = await service_client.post(
+        "/api/v1/sensors",
+        json={
+            "project_id": str(project_id),
+            "name": "sensor-to-delete",
+            "type": "thermocouple",
+            "input_unit": "mV",
+            "display_unit": "C",
+        },
+        headers=headers,
+    )
+    assert resp.status == 201
+    sensor_id = (await resp.json())["sensor"]["id"]
+
+    # Link sensor to run via run_sensors so we can infer "active capture sessions for sensor"
+    conninfo = pgsql["experiment_service"].conninfo
+    conn = await asyncpg.connect(dsn=conninfo.get_uri())
+    try:
+        await conn.execute(
+            """
+            INSERT INTO run_sensors (run_id, sensor_id, project_id, mode, created_by)
+            VALUES ($1, $2, $3, 'primary', $4)
+            """,
+            uuid.UUID(run_id),
+            uuid.UUID(sensor_id),
+            project_id,
+            user_id,
+        )
+    finally:
+        await conn.close()
+
+    # Delete should be rejected while capture session is active
+    resp = await service_client.delete(f"/api/v1/sensors/{sensor_id}", headers=headers)
+    assert resp.status == 400
+
+    # Stop capture session (no longer active)
+    resp = await service_client.post(
+        f"/api/v1/runs/{run_id}/capture-sessions/{session_id}/stop",
+        json={"status": "succeeded"},
+        headers=headers,
+    )
+    assert resp.status == 200
+
+    # Now delete should succeed
+    resp = await service_client.delete(f"/api/v1/sensors/{sensor_id}", headers=headers)
+    assert resp.status == 204
 
 
 @pytest.mark.asyncio

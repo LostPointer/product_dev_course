@@ -244,6 +244,30 @@ class SensorRepository(BaseRepository):
         if record is None:
             raise NotFoundError("Sensor not found")
 
+    async def has_active_capture_sessions(self, project_id: UUID, sensor_id: UUID) -> bool:
+        """Check whether this sensor participates in any active capture sessions.
+
+        Active = capture_sessions in statuses that imply ongoing work.
+        We infer sensor participation via run_sensors(run_id, sensor_id, project_id).
+        """
+        record = await self._fetchrow(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM run_sensors rs
+                JOIN capture_sessions cs
+                  ON cs.run_id = rs.run_id
+                 AND cs.project_id = rs.project_id
+                WHERE rs.project_id = $1
+                  AND rs.sensor_id = $2
+                  AND cs.status IN ('draft', 'running', 'backfilling')
+            ) AS has_active
+            """,
+            project_id,
+            sensor_id,
+        )
+        return bool(record["has_active"]) if record else False
+
     async def rotate_token(
         self,
         project_id: UUID,

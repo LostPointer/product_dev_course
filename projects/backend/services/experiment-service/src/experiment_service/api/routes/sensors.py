@@ -161,6 +161,8 @@ async def delete_sensor(request: web.Request):
         await service.delete_sensor(project_id, sensor_id)
     except NotFoundError as exc:
         raise web.HTTPNotFound(text=str(exc)) from exc
+    except InvalidStatusTransitionError as exc:
+        raise web.HTTPBadRequest(text=str(exc)) from exc
     return web.Response(status=204)
 
 
