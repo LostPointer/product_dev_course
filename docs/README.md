@@ -15,6 +15,7 @@
 
 ## Демонстрация
 - `demo-flow.md` — сценарий демо (что показать и в каком порядке).
+- `manual-testing.md` — ручной E2E чеклист (Portal → Auth Proxy → Services → DB).
 
 ## Спецификации / ТЗ
 - `experiment-tracking-ts.md` — ТЗ на платформу Experiment Tracking.
