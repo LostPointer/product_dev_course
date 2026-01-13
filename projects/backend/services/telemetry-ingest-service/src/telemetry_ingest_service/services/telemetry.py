@@ -16,6 +16,7 @@ from telemetry_ingest_service.core.exceptions import (
     UnauthorizedError,
 )
 from telemetry_ingest_service.domain.dto import TelemetryIngestDTO, TelemetryReadingDTO
+from telemetry_ingest_service.settings import settings
 
 
 def hash_sensor_token(token: str) -> bytes:
@@ -49,7 +50,19 @@ class TelemetryIngestService:
             if run_id is None:
                 run_id = capture_run_id
 
-            await self._bulk_insert(conn, project_id, payload, run_id=run_id)
+            capture_status: str | None = None
+            if payload.capture_session_id is not None:
+                capture_status = await self._get_capture_status(
+                    conn, project_id, payload.capture_session_id
+                )
+
+            await self._bulk_insert(
+                conn,
+                project_id,
+                payload,
+                run_id=run_id,
+                capture_status=capture_status,
+            )
             await self._update_sensor_heartbeat(conn, payload.sensor_id, payload.readings)
 
         return len(payload.readings)
@@ -102,6 +115,32 @@ class TelemetryIngestService:
             raise ScopeMismatchError("Capture session is archived")
         return UUID(str(row["run_id"]))
 
+    async def _get_capture_status(
+        self, conn, project_id: UUID, capture_session_id: UUID
+    ) -> str | None:
+        row = await conn.fetchrow(
+            "SELECT status FROM capture_sessions WHERE project_id = $1 AND id = $2",
+            project_id,
+            capture_session_id,
+        )
+        if row is None:
+            return None
+        value = row.get("status")
+        return str(value) if value is not None else None
+
+    @staticmethod
+    def _json_size_bytes(value: object) -> int:
+        # Approximate payload size in bytes after json serialization.
+        # Keep stable formatting to be predictable.
+        return len(json.dumps(value, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
+
+    def _validate_meta_sizes(self, payload: TelemetryIngestDTO) -> None:
+        if self._json_size_bytes(payload.meta or {}) > settings.telemetry_max_batch_meta_bytes:
+            raise ScopeMismatchError("Batch meta is too large")
+        for reading in payload.readings:
+            if self._json_size_bytes(reading.meta or {}) > settings.telemetry_max_reading_meta_bytes:
+                raise ScopeMismatchError("Reading meta is too large")
+
     async def _bulk_insert(
         self,
         conn,
@@ -109,8 +148,25 @@ class TelemetryIngestService:
         payload: TelemetryIngestDTO,
         *,
         run_id: UUID | None,
+        capture_status: str | None,
     ) -> None:
+        self._validate_meta_sizes(payload)
         batch_meta = payload.meta or {}
+
+        is_late = False
+        if capture_status is not None:
+            status_lower = capture_status.lower()
+            # Consider data late if session is already finalized.
+            is_late = status_lower in ("succeeded", "failed")
+
+        def _with_late_marker(meta: dict) -> dict:
+            if not is_late:
+                return meta
+            sys_meta = meta.get("__system")
+            if isinstance(sys_meta, dict):
+                return {**meta, "__system": {**sys_meta, "late": True}}
+            return {**meta, "__system": {"late": True}}
+
         items = [
             (
                 project_id,
@@ -120,7 +176,7 @@ class TelemetryIngestService:
                 reading.timestamp,
                 reading.raw_value,
                 reading.physical_value,
-                json.dumps({**batch_meta, **reading.meta}),
+                json.dumps(_with_late_marker({**batch_meta, **reading.meta})),
                 "client_provided" if reading.physical_value is not None else "raw_only",
                 None,  # conversion_profile_id (MVP: not computed here)
             )

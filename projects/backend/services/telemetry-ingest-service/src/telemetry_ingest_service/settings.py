@@ -20,6 +20,11 @@ class Settings(BaseServiceSettings):
         default=cast(PostgresDsn, "postgresql://postgres:postgres@localhost:5432/experiment_db")
     )
 
+    # Ingest safety limits (MVP)
+    telemetry_max_meta_bytes: int = 64 * 1024
+    telemetry_max_reading_meta_bytes: int = 64 * 1024
+    telemetry_max_batch_meta_bytes: int = 64 * 1024
+
 
 @lru_cache
 def get_settings() -> Settings:

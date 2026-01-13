@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
@@ -41,8 +42,8 @@ async def _seed(
         )
         await conn.execute(
             """
-            INSERT INTO capture_sessions (id, run_id, project_id, ordinal_number)
-            VALUES ($1, $2, $3, 1)
+            INSERT INTO capture_sessions (id, run_id, project_id, ordinal_number, status, archived)
+            VALUES ($1, $2, $3, 1, 'running', false)
             """,
             capture_session_id,
             run_id,
@@ -96,6 +97,92 @@ async def test_ingest_happy_path(service_client, pgsql):
         assert hb is not None
     finally:
         await conn.close()
+
+
+async def test_ingest_marks_late_data_in_meta(service_client, pgsql):
+    project_id = uuid4()
+    sensor_id = uuid4()
+    run_id = uuid4()
+    capture_session_id = uuid4()
+    token = "test-token"
+
+    db_uri = pgsql["telemetry_ingest_service"].conninfo.get_uri()
+    await _seed(
+        db_uri=db_uri,
+        project_id=project_id,
+        sensor_id=sensor_id,
+        token=token,
+        run_id=run_id,
+        capture_session_id=capture_session_id,
+    )
+
+    conn = await asyncpg.connect(db_uri)
+    try:
+        await conn.execute(
+            "UPDATE capture_sessions SET status = 'succeeded' WHERE id = $1 AND project_id = $2",
+            capture_session_id,
+            project_id,
+        )
+    finally:
+        await conn.close()
+
+    resp = await service_client.post(
+        "/api/v1/telemetry",
+        json={
+            "sensor_id": str(sensor_id),
+            "run_id": str(run_id),
+            "capture_session_id": str(capture_session_id),
+            "readings": [{"timestamp": "2026-01-01T00:00:00Z", "raw_value": 1.0}],
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status == 202
+
+    conn = await asyncpg.connect(db_uri)
+    try:
+        meta = await conn.fetchval(
+            "SELECT meta FROM telemetry_records WHERE capture_session_id = $1 LIMIT 1",
+            capture_session_id,
+        )
+        assert meta is not None
+        if isinstance(meta, str):
+            meta = json.loads(meta)
+        assert meta["__system"]["late"] is True
+    finally:
+        await conn.close()
+
+
+async def test_ingest_rejects_too_large_meta_400(service_client, pgsql):
+    project_id = uuid4()
+    sensor_id = uuid4()
+    run_id = uuid4()
+    capture_session_id = uuid4()
+    token = "test-token"
+
+    db_uri = pgsql["telemetry_ingest_service"].conninfo.get_uri()
+    await _seed(
+        db_uri=db_uri,
+        project_id=project_id,
+        sensor_id=sensor_id,
+        token=token,
+        run_id=run_id,
+        capture_session_id=capture_session_id,
+    )
+
+    # Create batch meta > 64KB
+    big = "x" * (70 * 1024)
+    resp = await service_client.post(
+        "/api/v1/telemetry",
+        json={
+            "sensor_id": str(sensor_id),
+            "run_id": str(run_id),
+            "capture_session_id": str(capture_session_id),
+            "meta": {"big": big},
+            "readings": [{"timestamp": "2026-01-01T00:00:00Z", "raw_value": 1.0}],
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status == 400
 
 
 async def test_ingest_invalid_token_401(service_client, pgsql):
