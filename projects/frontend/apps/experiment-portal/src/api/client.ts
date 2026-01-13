@@ -414,7 +414,7 @@ export const telemetryApi = {
       max_events?: number
       idle_timeout_seconds?: number
     },
-    sensorToken: string
+    sensorToken?: string
   ): Promise<Response> => {
     const TELEMETRY_BASE_URL =
       import.meta.env.VITE_TELEMETRY_INGEST_URL || AUTH_PROXY_URL
@@ -428,13 +428,18 @@ export const telemetryApi = {
 
     const traceId = getTraceId()
     const requestId = generateRequestId()
+    const headers: Record<string, string> = {
+      'X-Trace-Id': traceId,
+      'X-Request-Id': requestId,
+    }
+    // If sensor token is provided, use it. Otherwise rely on auth-proxy cookie session injection.
+    if (sensorToken && sensorToken.trim()) {
+      headers['Authorization'] = `Bearer ${sensorToken.trim()}`
+    }
+
     return await fetch(url.toString(), {
       method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${sensorToken}`,
-        'X-Trace-Id': traceId,
-        'X-Request-Id': requestId,
-      },
+      headers,
     })
   },
 }

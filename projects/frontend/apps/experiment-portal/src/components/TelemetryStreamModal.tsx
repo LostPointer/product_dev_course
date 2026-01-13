@@ -153,10 +153,6 @@ export default function TelemetryStreamModal({ sensorId, sensorToken, isOpen, on
 
     const start = async () => {
         setError(null)
-        if (!token.trim()) {
-            setError('Токен датчика обязателен')
-            return
-        }
 
         const since = _clamp(Number(sinceId || '0'), 0, Number.MAX_SAFE_INTEGER)
         const idle = _clamp(Number(idleTimeoutSeconds || '30'), 1, 600)
@@ -173,7 +169,7 @@ export default function TelemetryStreamModal({ sensorId, sensorToken, isOpen, on
         try {
             const resp = await telemetryApi.stream(
                 { sensor_id: sensorId, since_id: since, idle_timeout_seconds: idle },
-                token.trim()
+                token.trim() || undefined
             )
             if (!resp.ok) {
                 const text = await resp.text().catch(() => '')
@@ -241,17 +237,23 @@ export default function TelemetryStreamModal({ sensorId, sensorToken, isOpen, on
                 <div className="form-grid">
                     <div className="form-group">
                         <label htmlFor="telemetry_stream_token">
-                            Токен датчика <span className="required">*</span>
+                            Токен датчика <span className="dim">(опционально)</span>
                         </label>
                         <input
                             id="telemetry_stream_token"
                             type="text"
                             value={token}
                             onChange={(e) => setToken(e.target.value)}
-                            placeholder="Bearer token"
+                            placeholder="Bearer token (или пусто — через вашу сессию)"
                             disabled={status === 'connecting' || status === 'streaming' || !!sensorToken}
                         />
-                        {sensorToken && <small className="form-hint">Используется токен из ротации/регистрации</small>}
+                        {sensorToken ? (
+                            <small className="form-hint">Используется токен из ротации/регистрации</small>
+                        ) : (
+                            <small className="form-hint">
+                                Если оставить поле пустым, просмотр будет через вашу авторизацию (auth-proxy)
+                            </small>
+                        )}
                     </div>
 
                     <div className="form-group">
