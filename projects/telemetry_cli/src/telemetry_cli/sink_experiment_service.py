@@ -42,12 +42,11 @@ class ExperimentServiceClient:
             "sensor_id": str(sensor_id),
             "readings": [],
         }
+        if meta:
+            # Batch-level metadata; Telemetry Ingest Service will merge it into each reading meta.
+            payload["meta"] = meta
         for r in readings:
             item = r.as_ingest_dict()
-            # Merge global meta into each reading's meta (API forbids top-level `meta`)
-            if meta:
-                item_meta = item.get("meta") or {}
-                item["meta"] = {**meta, **item_meta}
             payload["readings"].append(item)
         if run_id is not None:
             payload["run_id"] = str(run_id)

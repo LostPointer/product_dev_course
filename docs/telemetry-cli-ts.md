@@ -1,17 +1,17 @@
 # Техническое задание: telemetry-cli
 
 ## 1. Введение
-- **Назначение документа:** описать требования и контракт работы CLI/агента `telemetry-cli` для сбора и отправки телеметрии в Experiment Service.
+- **Назначение документа:** описать требования и контракт работы CLI/агента `telemetry-cli` для сбора и отправки телеметрии в **Telemetry Ingest Service**.
 - **Версия документа:** 0.1
 - **Дата:** 2025-12-25
 - **Проект в репозитории:** `projects/telemetry_cli`
-- **Стейкхолдеры:** интеграторы устройств (ESP32/STM32), разработчики Experiment Service, команды стендов/демо.
+- **Стейкхолдеры:** интеграторы устройств (ESP32/STM32), разработчики Telemetry Ingest Service / Experiment Service, команды стендов/демо.
 
-`telemetry-cli` — CLI/агент для **универсального** сбора телеметрии (из реальных источников и синтетических сигналов) и отправки её в **Experiment Service** через HTTP endpoint:
+`telemetry-cli` — CLI/агент для **универсального** сбора телеметрии (из реальных источников и синтетических сигналов) и отправки её в **Telemetry Ingest Service** через HTTP endpoint:
 
 - `POST /api/v1/telemetry`
 
-Цель: обеспечить единый инструмент, который можно запускать на ноутбуке/мини-ПК/шлюзе для потоковой доставки телеметрии в Experiment Service в режиме, близком к реальному времени.
+Цель: обеспечить единый инструмент, который можно запускать на ноутбуке/мини-ПК/шлюзе для потоковой доставки телеметрии в Telemetry Ingest Service в режиме, близком к реальному времени.
 
 ## 1.1 Технологический стек
 - **Язык/платформа:** Python 3.14+
@@ -21,7 +21,7 @@
 
 ## 2. Область применения
 
-- **Разработчики и интеграторы** (RC vehicle, embedded-прототипы, стенды), которым нужно быстро отправлять телеметрию в Experiment Service.
+- **Разработчики и интеграторы** (RC vehicle, embedded-прототипы, стенды), которым нужно быстро отправлять телеметрию в Telemetry Ingest Service.
 - **Источники данных**:
   - генератор тестовых сигналов (synthetic),
   - UDP JSON (удобно как шлюз от ESP32/STM32),
@@ -37,14 +37,14 @@
 
 - CLI читает YAML-конфиг, валидирует его.
 - По `source.type` выбирается источник и начинается бесконечный асинхронный поток readings.
-- Readings накапливаются в батч и периодически отправляются в Experiment Service.
+- Readings накапливаются в батч и периодически отправляются в Telemetry Ingest Service.
 - Остановка — по `SIGINT`/`SIGTERM` (агент отменяет основной таск и завершается).
 
 Компоненты (логическая декомпозиция):
 - **CLI**: парсинг аргументов, загрузка конфига, управление жизненным циклом.
 - **Source**: генерация/приём readings.
 - **Runner**: батчинг и правила flush.
-- **Sink**: HTTP-клиент Experiment Service ingest.
+- **Sink**: HTTP-клиент Telemetry Ingest Service.
 
 ## 5. Интерфейс командной строки (CLI)
 
@@ -79,7 +79,7 @@ telemetry-cli --config /path/to/config.yaml
 
 ### 6.2. `experiment_service`
 
-- `base_url` (URL, по умолчанию `http://localhost:8002`): базовый адрес Experiment Service.
+- `base_url` (URL, по умолчанию `http://localhost:8003`): базовый адрес **Telemetry Ingest Service**.
 - `sensor_token` (string, **обязательный**): токен сенсора для авторизации.
 - `timeout_s` (float, по умолчанию `10`, \(>= 0.1\)): таймаут HTTP клиента.
 
@@ -181,7 +181,7 @@ telemetry-cli --config /path/to/config.yaml
 
 Генерация происходит с частотой `sample_hz`. На каждом тике эмитится **по одному reading на каждый `signals[]`**, при этом timestamp одинаковый для readings одного тика.
 
-## 8. Формат отправки в Experiment Service (sink)
+## 8. Формат отправки в Telemetry Ingest Service (sink)
 
 ### 8.1. Endpoint и авторизация
 
@@ -195,7 +195,7 @@ telemetry-cli --config /path/to/config.yaml
   "sensor_id": "<uuid>",
   "run_id": "<uuid>",                 // опционально
   "capture_session_id": "<uuid>",     // опционально
-  "meta": { ... },                    // опционально
+  "meta": { ... },                    // опционально (batch-level meta)
   "readings": [
     {
       "timestamp": "2025-12-25T12:34:56.789Z",
@@ -212,7 +212,8 @@ telemetry-cli --config /path/to/config.yaml
 
 Правила формирования `readings[].meta`:
 - поле `signal` всегда добавляется агентом;
-- дополнительно добавляются поля `TelemetryReading.meta` (например, из `udp_json.meta`).
+- дополнительно добавляются поля `TelemetryReading.meta` (например, из `udp_json.meta`);
+- `meta` на верхнем уровне — **опциональные метаданные батча**; Telemetry Ingest Service может объединять их с `readings[].meta`.
 
 ### 8.3. Обработка ошибок HTTP
 
@@ -244,7 +245,7 @@ telemetry-cli --config /path/to/config.yaml
 - При `synthetic` агент формирует readings согласно `signals[]` и отправляет их батчами, соблюдая правила из п. 9.
 - При `udp_json` агент корректно принимает обе формы payload (single/multi), корректно парсит `ts_ms`/`timestamp`, и игнорирует мусорные датаграммы без падения процесса.
 - При `esp32_ws` агент принимает сообщения `type="telem"`, корректно маппит поля в сигналы, и переподключается при разрыве.
-- Запрос в Experiment Service соответствует формату из п. 8 (включая `Authorization: Bearer ...` и `readings[].meta.signal`).
+- Запрос в Telemetry Ingest Service соответствует формату из п. 8 (включая `Authorization: Bearer ...` и `readings[].meta.signal`).
 
 ## 13. Рекомендуемые улучшения (вне MVP, как backlog)
 
@@ -253,5 +254,7 @@ telemetry-cli --config /path/to/config.yaml
 - Логирование (уровни, метрики: accepted/dropped/readings_per_sec).
 - Расширение CLI: `--dry-run`, `--log-level`, `--print-sample`, `--once N`.
 - Поддержка дополнительных источников (serial, MQTT, file replay) и преобразований (калибровки, physical_value).
+- Режим «догрузки после эксперимента» (backfill): читать сохранённые на устройстве/диске файлы с readings и отправлять их пакетами в ingest с привязкой к `run_id`/`capture_session_id`.
+- Поддержка «плохих часов» устройства: опционально вычислять/применять offset (например, через NTP/серверное время) и сохранять исходный `device_ts_ms` в `meta` для последующего анализа drift.
 
 
