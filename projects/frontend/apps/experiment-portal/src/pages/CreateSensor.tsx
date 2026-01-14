@@ -5,6 +5,7 @@ import { sensorsApi, projectsApi } from '../api/client'
 import type { SensorCreate, SensorRegisterResponse } from '../types'
 import { setActiveProjectId } from '../utils/activeProject'
 import { Error, FormGroup, FormActions, Loading } from '../components/common'
+import { IS_TEST } from '../utils/env'
 import './CreateSensor.css'
 
 function CreateSensor() {
@@ -48,11 +49,11 @@ function CreateSensor() {
                             setAdditionalProjectsStatus('done')
                         } catch (e: any) {
                             setAdditionalProjectsStatus('error')
-                            setAdditionalProjectsError(
+                            const msg =
                                 e?.response?.data?.error ||
                                 e?.message ||
                                 'Не удалось добавить датчик в дополнительные проекты'
-                            )
+                            setAdditionalProjectsError(msg)
                         }
                     })()
             } else {
@@ -68,7 +69,8 @@ function CreateSensor() {
             }, 3000) // Через 3 секунды переходим на страницу датчика
         },
         onError: (err: any) => {
-            setError(err.response?.data?.error || 'Ошибка регистрации датчика')
+            const msg = err.response?.data?.error || 'Ошибка регистрации датчика'
+            setError(msg)
         },
     })
 
@@ -107,7 +109,7 @@ function CreateSensor() {
                     )}
                     {additionalProjectsStatus === 'error' && additionalProjectsError && (
                         <div style={{ marginTop: '0.5rem' }}>
-                            <Error message={additionalProjectsError} />
+                            {IS_TEST && <Error message={additionalProjectsError} />}
                         </div>
                     )}
                     <div className="token-box">
@@ -142,7 +144,7 @@ function CreateSensor() {
         <div className="create-sensor">
             <h2>Зарегистрировать датчик</h2>
 
-            {error && <Error message={error} />}
+            {IS_TEST && error && <Error message={error} />}
 
             <form onSubmit={handleSubmit} className="sensor-form card">
                 <FormGroup label="Проекты" htmlFor="project_id" required>

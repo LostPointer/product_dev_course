@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import Modal from './Modal'
 import { runsApi } from '../api/client'
+import { IS_TEST } from '../utils/env'
+import { notifyError } from '../utils/notify'
 
 type BulkMode = 'add' | 'remove' | 'set'
 
@@ -46,7 +48,8 @@ export default function BulkRunTagsModal({ isOpen, onClose, experimentId, runIds
             setError(null)
         },
         onError: (err: any) => {
-            setError(err?.response?.data?.error || err?.message || 'Ошибка bulk tagging')
+            const msg = err?.response?.data?.error || err?.message || 'Ошибка bulk tagging'
+            setError(msg)
         },
     })
 
@@ -56,7 +59,9 @@ export default function BulkRunTagsModal({ isOpen, onClose, experimentId, runIds
         e.preventDefault()
         setError(null)
         if (mode !== 'set' && tags.length === 0) {
-            setError('Укажи хотя бы один тег (через запятую)')
+            const msg = 'Укажи хотя бы один тег (через запятую)'
+            setError(msg)
+            notifyError(msg)
             return
         }
         mutation.mutate()
@@ -65,7 +70,7 @@ export default function BulkRunTagsModal({ isOpen, onClose, experimentId, runIds
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Bulk tagging" disabled={mutation.isPending}>
             <form onSubmit={handleSubmit} className="modal-form">
-                {error && <div className="error">{error}</div>}
+                {IS_TEST && error && <div className="error">{error}</div>}
 
                 <div className="form-group">
                     <label>Выбрано запусков</label>

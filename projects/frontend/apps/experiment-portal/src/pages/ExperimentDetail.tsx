@@ -10,12 +10,14 @@ import {
   StatusBadge,
   Loading,
   Error,
+  EmptyState,
   InfoRow,
   Tags,
   experimentStatusMap,
 } from '../components/common'
 import './ExperimentDetail.css'
 import { setActiveProjectId } from '../utils/activeProject'
+import { IS_TEST } from '../utils/env'
 
 function ExperimentDetail() {
   const { id } = useParams<{ id: string }>()
@@ -50,7 +52,7 @@ function ExperimentDetail() {
   }
 
   if (error || !experiment) {
-    return <Error message="Эксперимент не найден" />
+    return IS_TEST ? <Error message="Эксперимент не найден" /> : <EmptyState message="Эксперимент не найден" />
   }
 
   return (

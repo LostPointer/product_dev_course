@@ -5,6 +5,8 @@ import { authApi } from '../api/auth'
 import type { ProjectMemberAdd, ProjectMemberUpdate } from '../types'
 import Modal from './Modal'
 import { Loading, Error } from './common'
+import { IS_TEST } from '../utils/env'
+import { notifyError } from '../utils/notify'
 import './CreateRunModal.css'
 
 interface ProjectMembersModalProps {
@@ -69,7 +71,8 @@ function ProjectMembersModal({ isOpen, onClose, projectId, projectOwnerId }: Pro
             setError(null)
         },
         onError: (err: any) => {
-            setError(err.response?.data?.error || err.message || 'Ошибка добавления участника')
+            const msg = err.response?.data?.error || err.message || 'Ошибка добавления участника'
+            setError(msg)
         },
     })
 
@@ -82,7 +85,8 @@ function ProjectMembersModal({ isOpen, onClose, projectId, projectOwnerId }: Pro
             setError(null)
         },
         onError: (err: any) => {
-            setError(err.response?.data?.error || err.message || 'Ошибка удаления участника')
+            const msg = err.response?.data?.error || err.message || 'Ошибка удаления участника'
+            setError(msg)
         },
     })
 
@@ -95,7 +99,8 @@ function ProjectMembersModal({ isOpen, onClose, projectId, projectOwnerId }: Pro
             setError(null)
         },
         onError: (err: any) => {
-            setError(err.response?.data?.error || err.message || 'Ошибка изменения роли')
+            const msg = err.response?.data?.error || err.message || 'Ошибка изменения роли'
+            setError(msg)
         },
     })
 
@@ -104,7 +109,9 @@ function ProjectMembersModal({ isOpen, onClose, projectId, projectOwnerId }: Pro
         setError(null)
 
         if (!newMemberUserId.trim()) {
-            setError('Введите ID пользователя')
+            const msg = 'Введите ID пользователя'
+            setError(msg)
+            notifyError(msg)
             return
         }
 
@@ -157,10 +164,10 @@ function ProjectMembersModal({ isOpen, onClose, projectId, projectOwnerId }: Pro
             className="project-members-modal"
         >
             <div className="modal-form">
-                {error && <div className="error">{error}</div>}
+                {IS_TEST && error && <div className="error">{error}</div>}
 
                 {isLoading && <Loading />}
-                {isError && (
+                {IS_TEST && isError && (
                     <Error
                         message={
                             membersError instanceof Error

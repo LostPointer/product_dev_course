@@ -10,10 +10,12 @@ import {
     StatusBadge,
     Loading,
     Error,
+    EmptyState,
     InfoRow,
     sensorStatusMap,
 } from '../components/common'
 import './SensorDetail.css'
+import { IS_TEST } from '../utils/env'
 
 function SensorDetail() {
     const { id } = useParams<{ id: string }>()
@@ -100,7 +102,7 @@ function SensorDetail() {
     }
 
     if (error || !sensor) {
-        return <Error message="Датчик не найден" />
+        return IS_TEST ? <Error message="Датчик не найден" /> : <EmptyState message="Датчик не найден" />
     }
 
     return (

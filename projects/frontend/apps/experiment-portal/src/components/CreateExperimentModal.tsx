@@ -5,6 +5,8 @@ import { experimentsApi, projectsApi } from '../api/client'
 import type { ExperimentCreate } from '../types'
 import { getActiveProjectId, setActiveProjectId } from '../utils/activeProject'
 import Modal from './Modal'
+import { IS_TEST } from '../utils/env'
+import { notifyError } from '../utils/notify'
 import './CreateRunModal.css'
 
 interface CreateExperimentModalProps {
@@ -41,7 +43,8 @@ function CreateExperimentModal({ isOpen, onClose, defaultProjectId }: CreateExpe
             navigate(`/experiments/${experiment.id}`)
         },
         onError: (err: any) => {
-            setError(err.response?.data?.error || 'Ошибка создания эксперимента')
+            const msg = err.response?.data?.error || 'Ошибка создания эксперимента'
+            setError(msg)
         },
     })
 
@@ -77,7 +80,9 @@ function CreateExperimentModal({ isOpen, onClose, defaultProjectId }: CreateExpe
         try {
             metadata = JSON.parse(metadataInput)
         } catch (e) {
-            setError('Неверный формат JSON в метаданных')
+            const msg = 'Неверный формат JSON в метаданных'
+            setError(msg)
+            notifyError(msg)
             return
         }
 
@@ -115,7 +120,7 @@ function CreateExperimentModal({ isOpen, onClose, defaultProjectId }: CreateExpe
             disabled={createMutation.isPending}
         >
             <form onSubmit={handleSubmit} className="modal-form">
-                {error && <div className="error">{error}</div>}
+                {IS_TEST && error && <div className="error">{error}</div>}
 
                 <div className="form-group">
                     <label htmlFor="experiment_project">

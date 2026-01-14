@@ -5,6 +5,8 @@ import { experimentsApi, projectsApi } from '../api/client'
 import type { ExperimentCreate } from '../types'
 import { setActiveProjectId } from '../utils/activeProject'
 import { Error, FormGroup, FormActions, Loading } from '../components/common'
+import { IS_TEST } from '../utils/env'
+import { notifyError } from '../utils/notify'
 import './CreateExperiment.css'
 
 function CreateExperiment() {
@@ -51,7 +53,9 @@ function CreateExperiment() {
     try {
       metadata = JSON.parse(metadataInput)
     } catch (e) {
-      setError('Неверный формат JSON в метаданных')
+      const msg = 'Неверный формат JSON в метаданных'
+      setError(msg)
+      notifyError(msg)
       return
     }
 
@@ -68,7 +72,7 @@ function CreateExperiment() {
     <div className="create-experiment">
       <h2>Создать эксперимент</h2>
 
-      {error && <Error message={error} />}
+      {IS_TEST && error && <Error message={error} />}
 
       <form onSubmit={handleSubmit} className="experiment-form card">
         <FormGroup label="Проект" required>

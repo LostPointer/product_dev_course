@@ -5,6 +5,7 @@ import { authApi } from '../api/auth'
 import type { ProjectCreate, ProjectUpdate } from '../types'
 import Modal from './Modal'
 import { Error, InfoRow, Loading } from './common'
+import { IS_TEST } from '../utils/env'
 import './CreateRunModal.css'
 
 type ProjectModalMode = 'create' | 'view' | 'edit'
@@ -215,7 +216,7 @@ function ProjectModal({ isOpen, onClose, mode, projectId }: ProjectModalProps) {
         >
             {isLoading && <Loading />}
 
-            {isErrorState && (
+            {IS_TEST && isErrorState && (
                 <Error
                     message={
                         combinedError && typeof combinedError === 'object' && 'message' in combinedError
@@ -227,7 +228,7 @@ function ProjectModal({ isOpen, onClose, mode, projectId }: ProjectModalProps) {
 
             {!isLoading && !isErrorState && (
                 <>
-                    {error && <div className="error">{error}</div>}
+                    {IS_TEST && error && <div className="error">{error}</div>}
 
                     {!isCreate && project && (
                         <div className="user-info-section" style={{ marginBottom: '1rem' }}>

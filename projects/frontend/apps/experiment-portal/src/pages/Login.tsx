@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { authApi } from '../api/auth'
 import type { LoginRequest } from '../types'
+import { IS_TEST } from '../utils/env'
 import './Login.css'
 
 function Login() {
@@ -23,11 +24,11 @@ function Login() {
             navigate('/experiments')
         },
         onError: (err: any) => {
-            setError(
+            const msg =
                 err.response?.data?.error ||
                 err.response?.data?.message ||
                 'Ошибка входа. Проверьте имя пользователя и пароль.'
-            )
+            setError(msg)
         },
     })
 
@@ -44,7 +45,7 @@ function Login() {
                     <h1 className="login-title">Вход в систему</h1>
                     <p className="login-subtitle">Experiment Tracking Platform</p>
 
-                    {error && <div className="error-message">{error}</div>}
+                    {IS_TEST && error && <div className="error-message">{error}</div>}
 
                     <form onSubmit={handleSubmit} className="login-form">
                         <div className="form-group">

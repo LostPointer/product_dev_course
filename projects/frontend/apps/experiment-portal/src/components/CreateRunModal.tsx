@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom'
 import { runsApi } from '../api/client'
 import type { RunCreate } from '../types'
 import Modal from './Modal'
+import { IS_TEST } from '../utils/env'
+import { notifyError } from '../utils/notify'
 import './CreateRunModal.css'
 
 interface CreateRunModalProps {
@@ -35,7 +37,8 @@ function CreateRunModal({ experimentId, isOpen, onClose }: CreateRunModalProps) 
             navigate(`/runs/${run.id}`)
         },
         onError: (err: any) => {
-            setError(err.response?.data?.error || 'Ошибка создания запуска')
+            const msg = err.response?.data?.error || 'Ошибка создания запуска'
+            setError(msg)
         },
     })
 
@@ -50,7 +53,9 @@ function CreateRunModal({ experimentId, isOpen, onClose }: CreateRunModalProps) 
             try {
                 params = JSON.parse(parametersJson)
             } catch (err) {
-                setJsonError('Ошибка в формате JSON для параметров')
+                const msg = 'Ошибка в формате JSON для параметров'
+                setJsonError(msg)
+                notifyError(msg)
                 return
             }
         }
@@ -61,7 +66,9 @@ function CreateRunModal({ experimentId, isOpen, onClose }: CreateRunModalProps) 
             try {
                 metadata = JSON.parse(metadataJson)
             } catch (err) {
-                setJsonError('Ошибка в формате JSON для метаданных')
+                const msg = 'Ошибка в формате JSON для метаданных'
+                setJsonError(msg)
+                notifyError(msg)
                 return
             }
         }
@@ -98,8 +105,8 @@ function CreateRunModal({ experimentId, isOpen, onClose }: CreateRunModalProps) 
             disabled={createMutation.isPending}
         >
             <form onSubmit={handleSubmit} className="modal-form">
-                {error && <div className="error">{error}</div>}
-                {jsonError && <div className="error">{jsonError}</div>}
+                {IS_TEST && error && <div className="error">{error}</div>}
+                {IS_TEST && jsonError && <div className="error">{jsonError}</div>}
 
                 <div className="form-group">
                     <label htmlFor="run_name">

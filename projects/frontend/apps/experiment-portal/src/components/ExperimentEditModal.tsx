@@ -4,6 +4,8 @@ import { experimentsApi } from '../api/client'
 import type { Experiment, ExperimentUpdate } from '../types'
 import Modal from './Modal'
 import { experimentStatusMap } from './common/statusMaps'
+import { IS_TEST } from '../utils/env'
+import { notifyError } from '../utils/notify'
 import './CreateRunModal.css'
 
 interface ExperimentEditModalProps {
@@ -96,7 +98,9 @@ function ExperimentEditModal({ isOpen, onClose, experiment }: ExperimentEditModa
             const parsed = JSON.parse((metadataInput || '').trim() || '{}')
             metadata = parsed && typeof parsed === 'object' ? parsed : {}
         } catch {
-            setError('Неверный формат JSON в метаданных')
+            const msg = 'Неверный формат JSON в метаданных'
+            setError(msg)
+            notifyError(msg)
             return
         }
 
@@ -134,7 +138,7 @@ function ExperimentEditModal({ isOpen, onClose, experiment }: ExperimentEditModa
             className="experiment-modal"
         >
             <form onSubmit={handleSubmit} className="modal-form">
-                {error && <div className="error">{error}</div>}
+                {IS_TEST && error && <div className="error">{error}</div>}
 
                 <div className="form-group">
                     <label>

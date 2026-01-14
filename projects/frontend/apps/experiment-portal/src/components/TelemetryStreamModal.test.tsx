@@ -50,9 +50,14 @@ describe('TelemetryStreamModal', () => {
         ]
 
         vi.mocked(telemetryApi.stream).mockResolvedValue({
-            ok: true,
-            status: 200,
-            body: makeSSEStream(sse),
+            response: {
+                ok: true,
+                status: 200,
+                statusText: 'OK',
+                headers: new Headers(),
+                body: makeSSEStream(sse),
+            },
+            debug: { url: 'http://example/stream', headers: { 'X-Trace-Id': 't', 'X-Request-Id': 'r' }, method: 'GET' },
         } as any)
 
         render(

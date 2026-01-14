@@ -3,6 +3,9 @@ import Modal from './Modal'
 import { telemetryApi } from '../api/client'
 import { createSSEParser } from '../utils/sse'
 import type { TelemetryStreamRecord } from '../types'
+import { buildHttpDebugInfoFromFetch, maybeEmitHttpErrorToast, truncateString } from '../utils/httpDebug'
+import { IS_TEST } from '../utils/env'
+import { notifyError } from '../utils/notify'
 import './TelemetryStreamModal.css'
 
 type TelemetryStreamModalProps = {
@@ -154,6 +157,14 @@ export default function TelemetryStreamModal({ sensorId, sensorToken, isOpen, on
     const start = async () => {
         setError(null)
 
+        if (!token.trim()) {
+            const msg = 'Токен датчика обязателен'
+            setError(msg)
+            notifyError(msg)
+            setStatus('error')
+            return
+        }
+
         const since = _clamp(Number(sinceId || '0'), 0, Number.MAX_SAFE_INTEGER)
         const idle = _clamp(Number(idleTimeoutSeconds || '30'), 1, 600)
         const max = _clamp(Number(maxPoints || '200'), 10, 2000)
@@ -167,12 +178,25 @@ export default function TelemetryStreamModal({ sensorId, sensorToken, isOpen, on
         runningRef.current = true
 
         try {
-            const resp = await telemetryApi.stream(
+            const { response: resp, debug } = await telemetryApi.stream(
                 { sensor_id: sensorId, since_id: since, idle_timeout_seconds: idle },
                 token.trim() || undefined
             )
             if (!resp.ok) {
                 const text = await resp.text().catch(() => '')
+                const bodyText = truncateString(text || '')
+                maybeEmitHttpErrorToast(
+                    buildHttpDebugInfoFromFetch({
+                        message: text || `Ошибка стрима: HTTP ${resp.status}`,
+                        request: { method: debug.method, url: debug.url, headers: debug.headers },
+                        response: {
+                            status: resp.status,
+                            statusText: resp.statusText,
+                            headers: Object.fromEntries(resp.headers.entries()),
+                            body: bodyText,
+                        },
+                    })
+                )
                 throw new Error(text || `Ошибка стрима: HTTP ${resp.status}`)
             }
             if (!resp.body) throw new Error('Stream body is empty')
@@ -191,12 +215,16 @@ export default function TelemetryStreamModal({ sensorId, sensorToken, isOpen, on
                             return next.length > max ? next.slice(next.length - max) : next
                         })
                     } catch (e: any) {
-                        setError(e?.message || 'Ошибка парсинга telemetry event')
+                        const msg = e?.message || 'Ошибка парсинга telemetry event'
+                        setError(msg)
+                        notifyError(msg)
                         setStatus('error')
                     }
                 }
                 if (evt.event === 'error') {
-                    setError(evt.data || 'Ошибка стрима')
+                    const msg = evt.data || 'Ошибка стрима'
+                    setError(msg)
+                    notifyError(msg)
                     setStatus('error')
                 }
             })
@@ -209,6 +237,15 @@ export default function TelemetryStreamModal({ sensorId, sensorToken, isOpen, on
         } catch (e: any) {
             if (e?.name === 'AbortError') {
                 return
+            }
+            const debug = e?.debug as { url: string; headers: Record<string, string>; method: string } | undefined
+            if (debug) {
+                maybeEmitHttpErrorToast(
+                    buildHttpDebugInfoFromFetch({
+                        message: e?.message || 'Ошибка подключения к стриму',
+                        request: { method: debug.method, url: debug.url, headers: debug.headers },
+                    })
+                )
             }
             setError(e?.message || 'Ошибка подключения к стриму')
             setStatus('error')
@@ -232,26 +269,26 @@ export default function TelemetryStreamModal({ sensorId, sensorToken, isOpen, on
             className="telemetry-stream-modal"
         >
             <div className="telemetry-stream">
-                {error && <div className="error">{error}</div>}
+                {IS_TEST && error && <div className="error">{error}</div>}
 
                 <div className="form-grid">
                     <div className="form-group">
                         <label htmlFor="telemetry_stream_token">
-                            Токен датчика <span className="dim">(опционально)</span>
+                            Токен датчика <span className="required">*</span>
                         </label>
                         <input
                             id="telemetry_stream_token"
                             type="text"
                             value={token}
                             onChange={(e) => setToken(e.target.value)}
-                            placeholder="Bearer token (или пусто — через вашу сессию)"
+                            placeholder="Bearer token"
                             disabled={status === 'connecting' || status === 'streaming' || !!sensorToken}
                         />
                         {sensorToken ? (
                             <small className="form-hint">Используется токен из ротации/регистрации</small>
                         ) : (
                             <small className="form-hint">
-                                Если оставить поле пустым, просмотр будет через вашу авторизацию (auth-proxy)
+                                Укажите токен датчика, чтобы подключиться к стриму
                             </small>
                         )}
                     </div>

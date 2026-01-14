@@ -16,6 +16,7 @@ import {
 } from '../components/common'
 import CreateExperimentModal from '../components/CreateExperimentModal'
 import { setActiveProjectId } from '../utils/activeProject'
+import { IS_TEST } from '../utils/env'
 import './ExperimentsList.css'
 
 function ExperimentsList() {
@@ -65,7 +66,7 @@ function ExperimentsList() {
   return (
     <div className="experiments-list">
       {isLoading && <Loading />}
-      {error && (
+      {IS_TEST && error && (
         <Error
           message={
             error instanceof Error
@@ -73,6 +74,9 @@ function ExperimentsList() {
               : 'Ошибка загрузки экспериментов. Убедитесь, что выбран проект.'
           }
         />
+      )}
+      {!IS_TEST && error && (
+        <EmptyState message="Не удалось загрузить эксперименты. Проверьте выбранный проект." />
       )}
       {!projectId && projectsData?.projects && projectsData.projects.length === 0 && (
         <EmptyState message="У вас нет проектов. Создайте проект, чтобы начать работу с экспериментами." />

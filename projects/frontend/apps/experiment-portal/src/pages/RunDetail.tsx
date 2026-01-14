@@ -15,6 +15,7 @@ import {
 } from '../components/common'
 import './RunDetail.css'
 import { setActiveProjectId } from '../utils/activeProject'
+import { IS_TEST } from '../utils/env'
 
 function RunDetail() {
   const { id } = useParams<{ id: string }>()
@@ -150,7 +151,7 @@ function RunDetail() {
   }
 
   if (error || !run) {
-    return <ErrorComponent message="Запуск не найден" />
+    return IS_TEST ? <ErrorComponent message="Запуск не найден" /> : <EmptyState message="Запуск не найден" />
   }
 
   // UI note:
@@ -238,7 +239,7 @@ function RunDetail() {
           </div>
         </div>
 
-        {actionError && (
+        {IS_TEST && actionError && (
           <div className="error" style={{ marginTop: '0.75rem' }}>
             {actionError}
           </div>

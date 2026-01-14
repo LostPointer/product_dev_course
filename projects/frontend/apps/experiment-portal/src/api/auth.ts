@@ -4,6 +4,7 @@ import type { User, LoginRequest, AuthResponse } from '../types'
 import { generateRequestId } from '../utils/uuid'
 import { getTraceId } from '../utils/trace'
 import { getCsrfToken } from '../utils/csrf'
+import { maybeEmitHttpErrorToastFromAxiosError } from '../utils/httpDebug'
 
 // Auth Proxy работает на другом порту
 const AUTH_PROXY_URL = import.meta.env.VITE_AUTH_PROXY_URL || 'http://localhost:8080'
@@ -37,18 +38,6 @@ authClient.interceptors.request.use(
                 config.headers['X-CSRF-Token'] = csrf
             }
         }
-
-        // Логирование запроса (только в development)
-        if (import.meta.env.DEV && import.meta.env.MODE !== 'test') {
-            console.log({
-                trace_id: traceId,
-                request_id: requestId,
-                method: config.method?.toUpperCase(),
-                url: config.url,
-                baseURL: config.baseURL,
-            })
-        }
-
         return config
     },
     (error) => {
@@ -60,19 +49,8 @@ authClient.interceptors.request.use(
 authClient.interceptors.response.use(
     (response) => response,
     (error) => {
-        const traceId = error.config?.headers?.['X-Trace-Id'] as string | undefined
-        const requestId = error.config?.headers?.['X-Request-Id'] as string | undefined
-
-        // Логирование ошибки
-        console.error({
-            trace_id: traceId,
-            request_id: requestId,
-            error: error.message,
-            status: error.response?.status,
-            statusText: error.response?.statusText,
-            url: error.config?.url,
-            method: error.config?.method?.toUpperCase(),
-        })
+        // Emit debug toast for auth failures (dev-only).
+        maybeEmitHttpErrorToastFromAxiosError(error)
 
         return Promise.reject(error)
     }

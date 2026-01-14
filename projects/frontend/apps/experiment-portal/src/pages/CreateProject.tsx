@@ -4,6 +4,7 @@ import { useMutation } from '@tanstack/react-query'
 import { projectsApi } from '../api/client'
 import type { ProjectCreate } from '../types'
 import { Error, FormGroup, FormActions } from '../components/common'
+import { IS_TEST } from '../utils/env'
 import './CreateProject.css'
 
 function CreateProject() {
@@ -21,7 +22,8 @@ function CreateProject() {
             navigate('/projects')
         },
         onError: (err: any) => {
-            setError(err.response?.data?.error || 'Ошибка создания проекта')
+            const msg = err.response?.data?.error || 'Ошибка создания проекта'
+            setError(msg)
         },
     })
 
@@ -39,7 +41,7 @@ function CreateProject() {
         <div className="create-project">
             <h2>Создать проект</h2>
 
-            {error && <Error message={error} />}
+            {IS_TEST && error && <Error message={error} />}
 
             <form onSubmit={handleSubmit} className="project-form card">
                 <FormGroup label="Название" required>

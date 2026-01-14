@@ -34,6 +34,7 @@ import { generateRequestId } from '../utils/uuid'
 import { getTraceId } from '../utils/trace'
 import { getActiveProjectId } from '../utils/activeProject'
 import { getCsrfToken } from '../utils/csrf'
+import { maybeEmitHttpErrorToastFromAxiosError } from '../utils/httpDebug'
 
 // API работает через Auth Proxy, который автоматически добавляет токен из куки
 const AUTH_PROXY_URL = import.meta.env.VITE_AUTH_PROXY_URL || 'http://localhost:8080'
@@ -138,17 +139,6 @@ apiClient.interceptors.request.use(
       }
     }
 
-    // Логирование запроса (только в development)
-    if (import.meta.env.DEV && import.meta.env.MODE !== 'test') {
-      console.log({
-        trace_id: traceId,
-        request_id: requestId,
-        method: config.method?.toUpperCase(),
-        url: config.url,
-        baseURL: config.baseURL,
-      })
-    }
-
     return config
   },
   (error) => {
@@ -159,42 +149,10 @@ apiClient.interceptors.request.use(
 // Обработка ошибок и автоматическое обновление токена
 apiClient.interceptors.response.use(
   (response) => {
-    // Логирование успешных ответов
-    console.log('API response SUCCESS:', {
-      url: response.config.url,
-      method: response.config.method?.toUpperCase(),
-      status: response.status,
-      statusText: response.statusText,
-      headers: response.headers,
-      data: response.data,
-    })
     return response
   },
   async (error) => {
-    // Логирование ошибок
-    console.error('API response ERROR:', {
-      url: error.config?.url,
-      method: error.config?.method?.toUpperCase(),
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      data: error.response?.data,
-      message: error.message,
-      code: error.code,
-    })
     const originalRequest = error.config
-    const traceId = error.config?.headers?.['X-Trace-Id'] as string | undefined
-    const requestId = error.config?.headers?.['X-Request-Id'] as string | undefined
-
-    // Логирование ошибки
-    console.error({
-      trace_id: traceId,
-      request_id: requestId,
-      error: error.message,
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      url: error.config?.url,
-      method: error.config?.method?.toUpperCase(),
-    })
 
     // Если получили 401 и это не повторный запрос
     if (error.response?.status === 401 && !originalRequest._retry) {
@@ -212,11 +170,16 @@ apiClient.interceptors.response.use(
         // Повторяем оригинальный запрос
         return apiClient(originalRequest)
       } catch (refreshError) {
+        // Show debug toast for refresh failure as well (dev-only), then redirect.
+        maybeEmitHttpErrorToastFromAxiosError(refreshError)
         // Если refresh не удался - перенаправляем на страницу входа
         window.location.href = '/login'
         return Promise.reject(refreshError)
       }
     }
+
+    // Emit debug toast for any request failure (dev-only; includes network/CORS/timeout).
+    maybeEmitHttpErrorToastFromAxiosError(error)
 
     return Promise.reject(error)
   }
@@ -389,18 +352,14 @@ export const telemetryApi = {
     // You can override with direct telemetry-ingest-service URL via VITE_TELEMETRY_INGEST_URL.
     const TELEMETRY_BASE_URL =
       import.meta.env.VITE_TELEMETRY_INGEST_URL || AUTH_PROXY_URL
-    const requestId = generateRequestId()
-    const traceId = getTraceId()
-
-    const response = await axios.post(
-      `${TELEMETRY_BASE_URL}/api/v1/telemetry`,
+    const response = await apiClient.post<TelemetryIngestResponse>(
+      '/api/v1/telemetry',
       data,
       {
+        baseURL: TELEMETRY_BASE_URL,
         headers: {
           'Authorization': `Bearer ${sensorToken}`,
           'Content-Type': 'application/json',
-          'X-Trace-Id': traceId,
-          'X-Request-Id': requestId,
         },
       }
     )
@@ -415,7 +374,7 @@ export const telemetryApi = {
       idle_timeout_seconds?: number
     },
     sensorToken?: string
-  ): Promise<Response> => {
+  ): Promise<{ response: Response; debug: { url: string; headers: Record<string, string>; method: string } }> => {
     const TELEMETRY_BASE_URL =
       import.meta.env.VITE_TELEMETRY_INGEST_URL || AUTH_PROXY_URL
     const url = new URL(`${TELEMETRY_BASE_URL}/api/v1/telemetry/stream`)
@@ -437,10 +396,18 @@ export const telemetryApi = {
       headers['Authorization'] = `Bearer ${sensorToken.trim()}`
     }
 
-    return await fetch(url.toString(), {
-      method: 'GET',
-      headers,
-    })
+    const debug = { url: url.toString(), headers, method: 'GET' }
+    try {
+      const response = await fetch(debug.url, {
+        method: debug.method,
+        headers: debug.headers,
+      })
+      return { response, debug }
+    } catch (e: any) {
+      // Attach debug info for higher-level error handling / toasts.
+      e.debug = debug
+      throw e
+    }
   },
 }
 
