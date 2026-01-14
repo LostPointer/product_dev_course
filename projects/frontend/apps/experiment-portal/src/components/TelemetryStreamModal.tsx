@@ -10,12 +10,14 @@ import './TelemetryStreamModal.css'
 
 type TelemetryStreamModalProps = {
     sensorId: string
-    sensorToken?: string | null
     isOpen: boolean
     onClose: () => void
+    filterRunId?: string
+    filterCaptureSessionId?: string
 }
 
 type StreamStatus = 'idle' | 'connecting' | 'streaming' | 'error'
+type FilterMode = 'all' | 'run' | 'capture'
 
 function _clamp(n: number, min: number, max: number) {
     return Math.max(min, Math.min(max, n))
@@ -97,12 +99,23 @@ function _buildSparkline(values: number[], width: number, height: number): Spark
     }
 }
 
-export default function TelemetryStreamModal({ sensorId, sensorToken, isOpen, onClose }: TelemetryStreamModalProps) {
-    const [token, setToken] = useState(sensorToken || '')
+export default function TelemetryStreamModal({
+    sensorId,
+    isOpen,
+    onClose,
+    filterRunId,
+    filterCaptureSessionId,
+}: TelemetryStreamModalProps) {
     const [sinceId, setSinceId] = useState('0')
     const [idleTimeoutSeconds, setIdleTimeoutSeconds] = useState('30')
     const [maxPoints, setMaxPoints] = useState('200')
     const [valueMode, setValueMode] = useState<'physical' | 'raw'>('physical')
+    const defaultFilterMode = useMemo<FilterMode>(() => {
+        if (filterCaptureSessionId) return 'capture'
+        if (filterRunId) return 'run'
+        return 'all'
+    }, [filterCaptureSessionId, filterRunId])
+    const [filterMode, setFilterMode] = useState<FilterMode>('all')
 
     const [status, setStatus] = useState<StreamStatus>('idle')
     const [error, setError] = useState<string | null>(null)
@@ -126,22 +139,30 @@ export default function TelemetryStreamModal({ sensorId, sensorToken, isOpen, on
             setIdleTimeoutSeconds('30')
             setMaxPoints('200')
             setValueMode('physical')
-            setToken(sensorToken || '')
+            setFilterMode(defaultFilterMode)
+            return
         }
+        setFilterMode(defaultFilterMode)
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isOpen])
+    }, [isOpen, defaultFilterMode])
 
-    useEffect(() => {
-        if (sensorToken) setToken(sensorToken)
-    }, [sensorToken])
+    const filteredRecords = useMemo(() => {
+        if (filterMode === 'run' && filterRunId) {
+            return records.filter((r) => r.run_id === filterRunId)
+        }
+        if (filterMode === 'capture' && filterCaptureSessionId) {
+            return records.filter((r) => r.capture_session_id === filterCaptureSessionId)
+        }
+        return records
+    }, [records, filterMode, filterRunId, filterCaptureSessionId])
 
     const plottedValues = useMemo(() => {
-        const vals = records
+        const vals = filteredRecords
             .map((r) => (valueMode === 'physical' ? r.physical_value : r.raw_value))
             .map((v) => (typeof v === 'number' ? v : null))
             .filter((v): v is number => v !== null && Number.isFinite(v))
         return vals.slice(-50)
-    }, [records, valueMode])
+    }, [filteredRecords, valueMode])
 
     const SPARK_W = 640
     const SPARK_H = 170
@@ -157,14 +178,6 @@ export default function TelemetryStreamModal({ sensorId, sensorToken, isOpen, on
     const start = async () => {
         setError(null)
 
-        if (!token.trim()) {
-            const msg = 'Токен датчика обязателен'
-            setError(msg)
-            notifyError(msg)
-            setStatus('error')
-            return
-        }
-
         const since = _clamp(Number(sinceId || '0'), 0, Number.MAX_SAFE_INTEGER)
         const idle = _clamp(Number(idleTimeoutSeconds || '30'), 1, 600)
         const max = _clamp(Number(maxPoints || '200'), 10, 2000)
@@ -179,8 +192,7 @@ export default function TelemetryStreamModal({ sensorId, sensorToken, isOpen, on
 
         try {
             const { response: resp, debug } = await telemetryApi.stream(
-                { sensor_id: sensorId, since_id: since, idle_timeout_seconds: idle },
-                token.trim() || undefined
+                { sensor_id: sensorId, since_id: since, idle_timeout_seconds: idle }
             )
             if (!resp.ok) {
                 const text = await resp.text().catch(() => '')
@@ -255,6 +267,7 @@ export default function TelemetryStreamModal({ sensorId, sensorToken, isOpen, on
     }
 
     const canClose = status !== 'connecting'
+    const hasFilterOptions = !!filterRunId || !!filterCaptureSessionId
 
     return (
         <Modal
@@ -272,27 +285,6 @@ export default function TelemetryStreamModal({ sensorId, sensorToken, isOpen, on
                 {IS_TEST && error && <div className="error">{error}</div>}
 
                 <div className="form-grid">
-                    <div className="form-group">
-                        <label htmlFor="telemetry_stream_token">
-                            Токен датчика <span className="required">*</span>
-                        </label>
-                        <input
-                            id="telemetry_stream_token"
-                            type="text"
-                            value={token}
-                            onChange={(e) => setToken(e.target.value)}
-                            placeholder="Bearer token"
-                            disabled={status === 'connecting' || status === 'streaming' || !!sensorToken}
-                        />
-                        {sensorToken ? (
-                            <small className="form-hint">Используется токен из ротации/регистрации</small>
-                        ) : (
-                            <small className="form-hint">
-                                Укажите токен датчика, чтобы подключиться к стриму
-                            </small>
-                        )}
-                    </div>
-
                     <div className="form-group">
                         <label htmlFor="telemetry_stream_since">since_id</label>
                         <input
@@ -330,6 +322,21 @@ export default function TelemetryStreamModal({ sensorId, sensorToken, isOpen, on
                             max={2000}
                         />
                     </div>
+                    {hasFilterOptions && (
+                        <div className="form-group">
+                            <label htmlFor="telemetry_stream_filter">filter</label>
+                            <select
+                                id="telemetry_stream_filter"
+                                value={filterMode}
+                                onChange={(e) => setFilterMode(e.target.value as FilterMode)}
+                                disabled={status === 'connecting'}
+                            >
+                                <option value="all">all events</option>
+                                {filterRunId && <option value="run">this run</option>}
+                                {filterCaptureSessionId && <option value="capture">active capture session</option>}
+                            </select>
+                        </div>
+                    )}
                 </div>
 
                 <div className="stream-actions">
@@ -344,8 +351,10 @@ export default function TelemetryStreamModal({ sensorId, sensorToken, isOpen, on
                     )}
                     <div className="stream-meta">
                         <span className="mono">sensor_id: {sensorId}</span>
+                        {filterRunId && <span className="mono">run_id: {filterRunId}</span>}
+                        {filterCaptureSessionId && <span className="mono">cs_id: {filterCaptureSessionId}</span>}
                         <span className="mono">last_id: {lastId}</span>
-                        <span>events: {records.length}</span>
+                        <span>events: {filteredRecords.length}{filterMode !== 'all' ? ` / ${records.length}` : ''}</span>
                     </div>
                 </div>
 
@@ -450,11 +459,11 @@ export default function TelemetryStreamModal({ sensorId, sensorToken, isOpen, on
                     <div className="records-header">
                         <strong>Последние события</strong>
                     </div>
-                    {records.length === 0 ? (
+                    {filteredRecords.length === 0 ? (
                         <div className="empty">Событий пока нет</div>
                     ) : (
                         <div className="records-list">
-                            {records
+                            {filteredRecords
                                 .slice()
                                 .reverse()
                                 .slice(0, 25)

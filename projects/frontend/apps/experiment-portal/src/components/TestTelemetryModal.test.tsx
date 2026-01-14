@@ -70,8 +70,6 @@ describe('TestTelemetryModal', () => {
 
         expect(screen.getByRole('heading', { name: /тестовая отправка телеметрии/i })).toBeInTheDocument()
         expect(screen.getByLabelText(/токен датчика/i)).toBeInTheDocument()
-        expect(screen.getByLabelText(/run id/i)).toBeInTheDocument()
-        expect(screen.getByLabelText(/capture session id/i)).toBeInTheDocument()
         expect(screen.getByLabelText(/meta/i)).toBeInTheDocument()
         expect(screen.getByLabelText(/readings/i)).toBeInTheDocument()
     })
@@ -216,7 +214,7 @@ describe('TestTelemetryModal', () => {
         })
     })
 
-    it('includes optional fields when provided', async () => {
+    it('includes optional meta when provided', async () => {
         const user = userEvent.setup()
         const mockIngest = vi.mocked(telemetryApi.ingest)
         mockIngest.mockResolvedValueOnce({
@@ -233,9 +231,6 @@ describe('TestTelemetryModal', () => {
             />,
             { wrapper: createWrapper() }
         )
-
-        await user.type(screen.getByLabelText(/run id/i), 'run-1')
-        await user.type(screen.getByLabelText(/capture session id/i), 'session-1')
 
         const metaTextarea = screen.getByLabelText(/meta/i)
         await user.clear(metaTextarea)
@@ -258,8 +253,6 @@ describe('TestTelemetryModal', () => {
             expect(mockIngest).toHaveBeenCalledWith(
                 {
                     sensor_id: 'sensor-1',
-                    run_id: 'run-1',
-                    capture_session_id: 'session-1',
                     meta: { test: true },
                     readings: [
                         {

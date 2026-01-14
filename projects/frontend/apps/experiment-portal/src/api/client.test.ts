@@ -41,7 +41,7 @@ Object.defineProperty(window, 'location', {
 })
 
 // Импортируем после мока
-import { experimentsApi, runsApi } from './client'
+import { experimentsApi, runsApi, sensorsApi } from './client'
 
 const requestInterceptor = mockAxiosInstance.interceptors.request.use.mock.calls[0]?.[0] as
     | ((cfg: any) => any)
@@ -458,6 +458,32 @@ describe('API Client', () => {
             // Также проверяем, что метод use существует и является мок-функцией
             expect(mockAxiosInstance.interceptors.response.use).toBeDefined()
             expect(vi.isMockFunction(mockAxiosInstance.interceptors.response.use)).toBe(true)
+        })
+    })
+
+    describe('sensorsApi', () => {
+        it('getProjects attaches project_id from active project context', async () => {
+            window.localStorage.setItem('experiment_portal.active_project_id', 'project-ctx')
+            mockAxiosInstance.get.mockResolvedValueOnce({ data: { project_ids: ['p1'] } })
+
+            const result = await sensorsApi.getProjects('sensor-123')
+
+            expect(mockAxiosInstance.get).toHaveBeenCalledWith(
+                '/api/v1/sensors/sensor-123/projects',
+                { params: { project_id: 'project-ctx' } }
+            )
+            expect(result).toEqual({ project_ids: ['p1'] })
+        })
+
+        it('removeProject sends explicit project_id context equal to target project', async () => {
+            mockAxiosInstance.delete.mockResolvedValueOnce({ data: {} })
+
+            await sensorsApi.removeProject('sensor-123', 'project-999')
+
+            expect(mockAxiosInstance.delete).toHaveBeenCalledWith(
+                '/api/v1/sensors/sensor-123/projects/project-999',
+                { params: { project_id: 'project-999' } }
+            )
         })
     })
 })

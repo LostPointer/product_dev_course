@@ -2,6 +2,25 @@
   max-width: 1000px;
 }
 
+.run-detail .header-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.run-detail__primary-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.run-detail__countdown-actions {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+
 .experiment-link {
   display: inline-block;
   margin-top: 8px;
@@ -51,6 +70,47 @@
   overflow-x: auto;
   font-size: 12px;
   line-height: 1.5;
+}
+
+.telemetry-section {
+  margin-top: 24px;
+  max-width: 1000px;
+}
+
+.telemetry-section .card-header {
+  margin-bottom: 12px;
+}
+
+.telemetry-section .card-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.telemetry-controls {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.telemetry-controls .form-group {
+  min-width: 240px;
+  flex: 1 1 280px;
+}
+
+.telemetry-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.telemetry-hints {
+  margin-top: 8px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  opacity: 0.8;
 }
 
 .capture-sessions-section {

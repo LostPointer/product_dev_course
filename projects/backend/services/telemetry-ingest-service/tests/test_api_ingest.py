@@ -142,14 +142,128 @@ async def test_ingest_marks_late_data_in_meta(service_client, pgsql):
 
     conn = await asyncpg.connect(db_uri)
     try:
-        meta = await conn.fetchval(
-            "SELECT meta FROM telemetry_records WHERE capture_session_id = $1 LIMIT 1",
-            capture_session_id,
+        row = await conn.fetchrow(
+            """
+            SELECT capture_session_id, meta
+            FROM telemetry_records
+            WHERE run_id = $1
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            run_id,
         )
+        assert row is not None
+        # After session is stopped, service must NOT attach new records to it.
+        assert row["capture_session_id"] is None
+        meta = row["meta"]
         assert meta is not None
         if isinstance(meta, str):
             meta = json.loads(meta)
         assert meta["__system"]["late"] is True
+        assert meta["__system"]["capture_session_attached"] is False
+        assert meta["__system"]["capture_session_id"] == str(capture_session_id)
+    finally:
+        await conn.close()
+
+
+async def test_ingest_auto_attaches_active_capture_session_by_run_id(service_client, pgsql):
+    project_id = uuid4()
+    sensor_id = uuid4()
+    run_id = uuid4()
+    capture_session_id = uuid4()
+    token = "test-token"
+
+    db_uri = pgsql["telemetry_ingest_service"].conninfo.get_uri()
+    await _seed(
+        db_uri=db_uri,
+        project_id=project_id,
+        sensor_id=sensor_id,
+        token=token,
+        run_id=run_id,
+        capture_session_id=capture_session_id,
+    )
+
+    # Client sends run_id only; service should attach active capture_session_id.
+    resp = await service_client.post(
+        "/api/v1/telemetry",
+        json={
+            "sensor_id": str(sensor_id),
+            "run_id": str(run_id),
+            "readings": [{"timestamp": "2026-01-01T00:00:00Z", "raw_value": 1.0}],
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status == 202
+
+    conn = await asyncpg.connect(db_uri)
+    try:
+        row = await conn.fetchrow(
+            """
+            SELECT capture_session_id, meta
+            FROM telemetry_records
+            WHERE run_id = $1
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            run_id,
+        )
+        assert row is not None
+        assert str(row["capture_session_id"]) == str(capture_session_id)
+        meta = row["meta"]
+        if isinstance(meta, str):
+            meta = json.loads(meta)
+        assert meta["__system"]["capture_session_auto_attached"] is True
+    finally:
+        await conn.close()
+
+
+async def test_ingest_auto_infers_capture_session_from_sensor_assignment(service_client, pgsql):
+    project_id = uuid4()
+    sensor_id = uuid4()
+    run_id = uuid4()
+    capture_session_id = uuid4()
+    token = "test-token"
+
+    db_uri = pgsql["telemetry_ingest_service"].conninfo.get_uri()
+    await _seed(
+        db_uri=db_uri,
+        project_id=project_id,
+        sensor_id=sensor_id,
+        token=token,
+        run_id=run_id,
+        capture_session_id=capture_session_id,
+    )
+
+    # Client omits run_id and capture_session_id; service should infer.
+    resp = await service_client.post(
+        "/api/v1/telemetry",
+        json={
+            "sensor_id": str(sensor_id),
+            "readings": [{"timestamp": "2026-01-01T00:00:00Z", "raw_value": 1.0}],
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status == 202
+
+    conn = await asyncpg.connect(db_uri)
+    try:
+        row = await conn.fetchrow(
+            """
+            SELECT run_id, capture_session_id, meta
+            FROM telemetry_records
+            WHERE sensor_id = $1
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            sensor_id,
+        )
+        assert row is not None
+        assert str(row["run_id"]) == str(run_id)
+        assert str(row["capture_session_id"]) == str(capture_session_id)
+        meta = row["meta"]
+        if isinstance(meta, str):
+            meta = json.loads(meta)
+        assert meta["__system"]["capture_session_inferred_from_project"] is True
     finally:
         await conn.close()
 

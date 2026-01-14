@@ -305,8 +305,8 @@ export const sensorsApi = {
 
   // Multiple projects management
   getProjects: async (id: string): Promise<{ project_ids: string[] }> => {
-    const response = await apiClient.get(`/api/v1/sensors/${id}/projects`)
-    return response.data
+    // IMPORTANT: use apiGet so project_id is auto-attached (auth-proxy derives X-Project-* from it)
+    return await apiGet(`/api/v1/sensors/${id}/projects`)
   },
 
   addProject: async (id: string, projectId: string): Promise<void> => {
@@ -314,7 +314,8 @@ export const sensorsApi = {
   },
 
   removeProject: async (id: string, projectId: string): Promise<void> => {
-    await apiDelete(`/api/v1/sensors/${id}/projects/${projectId}`)
+    // Use explicit project_id context for permission checks in that project
+    await apiDelete(`/api/v1/sensors/${id}/projects/${projectId}`, { params: { project_id: projectId } })
   },
 }
 
@@ -373,11 +374,10 @@ export const telemetryApi = {
       max_events?: number
       idle_timeout_seconds?: number
     },
-    sensorToken?: string
   ): Promise<{ response: Response; debug: { url: string; headers: Record<string, string>; method: string } }> => {
-    const TELEMETRY_BASE_URL =
-      import.meta.env.VITE_TELEMETRY_INGEST_URL || AUTH_PROXY_URL
-    const url = new URL(`${TELEMETRY_BASE_URL}/api/v1/telemetry/stream`)
+    // Stream is user-authenticated via auth-proxy session cookies.
+    // Do NOT attach sensor token here (UI doesn't ask for it anymore).
+    const url = new URL(`${AUTH_PROXY_URL}/api/v1/telemetry/stream`)
     url.searchParams.set('sensor_id', params.sensor_id)
     if (typeof params.since_id === 'number') url.searchParams.set('since_id', String(params.since_id))
     if (typeof params.max_events === 'number') url.searchParams.set('max_events', String(params.max_events))
@@ -391,16 +391,13 @@ export const telemetryApi = {
       'X-Trace-Id': traceId,
       'X-Request-Id': requestId,
     }
-    // If sensor token is provided, use it. Otherwise rely on auth-proxy cookie session injection.
-    if (sensorToken && sensorToken.trim()) {
-      headers['Authorization'] = `Bearer ${sensorToken.trim()}`
-    }
 
     const debug = { url: url.toString(), headers, method: 'GET' }
     try {
       const response = await fetch(debug.url, {
         method: debug.method,
         headers: debug.headers,
+        credentials: 'include',
       })
       return { response, debug }
     } catch (e: any) {

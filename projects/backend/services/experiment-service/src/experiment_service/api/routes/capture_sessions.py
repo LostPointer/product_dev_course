@@ -77,6 +77,12 @@ async def create_capture_session(request: web.Request):
     body = await read_json(request)
     body["project_id"] = project_id
     body["run_id"] = run_id
+    body.setdefault("initiated_by", user.user_id)
+    # UX: "Старт отсчёта" должен реально стартовать запись.
+    # По умолчанию создаём активную сессию (RUNNING) и фиксируем started_at.
+    # Клиент может явно передать другой статус (например, draft) для технических сценариев.
+    body.setdefault("status", CaptureSessionStatus.RUNNING.value)
+    body.setdefault("started_at", datetime.now(timezone.utc))
     idempotency_service = await get_idempotency_service(request)
     idempotency_key = request.headers.get(IDEMPOTENCY_HEADER)
     try:

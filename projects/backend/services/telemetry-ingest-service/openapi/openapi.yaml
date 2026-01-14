@@ -49,6 +49,50 @@ paths:
           description: Unauthorized
         "404":
           description: Not found
+  /api/v1/telemetry/stream:
+    get:
+      summary: Stream telemetry records (SSE)
+      description: >
+        Server-Sent Events stream for a single sensor. Requires Bearer token. In auth-proxy setup,
+        this endpoint can be accessed with either a sensor token or a user session.
+      parameters:
+        - name: Authorization
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Bearer sensor token (or user JWT via auth-proxy)
+        - name: sensor_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: since_id
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+        - name: max_events
+          in: query
+          required: false
+          schema:
+            type: integer
+            nullable: true
+        - name: idle_timeout_seconds
+          in: query
+          required: false
+          schema:
+            type: number
+            default: 30
+      responses:
+        "200":
+          description: OK (text/event-stream)
+          content:
+            text/event-stream:
+              schema:
+                type: string
 components:
   schemas:
     TelemetryReading:
@@ -77,10 +121,12 @@ components:
           type: string
           format: uuid
           nullable: true
+          description: "Optional. Usually omitted: service will infer run_id from project's active capture session if present."
         capture_session_id:
           type: string
           format: uuid
           nullable: true
+          description: "Optional. Usually omitted: service will attach active capture session automatically. If provided but not active, it will not be attached."
         meta:
           type: object
           description: Optional batch-level metadata merged into each reading meta

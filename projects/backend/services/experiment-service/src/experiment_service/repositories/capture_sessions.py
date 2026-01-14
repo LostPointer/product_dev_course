@@ -159,6 +159,20 @@ class CaptureSessionRepository(BaseRepository):
         )
         return record is not None
 
+    async def has_active_for_project(self, project_id: UUID) -> bool:
+        """Active capture sessions in project (recording window)."""
+        record = await self._fetchrow(
+            """
+            SELECT 1
+            FROM capture_sessions
+            WHERE project_id = $1
+              AND status IN ('draft', 'running', 'backfilling')
+            LIMIT 1
+            """,
+            project_id,
+        )
+        return record is not None
+
     async def update(
         self,
         project_id: UUID,

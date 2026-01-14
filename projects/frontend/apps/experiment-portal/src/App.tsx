@@ -8,6 +8,7 @@ import RunDetail from './pages/RunDetail'
 import SensorsList from './pages/SensorsList'
 import CreateSensor from './pages/CreateSensor'
 import ProjectsList from './pages/ProjectsList'
+import TelemetryViewer from './pages/TelemetryViewer'
 import './App.css'
 
 function App() {
@@ -27,6 +28,7 @@ function App() {
                 <Route path="/runs/:id" element={<RunDetail />} />
                 <Route path="/sensors" element={<SensorsList />} />
                 <Route path="/sensors/new" element={<CreateSensor />} />
+                <Route path="/telemetry" element={<TelemetryViewer />} />
               </Routes>
             </Layout>
           </ProtectedRoute>

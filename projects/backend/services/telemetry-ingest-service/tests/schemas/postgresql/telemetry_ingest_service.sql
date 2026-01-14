@@ -48,9 +48,20 @@ CREATE TABLE IF NOT EXISTS capture_sessions (
     ordinal_number integer NOT NULL DEFAULT 1,
     status text NOT NULL DEFAULT 'draft',
     archived boolean NOT NULL DEFAULT false,
+    started_at timestamptz,
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
     FOREIGN KEY (run_id) REFERENCES runs (id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS run_sensors (
+    run_id uuid NOT NULL,
+    sensor_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    detached_at timestamptz,
+    PRIMARY KEY (run_id, sensor_id),
+    FOREIGN KEY (run_id) REFERENCES runs (id) ON DELETE CASCADE,
+    FOREIGN KEY (sensor_id) REFERENCES sensors (id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS telemetry_records (

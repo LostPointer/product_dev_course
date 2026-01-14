@@ -91,16 +91,28 @@
   z-index: 100;
 }
 
+.header-container {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0 20px;
+  box-sizing: border-box;
+}
+
 .header-content {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   padding: 16px 0;
+  column-gap: 16px;
 }
 
 .logo {
   text-decoration: none;
   color: #333;
+  grid-column: 2;
+  justify-self: center;
+  text-align: center;
 }
 
 .logo h1 {
@@ -118,6 +130,8 @@
   display: flex;
   align-items: center;
   gap: 16px;
+  grid-column: 3;
+  justify-self: end;
 }
 
 .user-info {

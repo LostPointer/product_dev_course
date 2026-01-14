@@ -40,7 +40,9 @@ export function parseConfig(): Config {
         targetExperimentUrl:
             process.env.TARGET_EXPERIMENT_URL || 'http://localhost:8002',
         targetTelemetryUrl:
-            process.env.TARGET_TELEMETRY_URL || 'http://localhost:8003',
+            // In Docker, `localhost` would mean "inside auth-proxy container".
+            // Default to the docker-compose service name so telemetry proxy works out of the box.
+            process.env.TARGET_TELEMETRY_URL || 'http://telemetry-ingest-service:8003',
         authUrl: process.env.AUTH_URL || 'http://localhost:8001',
         corsOrigins: (process.env.CORS_ORIGINS || 'http://localhost:3000')
             .split(',')

@@ -68,7 +68,6 @@ describe('TelemetryStreamModal', () => {
             />
         )
 
-        await user.type(screen.getByLabelText(/токен датчика/i), 'test-token')
         await user.click(screen.getByRole('button', { name: /старт/i }))
 
         await waitFor(() => {
@@ -78,14 +77,6 @@ describe('TelemetryStreamModal', () => {
 
         expect(screen.getByRole('img', { name: /telemetry sparkline/i })).toBeInTheDocument()
         expect(vi.mocked(telemetryApi.stream)).toHaveBeenCalledTimes(1)
-    })
-
-    it('validates token is required', async () => {
-        const user = userEvent.setup()
-        render(<TelemetryStreamModal sensorId="s1" isOpen={true} onClose={onClose} />)
-
-        await user.click(screen.getByRole('button', { name: /старт/i }))
-        expect(screen.getByText(/токен датчика обязателен/i)).toBeInTheDocument()
     })
 })
 

@@ -61,11 +61,17 @@ function Layout({ children }: LayoutProps) {
             >
               Датчики
             </Link>
+            <Link
+              to="/telemetry"
+              className={location.pathname.startsWith('/telemetry') ? 'active' : ''}
+            >
+              Телеметрия
+            </Link>
           </nav>
         </div>
       </div>
       <header className="header">
-        <div className="container">
+        <div className="header-container">
           <div className="header-content">
             <Link to="/" className="logo">
               <h1>Experiment Tracking</h1>

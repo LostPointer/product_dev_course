@@ -28,6 +28,9 @@ class CaptureSessionService:
         run = await self._run_repository.get(data.project_id, data.run_id)
         if run.project_id != data.project_id:
             raise ScopeMismatchError("Run does not belong to project")
+        # Only one active capture session per project (recording window).
+        if await self._repository.has_active_for_project(data.project_id):
+            raise InvalidStatusTransitionError("Active capture session already exists for this project")
         if data.status != CaptureSessionStatus.DRAFT:
             validate_capture_transition(CaptureSessionStatus.DRAFT, data.status)
         return await self._repository.create(data)

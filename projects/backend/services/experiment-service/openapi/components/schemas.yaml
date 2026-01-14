@@ -289,14 +289,17 @@ CaptureSessionCreate:
     project_id:
       type: string
       format: uuid
+      description: Project context. Server may override from request context (query/auth headers).
     run_id:
       type: string
       format: uuid
+      description: Run context. Server may override from request path parameter.
     ordinal_number:
       type: integer
     status:
       $ref: '#/CaptureSessionStatus'
-      default: draft
+      default: running
+      description: By default, capture session is created as RUNNING (recording window starts immediately).
     initiated_by:
       type: string
       format: uuid
@@ -305,6 +308,7 @@ CaptureSessionCreate:
     started_at:
       type: string
       format: date-time
+      description: If omitted, server sets started_at when starting recording.
     stopped_at:
       type: string
       format: date-time
@@ -585,12 +589,20 @@ TelemetryIngestRequest:
       type: string
       format: uuid
       nullable: true
+      description: Optional. Usually omitted: service will infer run_id from project's active capture session if present.
     capture_session_id:
       type: string
       format: uuid
       nullable: true
+      description: Optional. Usually omitted: service will auto-attach active capture session. If provided but not active, it won't be attached.
+    meta:
+      type: object
+      description: Optional batch-level metadata merged into each reading meta
+      additionalProperties: true
     readings:
       type: array
+      minItems: 1
+      maxItems: 10000
       items:
         type: object
         required:

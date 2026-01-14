@@ -16,8 +16,6 @@ interface TestTelemetryModalProps {
 
 function TestTelemetryModal({ sensorId, sensorToken, isOpen, onClose }: TestTelemetryModalProps) {
     const [token, setToken] = useState(sensorToken || '')
-    const [runId, setRunId] = useState('')
-    const [captureSessionId, setCaptureSessionId] = useState('')
     const [metaJson, setMetaJson] = useState('{}')
     const [readingsJson, setReadingsJson] = useState('')
     const [error, setError] = useState<string | null>(null)
@@ -35,8 +33,6 @@ function TestTelemetryModal({ sensorId, sensorToken, isOpen, onClose }: TestTele
             setError(null)
             // Очищаем форму через 2 секунды
             setTimeout(() => {
-                setRunId('')
-                setCaptureSessionId('')
                 setMetaJson('{}')
                 setReadingsJson('')
                 setSuccess(null)
@@ -115,8 +111,6 @@ function TestTelemetryModal({ sensorId, sensorToken, isOpen, onClose }: TestTele
 
         const data: TelemetryIngest = {
             sensor_id: sensorId,
-            run_id: runId.trim() || undefined,
-            capture_session_id: captureSessionId.trim() || undefined,
             meta: Object.keys(meta).length > 0 ? meta : undefined,
             readings,
         }
@@ -128,8 +122,6 @@ function TestTelemetryModal({ sensorId, sensorToken, isOpen, onClose }: TestTele
         if (!ingestMutation.isPending) {
             setError(null)
             setSuccess(null)
-            setRunId('')
-            setCaptureSessionId('')
             setMetaJson('{}')
             setReadingsJson('')
             onClose()
@@ -199,30 +191,6 @@ function TestTelemetryModal({ sensorId, sensorToken, isOpen, onClose }: TestTele
                             Используется токен из контекста датчика
                         </small>
                     )}
-                </div>
-
-                <div className="form-group">
-                    <label htmlFor="telemetry_run_id">Run ID (опционально)</label>
-                    <input
-                        id="telemetry_run_id"
-                        type="text"
-                        value={runId}
-                        onChange={(e) => setRunId(e.target.value)}
-                        placeholder="UUID запуска"
-                        disabled={ingestMutation.isPending}
-                    />
-                </div>
-
-                <div className="form-group">
-                    <label htmlFor="telemetry_capture_session_id">Capture Session ID (опционально)</label>
-                    <input
-                        id="telemetry_capture_session_id"
-                        type="text"
-                        value={captureSessionId}
-                        onChange={(e) => setCaptureSessionId(e.target.value)}
-                        placeholder="UUID capture session"
-                        disabled={ingestMutation.isPending}
-                    />
                 </div>
 
                 <div className="form-group">

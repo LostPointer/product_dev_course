@@ -90,13 +90,17 @@ poetry run openapi-generator-cli generate \
 ## Текущее состояние и ограничения
 
 - Завершён блок **Foundation** + большая часть **Runs & Capture Management** из roadmap: репозитории, state machine, batch-операции, аудит событий через таблицы `capture_session_events`.
-- **Ещё не реализовано:** ingestion `/api/v1/telemetry`, `/api/v1/runs/{id}/metrics`, артефакты, привязка датчиков к запускам (`run_sensors`), вебхуки и интеграции с Auth Service. В API на эти ручки возвращается `501` либо заглушка WebSocket.
+- **Telemetry ingest реализован отдельным сервисом** `telemetry-ingest-service` (через Auth Proxy), при этом оба сервиса используют **общую БД** `experiment_db` и общую таблицу `telemetry_records`.
+- **Сенсоры не привязаны к эксперименту/запуску:** сенсор просто отправляет данные в проект (по своему токену). Привязка к `run_id`/`capture_session_id` выполняется сервером автоматически, если в проекте есть активная capture session.
+- **Capture sessions как “окно записи”:**
+  - `POST /api/v1/runs/{run_id}/capture-sessions` по умолчанию создаёт сессию в статусе `running` и выставляет `started_at`.
+  - В проекте допускается **только одна активная capture session** одновременно (иначе невозможно корректно автопривязывать “просто входящие” данные сенсоров).
 - RBAC пока завязан на заголовки; переход на реальный Auth Service и audit trail планируется следующим этапом (см. ниже).
 
 ## Следующие шаги
 
-1. **Telemetry & Metrics ingest:** REST + WebSocket/SSE, хранение raw/physical значений, SLA и heartbeat.
-2. **Run↔Sensor binding и артефакты:** использование таблиц `run_sensors`, CRUD/approve для `/artifacts`.
+1. **Telemetry & Metrics:** расширение API и UI (фильтры, агрегации, удобная навигация по capture sessions), SLA/heartbeat.
+2. **Артефакты:** CRUD/approve для `/artifacts`.
 3. **RBAC & Auth integration:** обмен токенами с Auth Service, audit-log на старты/остановки capture session, политики raw/physical.
 4. **Наблюдаемость и события:** Prometheus/OTel метрики, вебхуки `run.started/capture.completed`, очереди для API Gateway.
 5. **Документация:** синхронизация OpenAPI/AsyncAPI и обновление демо-сценариев `bin/demo_seed.py` (после реализации ingest).

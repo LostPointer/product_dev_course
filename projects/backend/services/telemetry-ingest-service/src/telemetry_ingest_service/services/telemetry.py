@@ -5,7 +5,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Sequence
+from typing import Any, Sequence, cast
 from uuid import UUID
 
 from backend_common.db.pool import get_pool_service as get_pool
@@ -39,29 +39,71 @@ class TelemetryIngestService:
             sensor = await self._authenticate_sensor(conn, payload.sensor_id, token_hash)
             project_id = sensor.project_id
 
+            # Resolve run/capture context.
+            # Desired behavior:
+            #  - Sensors may send run_id only (recommended); service auto-attaches active capture_session_id.
+            #  - If capture_session_id is provided but session is not active, we do NOT attach it to records
+            #    (recording should stop after session stop), but we keep a marker in meta.
             run_id = await self._ensure_run_scope(conn, project_id, payload.run_id)
-            capture_run_id = await self._ensure_capture_scope(
-                conn, project_id, payload.capture_session_id
+
+            requested_capture_session_id = payload.capture_session_id
+            requested_capture_run_id = await self._ensure_capture_scope(
+                conn, project_id, requested_capture_session_id
             )
 
-            if run_id and capture_run_id and run_id != capture_run_id:
+            if run_id and requested_capture_run_id and run_id != requested_capture_run_id:
                 raise ScopeMismatchError("Capture session does not belong to specified run")
 
             if run_id is None:
-                run_id = capture_run_id
+                run_id = requested_capture_run_id
 
+            # Sensors are NOT tied to runs/experiments. If client didn't provide run/capture context,
+            # we infer it from the *project's* currently active capture session (single recording window).
+            inferred_capture: tuple[UUID, UUID, str] | None = None
+            if run_id is None and requested_capture_session_id is None:
+                inferred_capture = await self._find_active_capture_session_in_project(conn, project_id)
+                if inferred_capture is not None:
+                    inferred_run_id, inferred_capture_id, inferred_status = inferred_capture
+                    run_id = inferred_run_id
+                    requested_capture_session_id = inferred_capture_id
+                    requested_capture_run_id = inferred_run_id
+
+            stored_capture_session_id: UUID | None = None
             capture_status: str | None = None
-            if payload.capture_session_id is not None:
-                capture_status = await self._get_capture_status(
-                    conn, project_id, payload.capture_session_id
-                )
+            system_meta: dict[str, object] = {}
+
+            if requested_capture_session_id is not None:
+                capture_status = await self._get_capture_status(conn, project_id, requested_capture_session_id)
+                status_lower = (capture_status or "").lower()
+                is_active = status_lower in ("running", "backfilling")
+                if is_active:
+                    stored_capture_session_id = requested_capture_session_id
+                else:
+                    system_meta = {
+                        "__system": {
+                            "capture_session_attached": False,
+                            "capture_session_id": str(requested_capture_session_id),
+                            "capture_session_status": capture_status,
+                        }
+                    }
+            elif run_id is not None:
+                active = await self._find_active_capture_session(conn, project_id, run_id)
+                if active is not None:
+                    stored_capture_session_id, capture_status = active
+                    system_meta = {"__system": {"capture_session_auto_attached": True}}
+
+            # If we inferred a capture session id, always mark it (debug/traceability).
+            if inferred_capture is not None and "__system" not in system_meta:
+                system_meta = {"__system": {"capture_session_inferred_from_project": True}}
 
             await self._bulk_insert(
                 conn,
                 project_id,
                 payload,
                 run_id=run_id,
+                capture_session_id=stored_capture_session_id,
                 capture_status=capture_status,
+                system_meta=system_meta,
             )
             await self._update_sensor_heartbeat(conn, payload.sensor_id, payload.readings)
 
@@ -128,6 +170,54 @@ class TelemetryIngestService:
         value = row.get("status")
         return str(value) if value is not None else None
 
+    async def _find_active_capture_session(
+        self, conn, project_id: UUID, run_id: UUID
+    ) -> tuple[UUID, str] | None:
+        row = await conn.fetchrow(
+            """
+            SELECT id, status
+            FROM capture_sessions
+            WHERE project_id = $1
+              AND run_id = $2
+              AND archived = false
+              AND status IN ('running', 'backfilling')
+            ORDER BY started_at DESC NULLS LAST, created_at DESC
+            LIMIT 1
+            """,
+            project_id,
+            run_id,
+        )
+        if row is None:
+            return None
+        return UUID(str(row["id"])), str(row["status"])
+
+    async def _find_active_capture_session_in_project(
+        self, conn, project_id: UUID
+    ) -> tuple[UUID, UUID, str] | None:
+        """
+        Find the project's active capture session (single recording window).
+        Returns (run_id, capture_session_id, status).
+        """
+        row = await conn.fetchrow(
+            """
+            SELECT run_id, id AS capture_session_id, status
+            FROM capture_sessions
+            WHERE project_id = $1
+              AND archived = false
+              AND status IN ('running', 'backfilling')
+            ORDER BY started_at DESC NULLS LAST, created_at DESC
+            LIMIT 1
+            """,
+            project_id,
+        )
+        if row is None:
+            return None
+        return (
+            UUID(str(row["run_id"])),
+            UUID(str(row["capture_session_id"])),
+            str(row["status"]),
+        )
+
     @staticmethod
     def _json_size_bytes(value: object) -> int:
         # Approximate payload size in bytes after json serialization.
@@ -148,10 +238,21 @@ class TelemetryIngestService:
         payload: TelemetryIngestDTO,
         *,
         run_id: UUID | None,
+        capture_session_id: UUID | None,
         capture_status: str | None,
+        system_meta: dict[str, Any] | None = None,
     ) -> None:
         self._validate_meta_sizes(payload)
         batch_meta = payload.meta or {}
+        if system_meta:
+            # merge, with system_meta taking precedence for __system
+            if "__system" in system_meta and "__system" in batch_meta and isinstance(batch_meta.get("__system"), dict):
+                base_sys = cast(dict[str, Any], batch_meta.get("__system", {}))
+                next_sys = cast(dict[str, Any], system_meta.get("__system", {}))
+                merged_sys = {**base_sys, **next_sys}
+                batch_meta = {**batch_meta, **system_meta, "__system": merged_sys}
+            else:
+                batch_meta = {**batch_meta, **system_meta}
 
         is_late = False
         if capture_status is not None:
@@ -172,7 +273,7 @@ class TelemetryIngestService:
                 project_id,
                 payload.sensor_id,
                 run_id,
-                payload.capture_session_id,
+                capture_session_id,
                 reading.timestamp,
                 reading.raw_value,
                 reading.physical_value,

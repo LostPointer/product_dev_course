@@ -479,7 +479,7 @@ describe('RunDetail', () => {
             render(<RunDetail />, { wrapper: createWrapper() })
 
             await waitFor(() => {
-                expect(screen.getByText('Стоп отсчёта')).toBeInTheDocument()
+                expect(screen.getByText('Остановить отсчёт')).toBeInTheDocument()
             })
         })
 
@@ -503,10 +503,10 @@ describe('RunDetail', () => {
             render(<RunDetail />, { wrapper: createWrapper() })
 
             await waitFor(() => {
-                expect(screen.getByText('Стоп отсчёта')).toBeInTheDocument()
+                expect(screen.getByText('Остановить отсчёт')).toBeInTheDocument()
             })
 
-            const stopButton = screen.getByText('Стоп отсчёта')
+            const stopButton = screen.getByText('Остановить отсчёт')
             await user.click(stopButton)
 
             await waitFor(() => {

@@ -399,7 +399,6 @@ function SensorDetail() {
                     />
                     <TelemetryStreamModal
                         sensorId={id}
-                        sensorToken={newToken || null}
                         isOpen={showTelemetryStreamModal}
                         onClose={() => setShowTelemetryStreamModal(false)}
                     />

@@ -29,11 +29,47 @@ ingest:
 stream:
   get:
     tags: [telemetry]
-    summary: Telemetry WebSocket
+    summary: Stream telemetry records (SSE)
+    description: >
+      Server-Sent Events stream for telemetry records. In the default deployment this is served by
+      telemetry-ingest-service behind auth-proxy at the same path.
     operationId: telemetryStream
+    parameters:
+      - name: Authorization
+        in: header
+        required: true
+        description: Bearer sensor token (or user JWT via auth-proxy)
+        schema:
+          type: string
+      - name: sensor_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: since_id
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+      - name: max_events
+        in: query
+        required: false
+        schema:
+          type: integer
+          nullable: true
+      - name: idle_timeout_seconds
+        in: query
+        required: false
+        schema:
+          type: number
+          default: 30
     responses:
-      101:
-        description: Switching to WebSocket
-      501:
-        description: Not implemented
+      200:
+        description: OK (text/event-stream)
+        content:
+          text/event-stream:
+            schema:
+              type: string
 
