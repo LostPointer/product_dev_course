@@ -34,6 +34,12 @@ export default function ToastProvider({ children }: { children: ReactNode }) {
     setToasts((prev) => prev.filter((x) => x.id !== id))
   }
 
+  const pin = (id: string) => {
+    const t = timersRef.current.get(id)
+    if (t) window.clearTimeout(t)
+    timersRef.current.delete(id)
+  }
+
   useEffect(() => {
     return subscribeToasts((evt) => {
       const item: ToastItem = { id: _id(), createdAt: _now(), event: evt }
@@ -60,7 +66,13 @@ export default function ToastProvider({ children }: { children: ReactNode }) {
     return toasts.map((t) => {
       const msg = t.event.message || ''
       return (
-        <div key={t.id} className="toast-card">
+        <div
+          key={t.id}
+          className="toast-card"
+          onPointerDown={() => pin(t.id)}
+          onMouseEnter={() => pin(t.id)}
+          onFocusCapture={() => pin(t.id)}
+        >
           <div className="toast-card-header">
             <div className="toast-title">{t.event.title}</div>
             <button
