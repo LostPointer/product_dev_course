@@ -73,7 +73,7 @@ describe('ExperimentsList', () => {
         render(<ExperimentsList />, { wrapper: createWrapper() })
 
         await waitFor(() => {
-            expect(screen.getByText('Загрузка...')).toBeInTheDocument()
+            expect(screen.getByText(/Загрузка/i)).toBeInTheDocument()
         })
     })
 

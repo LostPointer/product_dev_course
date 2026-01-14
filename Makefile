@@ -2,7 +2,7 @@
 .PHONY: backend-install
 .PHONY: logs logs-follow logs-service logs-proxy logs-auth-service logs-errors
 .PHONY: logs-stack logs-stack-up logs-stack-down logs-stack-restart
-.PHONY: dev dev-up dev-down dev-restart dev-logs dev-fix dev-clean grafana-reset-password
+.PHONY: dev dev-up dev-down dev-restart dev-rebuild dev-logs dev-fix dev-clean grafana-reset-password
 
 BACKEND_SERVICES_DIR := projects/backend/services
 BACKEND_DIR := projects/backend/services/experiment-service
@@ -288,6 +288,12 @@ dev-down:
 # Перезапуск фронтенда, бэкенда, auth-service, auth-proxy и Grafana
 dev-restart: dev-down dev-up
 
+# Пересборка контейнеров и запуск dev-сервисов
+dev-rebuild: dev-down
+	@echo "Пересборка контейнеров dev-сервисов..."
+	docker-compose build --no-cache postgres auth-service experiment-service telemetry-ingest-service auth-proxy experiment-portal sensor-simulator loki alloy grafana
+	@$(MAKE) dev-up
+
 # Просмотр логов всех dev-сервисов
 dev-logs:
 	@echo "Просмотр логов всех dev-сервисов (Ctrl+C для выхода)"
@@ -354,7 +360,7 @@ dev-clean-all:
 	@docker volume rm -f $${LOKI_DATA_VOLUME:-experiment-loki-data} 2>/dev/null || true
 	@docker volume rm -f $${GRAFANA_DATA_VOLUME:-experiment-grafana-data} 2>/dev/null || true
 	@echo "Удаление неиспользуемых образов проекта..."
-	@docker images --filter "reference=*auth-service*" --filter "reference=*experiment-service*" --filter "reference=*auth-proxy*" --filter "reference=*experiment-portal*" --format "{{.ID}}" | xargs -r docker rmi -f 2>/dev/null || true
+	@docker images --filter "reference=*auth-service*" --filter "reference=*experiment-service*" --filter "reference=*telemetry-ingest-service*" --filter "reference=*auth-proxy*" --filter "reference=*experiment-portal*" --format "{{.ID}}" | xargs -r docker rmi -f 2>/dev/null || true
 	@docker image prune -f >/dev/null 2>&1 || true
 	@echo "✅ Полная очистка завершена!"
 	@echo ""

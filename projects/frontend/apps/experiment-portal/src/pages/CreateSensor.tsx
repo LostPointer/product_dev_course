@@ -91,8 +91,39 @@ function CreateSensor() {
             return
         }
 
+        if (!formData.name.trim()) {
+            const msg = 'Название датчика обязательно'
+            setError(msg)
+            notifyError(msg)
+            return
+        }
+
+        if (!formData.type) {
+            const msg = 'Выберите тип датчика'
+            setError(msg)
+            notifyError(msg)
+            return
+        }
+
+        if (!formData.input_unit.trim()) {
+            const msg = 'Укажите входную единицу измерения'
+            setError(msg)
+            notifyError(msg)
+            return
+        }
+
+        if (!formData.display_unit.trim()) {
+            const msg = 'Укажите единицу отображения'
+            setError(msg)
+            notifyError(msg)
+            return
+        }
+
         createMutation.mutate({
             ...formData,
+            name: formData.name.trim(),
+            input_unit: formData.input_unit.trim(),
+            display_unit: formData.display_unit.trim(),
             calibration_notes: formData.calibration_notes || undefined,
         })
     }

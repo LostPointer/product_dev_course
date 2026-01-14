@@ -28,7 +28,7 @@ function ExperimentsList() {
   const pageSize = 20
 
   // Загружаем список проектов для автоматического выбора первого проекта
-  const { data: projectsData } = useQuery({
+  const { data: projectsData, isLoading: projectsLoading } = useQuery({
     queryKey: ['projects'],
     queryFn: () => projectsApi.list(),
   })
@@ -65,7 +65,7 @@ function ExperimentsList() {
 
   return (
     <div className="experiments-list">
-      {isLoading && <Loading />}
+      {isLoading && <Loading message="Загрузка экспериментов..." />}
       {IS_TEST && error && (
         <Error
           message={
@@ -90,6 +90,7 @@ function ExperimentsList() {
               <button
                 className="btn btn-primary"
                 onClick={() => setIsCreateModalOpen(true)}
+                disabled={isLoading || projectsLoading}
               >
                 Создать эксперимент
               </button>

@@ -70,7 +70,7 @@ function ProjectsList() {
 
     return (
         <div className="projects-list">
-            {isLoading && <Loading />}
+            {isLoading && <Loading message="Загрузка проектов..." />}
             {isError && error && (
                 <Error
                     message={
@@ -89,6 +89,7 @@ function ProjectsList() {
                             <button
                                 className="btn btn-primary"
                                 onClick={openCreateProject}
+                                disabled={isLoading}
                             >
                                 Создать проект
                             </button>
@@ -125,13 +126,13 @@ function ProjectsList() {
                                             {isProjectOwner(project.owner_id) && (
                                                 <button
                                                     className="btn btn-sm btn-secondary"
-                                                onClick={() => handleManageMembers(project.id, project.owner_id)}
-                                                title="Управление участниками"
+                                                    onClick={() => handleManageMembers(project.id, project.owner_id)}
+                                                    title="Управление участниками"
                                                     aria-label="Управление участниками"
-                                            >
-                                                👥
-                                            </button>
-                                        )}
+                                                >
+                                                    👥
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                     {project.description && (

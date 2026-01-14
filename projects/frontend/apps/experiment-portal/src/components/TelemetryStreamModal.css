@@ -4,6 +4,16 @@
     max-height: 92vh;
 }
 
+.modal-content.telemetry-stream-modal>.telemetry-stream {
+    padding: 16px 24px 24px;
+}
+
+@media (max-width: 600px) {
+    .modal-content.telemetry-stream-modal>.telemetry-stream {
+        padding: 12px 14px 16px;
+    }
+}
+
 .telemetry-stream {
     display: flex;
     flex-direction: column;

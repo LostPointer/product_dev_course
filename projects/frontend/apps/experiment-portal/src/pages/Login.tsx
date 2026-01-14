@@ -37,7 +37,24 @@ function Login() {
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault()
         setError(null)
-        loginMutation.mutate(formData)
+        if (!formData.username.trim()) {
+            const msg = 'Введите имя пользователя'
+            setError(msg)
+            notifyError(msg)
+            return
+        }
+
+        if (!formData.password) {
+            const msg = 'Введите пароль'
+            setError(msg)
+            notifyError(msg)
+            return
+        }
+
+        loginMutation.mutate({
+            username: formData.username.trim(),
+            password: formData.password,
+        })
     }
 
     return (

@@ -27,7 +27,7 @@ function SensorsList() {
     const [selectedSensorId, setSelectedSensorId] = useState<string | null>(null)
 
     // Загружаем список проектов для автоматического выбора первого проекта
-    const { data: projectsData } = useQuery({
+    const { data: projectsData, isLoading: projectsLoading } = useQuery({
         queryKey: ['projects'],
         queryFn: () => projectsApi.list(),
     })
@@ -68,7 +68,7 @@ function SensorsList() {
 
     return (
         <div className="sensors-list">
-            {isLoading && <Loading />}
+            {isLoading && <Loading message="Загрузка датчиков..." />}
             {error && (
                 <Error
                     message={
@@ -107,6 +107,7 @@ function SensorsList() {
                                         setActiveProjectId(id)
                                         setPage(1)
                                     }}
+                                    disabled={projectsLoading || isLoading}
                                 >
                                     <option value="">Выберите проект</option>
                                     {projectsData?.projects.map((project) => (
@@ -125,6 +126,7 @@ function SensorsList() {
                                         setStatus(e.target.value)
                                         setPage(1)
                                     }}
+                                    disabled={isLoading}
                                 >
                                     <option value="">Все</option>
                                     <option value="registering">Регистрация</option>
