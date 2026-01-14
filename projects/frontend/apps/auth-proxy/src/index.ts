@@ -268,6 +268,30 @@ export async function buildServer(config: Config) {
             method: request.method,
             url: request.url,
         }, 'Incoming request')
+
+        // SSE hardening: disable timeouts/buffering and set streaming headers early.
+        const accept = String(request.headers.accept || '')
+        const url = String(request.url || '')
+        const isSse =
+            accept.includes('text/event-stream') ||
+            url.startsWith('/api/v1/telemetry/stream')
+        if (isSse) {
+            if (!request.raw.socket) return
+            if (typeof request.raw.setTimeout === 'function') {
+                request.raw.setTimeout(0)
+            }
+            // Keep the socket open for streaming.
+            if (typeof request.raw.socket?.setTimeout === 'function') {
+                request.raw.socket.setTimeout(0)
+            }
+            if (typeof reply.raw.setTimeout === 'function') {
+                reply.raw.setTimeout(0)
+            }
+            if (!reply.raw.headersSent) {
+                reply.raw.setHeader('Cache-Control', 'no-cache, no-transform')
+                reply.raw.setHeader('X-Accel-Buffering', 'no')
+            }
+        }
     })
 
     // Hook для логирования ответов
@@ -285,6 +309,21 @@ export async function buildServer(config: Config) {
 
         request.log.info(logData, 'Request completed')
     })
+
+    function _originAllowed(origin: string | undefined): boolean {
+        if (!origin) return false
+        const normalized = origin.toLowerCase()
+        return config.corsOrigins.some((o) => o.toLowerCase() === normalized)
+    }
+
+    function _extractOriginFromReferer(referer: string | undefined): string | undefined {
+        if (!referer) return undefined
+        try {
+            return new URL(referer).origin
+        } catch {
+            return undefined
+        }
+    }
 
     // CSRF protection for cookie-authenticated, state-changing requests (double-submit cookie).
     // Exclusions:
@@ -305,6 +344,14 @@ export async function buildServer(config: Config) {
         )
         if (!hasSessionCookie) return
 
+        const origin = (request.headers.origin as string | undefined) || undefined
+        const referer = (request.headers.referer as string | undefined) || undefined
+        const originToCheck = origin || _extractOriginFromReferer(referer)
+        if (!originToCheck || !_originAllowed(originToCheck)) {
+            reply.status(403).send({ error: 'CSRF origin missing or invalid' })
+            return
+        }
+
         const csrfCookie = request.cookies?.csrf_token
         const hdr = request.headers['x-csrf-token'] as string | string[] | undefined
         const csrfHeader = Array.isArray(hdr) ? hdr[0] : hdr
@@ -317,7 +364,23 @@ export async function buildServer(config: Config) {
 
     // Логирование ответов от проксированных запросов через отдельный hook
     // Это нужно, так как onResponse в http-proxy может блокировать ответ
-    app.addHook('onSend', async (request, reply) => {
+    app.addHook('onSend', async (request, reply, payload) => {
+        const accept = String(request.headers.accept || '')
+        const url = String(request.url || '')
+        const contentType = String(reply.getHeader('content-type') || '')
+        const isSse =
+            contentType.includes('text/event-stream') ||
+            accept.includes('text/event-stream') ||
+            url.startsWith('/api/v1/telemetry/stream')
+
+        if (isSse && request.raw.socket && !reply.raw.headersSent) {
+            reply.header('Cache-Control', 'no-cache, no-transform')
+            reply.header('X-Accel-Buffering', 'no')
+            if (!contentType) {
+                reply.header('Content-Type', 'text/event-stream; charset=utf-8')
+            }
+        }
+
         // Логируем только проксированные запросы (не /health и не /auth/*)
         if (request.url.startsWith('/projects') || request.url.startsWith('/api/')) {
             const { traceId } = getTraceContext(request as FastifyRequest)
@@ -328,6 +391,7 @@ export async function buildServer(config: Config) {
                 trace_id: traceId,
             }, 'Sending response to client')
         }
+        return payload
     })
 
     // Hook для логирования ошибок прокси

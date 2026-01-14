@@ -1,0 +1,24 @@
+# Base image for backend services: OS deps + Poetry.
+FROM python:3.14-slim AS base
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# Install system dependencies required for building Python packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    postgresql-client \
+    libpq-dev \
+    gcc \
+    g++ \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install poetry
+RUN pip install --upgrade pip \
+    && pip install poetry \
+    && poetry config virtualenvs.create false
+
+ARG BASE_IMAGE_HASH=""
+LABEL org.opencontainers.image.base.dockerfile-hash=$BASE_IMAGE_HASH

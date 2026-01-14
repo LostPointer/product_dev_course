@@ -20,6 +20,11 @@ BACKEND_SERVICES := $(shell find $(BACKEND_SERVICES_DIR) -maxdepth 2 -name "pypr
 PYTHON ?= python3.14
 NODE ?= node
 FRONTEND_NODE_IMAGE ?= node:24-alpine
+DOCKER_BUILDKIT ?= 1
+COMPOSE_DOCKER_CLI_BUILD ?= 1
+DOCKER_BUILD_ENV := DOCKER_BUILDKIT=$(DOCKER_BUILDKIT) COMPOSE_DOCKER_CLI_BUILD=$(COMPOSE_DOCKER_CLI_BUILD)
+BACKEND_BASE_DOCKERFILE := projects/backend/Dockerfile.base
+BACKEND_BASE_HASH := $(shell sha256sum $(BACKEND_BASE_DOCKERFILE) 2>/dev/null | awk '{print $$1}')
 
 test: type-check test-backend test-telemetry-cli test-frontend
 
@@ -239,6 +244,7 @@ grafana-reset-password:
 # Запуск фронтенда, бэкенда, auth-service, auth-proxy и Grafana для локальной отладки
 dev-up:
 	@echo "Запуск фронтенда, бэкенда, auth-service, auth-proxy и Grafana для локальной отладки..."
+	@$(MAKE) backend-base-check || $(MAKE) backend-base
 	@if [ ! -f docker-compose.override.yml ]; then \
 		echo "⚠️  Файл docker-compose.override.yml не найден. Создаю из примера..."; \
 		cp docker-compose.override.yml.example docker-compose.override.yml 2>/dev/null || true; \
@@ -291,8 +297,61 @@ dev-restart: dev-down dev-up
 # Пересборка контейнеров и запуск dev-сервисов
 dev-rebuild: dev-down
 	@echo "Пересборка контейнеров dev-сервисов..."
-	docker-compose build --no-cache postgres auth-service experiment-service telemetry-ingest-service auth-proxy experiment-portal sensor-simulator loki alloy grafana
+	@$(MAKE) backend-base-no-cache
+	@set -e; \
+	if docker buildx version >/dev/null 2>&1; then \
+		$(DOCKER_BUILD_ENV) docker-compose build --no-cache postgres auth-service experiment-service telemetry-ingest-service auth-proxy experiment-portal sensor-simulator loki alloy grafana; \
+	else \
+		echo "⚠️  buildx не найден — docker-compose build без BuildKit."; \
+		DOCKER_BUILDKIT=0 COMPOSE_DOCKER_CLI_BUILD=0 docker-compose build --no-cache postgres auth-service experiment-service telemetry-ingest-service auth-proxy experiment-portal sensor-simulator loki alloy grafana; \
+	fi
 	@$(MAKE) dev-up
+
+backend-base:
+	@set -e; \
+	if [ "$(FORCE_BACKEND_BASE)" != "1" ] && docker image inspect backend-base:local >/dev/null 2>&1; then \
+		current_hash="$$(docker image inspect backend-base:local --format '{{ index .Config.Labels "org.opencontainers.image.base.dockerfile-hash" }}' 2>/dev/null)"; \
+		if [ "$$current_hash" = "$(BACKEND_BASE_HASH)" ] && [ -n "$$current_hash" ]; then \
+			echo "Базовый backend образ уже актуален — пропускаю сборку."; \
+			exit 0; \
+		fi; \
+	fi; \
+	echo "Сборка базового backend образа..."; \
+	if docker buildx version >/dev/null 2>&1; then \
+		$(DOCKER_BUILD_ENV) docker build -f $(BACKEND_BASE_DOCKERFILE) --build-arg BASE_IMAGE_HASH=$(BACKEND_BASE_HASH) -t backend-base:local projects/backend; \
+	else \
+		echo "⚠️  buildx не найден — собираю без BuildKit."; \
+		DOCKER_BUILDKIT=0 COMPOSE_DOCKER_CLI_BUILD=0 docker build -f $(BACKEND_BASE_DOCKERFILE) --build-arg BASE_IMAGE_HASH=$(BACKEND_BASE_HASH) -t backend-base:local projects/backend; \
+	fi
+
+backend-base-no-cache:
+	@echo "Пересборка базового backend образа без кэша..."
+	@set -e; \
+	if docker buildx version >/dev/null 2>&1; then \
+		$(DOCKER_BUILD_ENV) docker build --no-cache -f $(BACKEND_BASE_DOCKERFILE) --build-arg BASE_IMAGE_HASH=$(BACKEND_BASE_HASH) -t backend-base:local projects/backend; \
+	else \
+		echo "⚠️  buildx не найден — собираю без BuildKit."; \
+		DOCKER_BUILDKIT=0 COMPOSE_DOCKER_CLI_BUILD=0 docker build --no-cache -f $(BACKEND_BASE_DOCKERFILE) --build-arg BASE_IMAGE_HASH=$(BACKEND_BASE_HASH) -t backend-base:local projects/backend; \
+	fi
+
+backend-base-check:
+	@set -e; \
+	if ! docker image inspect backend-base:local >/dev/null 2>&1; then \
+		echo "❌ Базовый backend образ не найден."; \
+		exit 1; \
+	fi; \
+	current_hash="$$(docker image inspect backend-base:local --format '{{ index .Config.Labels "org.opencontainers.image.base.dockerfile-hash" }}' 2>/dev/null)"; \
+	if [ -z "$$current_hash" ]; then \
+		echo "⚠️  В образе нет метки хэша. Пересоберите: make backend-base"; \
+		exit 2; \
+	fi; \
+	if [ "$$current_hash" = "$(BACKEND_BASE_HASH)" ]; then \
+		echo "✅ Базовый backend образ актуален."; \
+	else \
+		echo "⚠️  Базовый backend образ устарел. Текущий хэш: $$current_hash"; \
+		echo "    Актуальный хэш: $(BACKEND_BASE_HASH)"; \
+		exit 3; \
+	fi
 
 # Просмотр логов всех dev-сервисов
 dev-logs:

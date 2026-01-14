@@ -159,7 +159,7 @@ describe('full cycle happy path (auth-proxy)', () => {
             const createProjectBlocked = await app.inject({
                 method: 'POST',
                 url: '/projects',
-                headers: { cookie: cookieHeader, 'content-type': 'application/json' },
+                headers: { origin: 'http://localhost:3000', cookie: cookieHeader, 'content-type': 'application/json' },
                 payload: JSON.stringify({ name: 'P1' }),
             })
             expect(createProjectBlocked.statusCode).toBe(403)
@@ -168,6 +168,7 @@ describe('full cycle happy path (auth-proxy)', () => {
                 method: 'POST',
                 url: '/projects',
                 headers: {
+                    origin: 'http://localhost:3000',
                     cookie: cookieHeader,
                     'x-csrf-token': String(csrf),
                     'content-type': 'application/json',
@@ -186,6 +187,7 @@ describe('full cycle happy path (auth-proxy)', () => {
                 method: 'POST',
                 url: `/api/v1/experiments?project_id=${projectId}`,
                 headers: {
+                    origin: 'http://localhost:3000',
                     cookie: cookieHeader,
                     'x-csrf-token': String(csrf),
                     'content-type': 'application/json',
@@ -207,6 +209,7 @@ describe('full cycle happy path (auth-proxy)', () => {
                 method: 'POST',
                 url: `/api/v1/experiments/${experimentId}/runs?project_id=${projectId}`,
                 headers: {
+                    origin: 'http://localhost:3000',
                     cookie: cookieHeader,
                     'x-csrf-token': String(csrf),
                     'content-type': 'application/json',
@@ -221,6 +224,7 @@ describe('full cycle happy path (auth-proxy)', () => {
                 method: 'POST',
                 url: `/api/v1/sensors?project_id=${projectId}`,
                 headers: {
+                    origin: 'http://localhost:3000',
                     cookie: cookieHeader,
                     'x-csrf-token': String(csrf),
                     'content-type': 'application/json',
@@ -235,6 +239,7 @@ describe('full cycle happy path (auth-proxy)', () => {
                 method: 'PATCH',
                 url: `/api/v1/runs/${runId}?project_id=${projectId}`,
                 headers: {
+                    origin: 'http://localhost:3000',
                     cookie: cookieHeader,
                     'x-csrf-token': String(csrf),
                     'content-type': 'application/json',
@@ -248,6 +253,7 @@ describe('full cycle happy path (auth-proxy)', () => {
                 method: 'POST',
                 url: `/api/v1/runs/${runId}/capture-sessions?project_id=${projectId}`,
                 headers: {
+                    origin: 'http://localhost:3000',
                     cookie: cookieHeader,
                     'x-csrf-token': String(csrf),
                     'content-type': 'application/json',
@@ -293,6 +299,7 @@ describe('full cycle happy path (auth-proxy)', () => {
                 method: 'POST',
                 url: `/api/v1/runs/${runId}/capture-sessions/${captureSessionId}/stop?project_id=${projectId}`,
                 headers: {
+                    origin: 'http://localhost:3000',
                     cookie: cookieHeader,
                     'x-csrf-token': String(csrf),
                     'content-type': 'application/json',
@@ -305,6 +312,7 @@ describe('full cycle happy path (auth-proxy)', () => {
                 method: 'PATCH',
                 url: `/api/v1/runs/${runId}?project_id=${projectId}`,
                 headers: {
+                    origin: 'http://localhost:3000',
                     cookie: cookieHeader,
                     'x-csrf-token': String(csrf),
                     'content-type': 'application/json',

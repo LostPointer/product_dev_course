@@ -1,34 +1,17 @@
-FROM python:3.14-slim AS base
+FROM backend-base:local AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# Install system dependencies required for building Python packages
-# postgresql-dev provides pg_config needed for psycopg2
-# gcc, g++, python3-dev needed for compiling C/Cython extensions (asyncpg)
-# libpq-dev provides PostgreSQL client libraries
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    postgresql-client \
-    libpq-dev \
-    gcc \
-    g++ \
-    python3-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install poetry
-RUN pip install --upgrade pip \
-    && pip install poetry \
-    && poetry config virtualenvs.create false
-
 # Copy backend_common directory first (needed for backend-common dependency)
 COPY common ./common
-# Copy dependency files (for better layer caching)
-COPY services/experiment-service/pyproject.toml services/experiment-service/README.md ./
 
-# Fix path to backend-common in pyproject.toml (relative path changes after copying to /app)
-RUN sed -i 's|path = "../../common"|path = "./common"|g' pyproject.toml
+WORKDIR /app/services/experiment-service
+
+# Copy dependency files (for better layer caching)
+COPY services/experiment-service/pyproject.toml services/experiment-service/poetry.lock services/experiment-service/README.md ./
 
 # Install dependencies (including dev dependencies for hot-reload support)
 # In production, this can be optimized by using --no-dev flag
@@ -40,7 +23,7 @@ COPY services/experiment-service/bin ./bin
 COPY services/experiment-service/migrations ./migrations
 
 # Set PYTHONPATH to include src directory
-ENV PYTHONPATH=/app/src
+ENV PYTHONPATH=/app/services/experiment-service/src
 
 EXPOSE 8002
 

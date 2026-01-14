@@ -3,7 +3,7 @@ FROM node:24-alpine AS base
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install --ignore-scripts
+RUN npm ci --ignore-scripts --no-audit --no-fund
 
 # Development stage: for hot-reload with ts-node-dev
 FROM base AS development
@@ -27,7 +27,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 COPY --from=build /app/package*.json ./
-RUN npm install --omit=dev --ignore-scripts
+RUN npm install --omit=dev --ignore-scripts --no-audit --no-fund
 
 COPY --from=build /app/dist ./dist
 

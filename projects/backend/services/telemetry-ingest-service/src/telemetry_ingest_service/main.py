@@ -5,11 +5,15 @@ from pathlib import Path
 from typing import Any
 
 from aiohttp import web
-from aiohttp_cors import ResourceOptions, setup as cors_setup
 
+from backend_common.aiohttp_app import (
+    add_cors_to_routes,
+    add_healthcheck,
+    add_openapi_spec,
+    create_base_app,
+)
 from backend_common.db.pool import close_pool_service as close_pool, init_pool_service
 from backend_common.logging_config import configure_logging
-from backend_common.middleware.trace import create_trace_middleware
 
 from telemetry_ingest_service.api.routes.telemetry import routes as telemetry_routes
 from telemetry_ingest_service.settings import settings
@@ -25,42 +29,17 @@ async def init_pool(_app: Any = None) -> None:
     await init_pool_service(_app, settings)
 
 
-async def healthcheck(_request: web.Request) -> web.Response:
-    return web.json_response({"status": "ok", "service": settings.app_name, "env": settings.env})
-
-
-async def openapi_spec(_request: web.Request) -> web.StreamResponse:
-    return web.FileResponse(OPENAPI_PATH, headers={"Content-Type": "application/yaml"})
-
-
 def create_app() -> web.Application:
-    app = web.Application()
+    app, cors = create_base_app(settings)
 
-    trace_middleware = create_trace_middleware(settings.app_name)
-    app.middlewares.append(trace_middleware)
-
-    cors = cors_setup(
-        app,
-        defaults={
-            origin: ResourceOptions(
-                allow_credentials=True,
-                expose_headers="*",
-                allow_headers="*",
-                allow_methods="*",
-            )
-            for origin in settings.cors_allowed_origins
-        },
-    )
-
-    app.router.add_get("/health", healthcheck)
-    app.router.add_get("/openapi.yaml", openapi_spec)
+    add_healthcheck(app, settings)
+    add_openapi_spec(app, OPENAPI_PATH)
     app.add_routes(telemetry_routes)
 
     app.on_startup.append(init_pool)
     app.on_cleanup.append(close_pool)
 
-    for route in list(app.router.routes()):
-        cors.add(route)
+    add_cors_to_routes(app, cors)
 
     return app
 

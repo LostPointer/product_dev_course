@@ -125,6 +125,7 @@ describe('full cycle integration (auth-proxy)', () => {
                 method: 'POST',
                 url: '/api/v1/experiments',
                 headers: {
+                    origin: 'http://localhost:3000',
                     cookie: cookieHeader,
                     'content-type': 'application/json',
                 },
@@ -137,6 +138,7 @@ describe('full cycle integration (auth-proxy)', () => {
                 method: 'POST',
                 url: '/api/v1/experiments',
                 headers: {
+                    origin: 'http://localhost:3000',
                     cookie: cookieHeader,
                     'x-csrf-token': String(csrf),
                     'content-type': 'application/json',
