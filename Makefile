@@ -359,7 +359,7 @@ dev-rebuild-changed:
 			$(MAKE) backend-base-check || $(MAKE) backend-base; \
 		fi; \
 	fi; \
-	@echo "Пересборка измененных сервисов: $$services"; \
+	echo "Пересборка измененных сервисов: $$services"; \
 	if docker buildx version >/dev/null 2>&1; then \
 		$(DOCKER_BUILD_ENV) docker-compose build $$services; \
 	else \
