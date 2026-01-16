@@ -8,7 +8,7 @@
 .page-header h2 {
   font-size: 32px;
   font-weight: 600;
-  color: #333;
+  color: var(--text);
 }
 
 .filters-grid {
@@ -32,32 +32,32 @@
 
 .experiment-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--elevation-2);
 }
 
 .experiment-description {
-  color: #666;
+  color: var(--text-secondary);
   margin-bottom: 12px;
   line-height: 1.5;
 }
 
 .experiment-type {
   margin-bottom: 12px;
-  color: #495057;
+  color: var(--text-secondary);
   font-size: 14px;
 }
 
 .experiment-meta {
   margin-top: 16px;
   padding-top: 12px;
-  border-top: 1px solid #eee;
-  color: #999;
+  border-top: 1px solid var(--outline);
+  color: var(--text-secondary);
 }
 
 .empty-state {
   text-align: center;
   padding: 60px 20px;
-  color: #999;
+  color: var(--text-secondary);
 }
 
 .pagination {
@@ -67,4 +67,3 @@
   gap: 16px;
   margin-top: 32px;
 }
-

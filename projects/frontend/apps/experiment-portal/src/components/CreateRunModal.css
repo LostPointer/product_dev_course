@@ -4,7 +4,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: rgba(0, 0, 0, 0.5);
+    background-color: rgba(28, 27, 31, 0.45);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -13,9 +13,9 @@
 }
 
 .modal-content {
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--elevation-3);
     max-width: 600px;
     width: 100%;
     max-height: 90vh;
@@ -27,14 +27,14 @@
     justify-content: space-between;
     align-items: center;
     padding: 20px 24px;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid var(--outline);
 }
 
 .modal-header h2 {
     margin: 0;
     font-size: 20px;
     font-weight: 600;
-    color: #333;
+    color: var(--text);
 }
 
 .modal-close {
@@ -42,7 +42,7 @@
     border: none;
     font-size: 32px;
     line-height: 1;
-    color: #666;
+    color: var(--text-secondary);
     cursor: pointer;
     padding: 0;
     width: 32px;
@@ -55,7 +55,7 @@
 }
 
 .modal-close:hover:not(:disabled) {
-    background-color: #f0f0f0;
+    background-color: var(--surface-variant);
 }
 
 .modal-close:disabled {
@@ -75,15 +75,15 @@
     display: block;
     margin-bottom: 8px;
     font-weight: 500;
-    color: #333;
+    color: var(--text-secondary);
 }
 
 .modal-form .form-group input,
 .modal-form .form-group textarea {
     width: 100%;
     padding: 12px 16px;
-    border: 1px solid #ddd;
-    border-radius: 8px;
+    border: 1px solid var(--outline);
+    border-radius: var(--radius-sm);
     font-size: 16px;
     transition: border-color 0.2s, box-shadow 0.2s;
     font-family: inherit;
@@ -98,13 +98,13 @@
 .modal-form .form-group input:focus,
 .modal-form .form-group textarea:focus {
     outline: none;
-    border-color: #007bff;
-    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(103, 80, 164, 0.2);
 }
 
 .modal-form .form-group input:disabled,
 .modal-form .form-group textarea:disabled {
-    background-color: #f5f5f5;
+    background-color: var(--surface-variant);
     cursor: not-allowed;
 }
 
@@ -112,11 +112,11 @@
     display: block;
     margin-top: 4px;
     font-size: 12px;
-    color: #666;
+    color: var(--text-secondary);
 }
 
 .modal-form .required {
-    color: #dc3545;
+    color: var(--error);
 }
 
 .modal-actions {
@@ -125,12 +125,12 @@
     justify-content: flex-end;
     margin-top: 24px;
     padding-top: 20px;
-    border-top: 1px solid #eee;
+    border-top: 1px solid var(--outline);
 }
 
 .modal-form .error {
-    background-color: #f8d7da;
-    color: #721c24;
+    background-color: var(--error-container);
+    color: var(--error);
     padding: 12px 16px;
     border-radius: 4px;
     margin-bottom: 20px;
@@ -150,11 +150,11 @@
     margin: 0 0 1rem 0;
     font-size: 1.125rem;
     font-weight: 600;
-    color: #333;
+    color: var(--text);
 }
 
 .empty-message {
-    color: #666;
+    color: var(--text-secondary);
     font-style: italic;
     padding: 1rem;
     text-align: center;
@@ -173,13 +173,13 @@
 .members-table td {
     padding: 12px;
     text-align: left;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid var(--outline);
 }
 
 .members-table th {
-    background-color: #f8f9fa;
+    background-color: var(--surface-variant);
     font-weight: 600;
-    color: #333;
+    color: var(--text-secondary);
     font-size: 0.875rem;
     text-transform: uppercase;
 }
@@ -189,7 +189,7 @@
 }
 
 .members-table tr:hover {
-    background-color: #f8f9fa;
+    background-color: var(--surface-variant);
 }
 
 .badge {
@@ -199,17 +199,17 @@
     font-size: 0.75rem;
     font-weight: 500;
     margin-left: 8px;
-    background-color: #e9ecef;
-    color: #495057;
+    background-color: var(--surface-variant);
+    color: var(--text-secondary);
 }
 
 .badge-primary {
-    background-color: #007bff;
-    color: white;
+    background-color: var(--primary-container);
+    color: var(--primary);
 }
 
 .text-muted {
-    color: #6c757d;
+    color: var(--text-secondary);
     font-size: 0.875rem;
 }
 
@@ -219,13 +219,13 @@
 }
 
 .btn-danger {
-    background-color: #dc3545;
+    background-color: var(--error);
     color: white;
     border: none;
 }
 
 .btn-danger:hover:not(:disabled) {
-    background-color: #c82333;
+    background-color: #9b1f1a;
 }
 
 .btn-danger:disabled {
@@ -236,14 +236,14 @@
 .add-member-form {
     margin-top: 2rem;
     padding-top: 2rem;
-    border-top: 2px solid #eee;
+    border-top: 2px solid var(--outline);
 }
 
 .add-member-form h3 {
     margin: 0 0 1rem 0;
     font-size: 1.125rem;
     font-weight: 600;
-    color: #333;
+    color: var(--text);
 }
 
 .project-card-header {
@@ -273,11 +273,11 @@
     margin: 0 0 16px 0;
     font-size: 18px;
     font-weight: 600;
-    color: #333;
+    color: var(--text);
 }
 
 .user-projects-section {
-    border-top: 1px solid #eee;
+    border-top: 1px solid var(--outline);
 }
 
 .info-grid {
@@ -294,19 +294,19 @@
 
 .info-label {
     font-weight: 500;
-    color: #666;
+    color: var(--text-secondary);
     min-width: 150px;
 }
 
 .info-value {
-    color: #333;
+    color: var(--text);
     flex: 1;
 }
 
 .info-value.mono {
     font-family: 'Courier New', monospace;
     font-size: 14px;
-    background-color: #f8f9fa;
+    background-color: var(--surface-variant);
     padding: 4px 8px;
     border-radius: 4px;
 }
@@ -325,13 +325,13 @@
 .user-profile-modal .projects-list td {
     padding: 12px 16px;
     text-align: left;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid var(--outline);
 }
 
 .user-profile-modal .projects-list th {
-    background-color: #f8f9fa;
+    background-color: var(--surface-variant);
     font-weight: 600;
-    color: #555;
+    color: var(--text-secondary);
     font-size: 14px;
     position: sticky;
     top: 0;
@@ -339,19 +339,19 @@
 }
 
 .user-profile-modal .projects-list tr:nth-child(even) {
-    background-color: #fcfcfc;
+    background-color: #faf8fc;
 }
 
 .user-profile-modal .projects-list tr:hover {
-    background-color: #f0f0f0;
+    background-color: var(--surface-variant);
 }
 
 .badge-info {
-    background-color: #17a2b8;
-    color: white;
+    background-color: var(--info-container);
+    color: var(--info);
 }
 
 .text-muted {
-    color: #6c757d;
+    color: var(--text-secondary);
     font-style: italic;
 }

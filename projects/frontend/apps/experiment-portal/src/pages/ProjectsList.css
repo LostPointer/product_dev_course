@@ -20,7 +20,7 @@
 
 .project-card:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--elevation-2);
 }
 
 .project-card-header {
@@ -36,7 +36,7 @@
     min-width: 0;
     font-size: 1.25rem;
     font-weight: 600;
-    color: var(--primary-color, #007bff);
+    color: var(--primary);
 }
 
 .project-card-actions {
@@ -48,7 +48,7 @@
 .project-description {
     flex: 1;
     margin: 0 0 1rem 0;
-    color: var(--text-secondary, #666);
+    color: var(--text-secondary);
     line-height: 1.5;
 }
 
@@ -57,10 +57,10 @@
     justify-content: space-between;
     align-items: center;
     padding-top: 1rem;
-    border-top: 1px solid var(--border-color, #e0e0e0);
+    border-top: 1px solid var(--outline);
 }
 
 .project-meta {
     font-size: 0.875rem;
-    color: var(--text-secondary, #666);
+    color: var(--text-secondary);
 }

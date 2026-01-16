@@ -20,7 +20,7 @@
 
 .sensor-card:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: var(--elevation-2);
 }
 
 .sensor-info {
@@ -38,23 +38,23 @@
 }
 
 .info-row strong {
-    color: #666;
+    color: var(--text-secondary);
     font-weight: 500;
 }
 
 .info-row span {
-    color: #333;
+    color: var(--text);
 }
 
 .sensor-meta {
     margin-top: auto;
     padding-top: 12px;
-    border-top: 1px solid #eee;
+    border-top: 1px solid var(--outline);
 }
 
 .badge-warning {
-    background-color: #ffc107;
-    color: #000;
+    background-color: var(--warning-container);
+    color: #7a4900;
 }
 
 .mono {

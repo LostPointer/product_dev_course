@@ -15,35 +15,36 @@
 .runs-table table {
   width: 100%;
   border-collapse: collapse;
-  background: white;
-  border-radius: 8px;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
   overflow: hidden;
+  box-shadow: var(--elevation-1);
 }
 
 .runs-table thead {
-  background-color: #f8f9fa;
+  background-color: var(--surface-variant);
 }
 
 .runs-table th {
   padding: 12px;
   text-align: left;
   font-weight: 600;
-  color: #333;
-  border-bottom: 2px solid #dee2e6;
+  color: var(--text-secondary);
+  border-bottom: 2px solid var(--outline);
 }
 
 .runs-table td {
   padding: 12px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--outline);
 }
 
 .runs-table tbody tr:hover {
-  background-color: #f8f9fa;
+  background-color: var(--surface-variant);
 }
 
 .run-link {
   font-weight: 500;
-  color: #007bff;
+  color: var(--primary);
 }
 
 .run-link:hover {
@@ -58,18 +59,18 @@
 
 .param-item {
   padding: 2px 6px;
-  background-color: #e9ecef;
-  border-radius: 4px;
+  background-color: var(--surface-variant);
+  border-radius: var(--radius-pill);
   font-size: 11px;
-  color: #495057;
+  color: var(--text-secondary);
 }
 
 .param-more {
   padding: 2px 6px;
-  background-color: #dee2e6;
-  border-radius: 4px;
+  background-color: var(--surface-variant);
+  border-radius: var(--radius-pill);
   font-size: 11px;
-  color: #6c757d;
+  color: var(--text-secondary);
 }
 
 .btn-sm {
