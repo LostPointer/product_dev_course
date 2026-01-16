@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import Plotly from 'plotly.js-dist-min'
 import type { Sensor, TelemetryStreamRecord } from '../types'
 import { telemetryApi } from '../api/client'
 import { createSSEParser } from '../utils/sse'
@@ -11,10 +12,23 @@ type TelemetryPanelProps = {
     title: string
     sensors: Sensor[]
     onRemove: () => void
+    dragHandleProps?: React.ButtonHTMLAttributes<HTMLButtonElement>
+    onSizeChange?: (size: { width: number; height: number }) => void
 }
 
 type StreamStatus = 'idle' | 'connecting' | 'streaming' | 'error'
 type ValueMode = 'physical' | 'raw'
+type TimeWindowSeconds = 5 | 10 | 30 | 60 | 120 | 300 | 600
+
+type TelemetryPanelState = {
+    title: string
+    selectedSensorIds: string[]
+    valueMode: ValueMode
+    maxPoints: number
+    timeWindowSeconds: TimeWindowSeconds
+    useLatestAnchor: boolean
+    size?: { width: number; height: number }
+}
 
 const SERIES_COLORS = [
     '#2563eb',
@@ -26,83 +40,169 @@ const SERIES_COLORS = [
     '#ca8a04',
     '#0ea5e9',
 ]
+const TIME_WINDOWS_SECONDS = [5, 10, 30, 60, 120, 300, 600] as const
+
+function formatWindow(seconds: number) {
+    if (seconds < 60) return `${seconds} сек`
+    if (seconds % 60 === 0) return `${seconds / 60} мин`
+    return `${seconds} сек`
+}
 
 function clamp(n: number, min: number, max: number) {
     return Math.max(min, Math.min(max, n))
 }
 
-function buildLinePath(values: number[], min: number, max: number, width: number, height: number) {
-    if (values.length === 0) return ''
-    const margin = { left: 42, right: 14, top: 12, bottom: 24 }
-    const plotW = Math.max(1, width - margin.left - margin.right)
-    const plotH = Math.max(1, height - margin.top - margin.bottom)
-    const maxLen = Math.max(1, values.length)
-    const stepX = maxLen === 1 ? 0 : plotW / (maxLen - 1)
-    const span = max === min ? 1 : max - min
-
-    const points = values.map((v, i) => {
-        const x = margin.left + i * stepX
-        const y = margin.top + ((max - v) / span) * plotH
-        return [x, y] as const
-    })
-
-    const [x0, y0] = points[0]
-    const rest = points.slice(1).map(([x, y]) => `L ${x.toFixed(2)} ${y.toFixed(2)}`).join(' ')
-    return `M ${x0.toFixed(2)} ${y0.toFixed(2)} ${rest}`.trim()
+function parseTimestampMs(value: string) {
+    const parsed = Date.parse(value)
+    return Number.isFinite(parsed) ? parsed : null
 }
 
-function buildAlignedPaths(
-    series: { id: string; values: number[] }[],
-    width: number,
-    height: number
-) {
-    const allValues = series.flatMap((s) => s.values)
-    if (allValues.length === 0) return { min: 0, max: 0, paths: [] as string[] }
-    const min = Math.min(...allValues)
-    const max = Math.max(...allValues)
-    const margin = { left: 42, right: 14, top: 12, bottom: 24 }
-    const plotW = Math.max(1, width - margin.left - margin.right)
-    const plotH = Math.max(1, height - margin.top - margin.bottom)
-    const maxLen = Math.max(1, ...series.map((s) => s.values.length))
-    const stepX = maxLen === 1 ? 0 : plotW / (maxLen - 1)
-    const span = max === min ? 1 : max - min
 
-    const paths = series.map((s) => {
-        if (s.values.length === 0) return ''
-        const offset = maxLen - s.values.length
-        const points = s.values.map((v, i) => {
-            const x = margin.left + (offset + i) * stepX
-            const y = margin.top + ((max - v) / span) * plotH
-            return [x, y] as const
-        })
-        const [x0, y0] = points[0]
-        const rest = points.slice(1).map(([x, y]) => `L ${x.toFixed(2)} ${y.toFixed(2)}`).join(' ')
-        return `M ${x0.toFixed(2)} ${y0.toFixed(2)} ${rest}`.trim()
-    })
-
-    return { min, max, paths }
-}
-
-export default function TelemetryPanel({ panelId, title, sensors, onRemove }: TelemetryPanelProps) {
+export default function TelemetryPanel({
+    panelId,
+    title,
+    sensors,
+    onRemove,
+    dragHandleProps,
+    onSizeChange,
+}: TelemetryPanelProps) {
     const [panelTitle, setPanelTitle] = useState(title)
     const [selectedSensorIds, setSelectedSensorIds] = useState<string[]>([])
     const [status, setStatus] = useState<StreamStatus>('idle')
     const [valueMode, setValueMode] = useState<ValueMode>('physical')
     const [maxPoints, setMaxPoints] = useState(200)
+    const [timeWindowSeconds, setTimeWindowSeconds] = useState<TimeWindowSeconds>(300)
+    const [useLatestAnchor, setUseLatestAnchor] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [recordsBySensor, setRecordsBySensor] = useState<Record<string, TelemetryStreamRecord[]>>({})
     const [showSettings, setShowSettings] = useState(false)
+    const [panelSize, setPanelSize] = useState<{ width: number; height: number } | null>(null)
 
     const abortControllers = useRef<Record<string, AbortController>>({})
     const runningRef = useRef<Record<string, boolean>>({})
+    const plotRef = useRef<HTMLDivElement | null>(null)
+    const panelRef = useRef<HTMLDivElement | null>(null)
+    const stateLoadedRef = useRef(false)
+    const skipInitialSaveRef = useRef(true)
+
+    const storageKey = `telemetry_panel_state_${panelId}`
+
+    const persistPanelState = (nextSelectedSensorIds?: string[]) => {
+        if (typeof window === 'undefined') return
+        const payload: TelemetryPanelState = {
+            title: panelTitle,
+            selectedSensorIds: nextSelectedSensorIds ?? selectedSensorIds,
+            valueMode,
+            maxPoints,
+            timeWindowSeconds,
+            useLatestAnchor,
+            size: panelSize ?? undefined,
+        }
+        window.localStorage.setItem(storageKey, JSON.stringify(payload))
+        console.debug('[TelemetryPanel] saved state (manual)', { panelId, storageKey, payload })
+    }
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return
+        const raw = window.localStorage.getItem(storageKey)
+        if (!raw) {
+            console.debug('[TelemetryPanel] no saved state', { panelId, storageKey })
+            stateLoadedRef.current = true
+            skipInitialSaveRef.current = true
+            return
+        }
+        try {
+            const parsed = JSON.parse(raw) as Partial<TelemetryPanelState>
+            console.debug('[TelemetryPanel] loaded state', { panelId, storageKey, parsed })
+            if (typeof parsed.title === 'string') setPanelTitle(parsed.title)
+            if (Array.isArray(parsed.selectedSensorIds)) {
+                const next = parsed.selectedSensorIds.filter((id) => typeof id === 'string')
+                console.debug('[TelemetryPanel] restore selected sensors', { panelId, next })
+                setSelectedSensorIds(next)
+            }
+            if (parsed.valueMode === 'physical' || parsed.valueMode === 'raw') setValueMode(parsed.valueMode)
+            if (typeof parsed.maxPoints === 'number' && Number.isFinite(parsed.maxPoints)) {
+                setMaxPoints(clamp(parsed.maxPoints, 50, 2000))
+            }
+            if (
+                typeof parsed.timeWindowSeconds === 'number' &&
+                TIME_WINDOWS_SECONDS.includes(parsed.timeWindowSeconds as TimeWindowSeconds)
+            ) {
+                setTimeWindowSeconds(parsed.timeWindowSeconds as TimeWindowSeconds)
+            } else if (typeof (parsed as { timeWindowMinutes?: number }).timeWindowMinutes === 'number') {
+                const seconds = (parsed as { timeWindowMinutes: number }).timeWindowMinutes * 60
+                if (TIME_WINDOWS_SECONDS.includes(seconds as TimeWindowSeconds)) {
+                    setTimeWindowSeconds(seconds as TimeWindowSeconds)
+                }
+            }
+            if (typeof parsed.useLatestAnchor === 'boolean') {
+                setUseLatestAnchor(parsed.useLatestAnchor)
+            }
+            if (
+                parsed.size &&
+                typeof parsed.size.width === 'number' &&
+                typeof parsed.size.height === 'number'
+            ) {
+                setPanelSize({
+                    width: Math.max(280, Math.round(parsed.size.width)),
+                    height: Math.max(240, Math.round(parsed.size.height)),
+                })
+            }
+        } catch {
+            // ignore malformed local storage
+        } finally {
+            stateLoadedRef.current = true
+            skipInitialSaveRef.current = true
+        }
+    }, [storageKey])
 
     useEffect(() => {
         if (!panelTitle) setPanelTitle(title)
     }, [title, panelTitle])
 
     useEffect(() => {
-        setSelectedSensorIds((prev) => prev.filter((id) => sensors.some((sensor) => sensor.id === id)))
+        if (sensors.length === 0) return
+        setSelectedSensorIds((prev) => {
+            const next = prev.filter((id) => sensors.some((sensor) => sensor.id === id))
+            if (next.length !== prev.length) {
+                console.debug('[TelemetryPanel] filtered sensors', {
+                    panelId,
+                    before: prev,
+                    after: next,
+                    available: sensors.map((sensor) => sensor.id),
+                })
+            }
+            return next
+        })
     }, [sensors])
+
+    useEffect(() => {
+        console.debug('[TelemetryPanel] selected sensors state', { panelId, selectedSensorIds })
+    }, [panelId, selectedSensorIds])
+
+    useEffect(() => {
+        if (typeof window === 'undefined' || !stateLoadedRef.current) return
+        if (skipInitialSaveRef.current) {
+            skipInitialSaveRef.current = false
+            console.debug('[TelemetryPanel] skip initial save', { panelId, storageKey })
+            return
+        }
+        const payload: TelemetryPanelState = {
+            title: panelTitle,
+            selectedSensorIds,
+            valueMode,
+            maxPoints,
+            timeWindowSeconds,
+            useLatestAnchor,
+            size: panelSize ?? undefined,
+        }
+        window.localStorage.setItem(storageKey, JSON.stringify(payload))
+        console.debug('[TelemetryPanel] saved state', { panelId, storageKey, payload })
+    }, [panelTitle, selectedSensorIds, valueMode, maxPoints, timeWindowSeconds, useLatestAnchor, panelSize, storageKey])
+
+    useEffect(() => {
+        if (panelSize) onSizeChange?.(panelSize)
+    }, [panelSize, onSizeChange])
 
     useEffect(() => {
         setRecordsBySensor((prev) => {
@@ -122,13 +222,41 @@ export default function TelemetryPanel({ panelId, title, sensors, onRemove }: Te
         }
     }, [])
 
+    useEffect(() => {
+        const element = panelRef.current
+        if (!element || typeof ResizeObserver === 'undefined') return
+
+        const updateSize = () => {
+            const rect = element.getBoundingClientRect()
+            const width = Math.max(280, Math.round(rect.width))
+            const height = Math.max(240, Math.round(rect.height))
+            setPanelSize((prev) => (prev && prev.width === width && prev.height === height ? prev : { width, height }))
+        }
+
+        updateSize()
+        const observer = new ResizeObserver(updateSize)
+        observer.observe(element)
+
+        return () => observer.disconnect()
+    }, [])
+
     const addSensor = (sensorId: string) => {
         if (!sensorId) return
-        setSelectedSensorIds((prev) => (prev.includes(sensorId) ? prev : [...prev, sensorId]))
+        console.debug('[TelemetryPanel] add sensor', { panelId, sensorId })
+        setSelectedSensorIds((prev) => {
+            if (prev.includes(sensorId)) return prev
+            const next = [...prev, sensorId]
+            persistPanelState(next)
+            return next
+        })
     }
 
     const removeSensor = (sensorId: string) => {
-        setSelectedSensorIds((prev) => prev.filter((id) => id !== sensorId))
+        setSelectedSensorIds((prev) => {
+            const next = prev.filter((id) => id !== sensorId)
+            persistPanelState(next)
+            return next
+        })
     }
 
     const stopStreams = () => {
@@ -206,26 +334,142 @@ export default function TelemetryPanel({ panelId, title, sensors, onRemove }: Te
     }, [selectedSensorIds, sensors])
 
     const seriesData = useMemo(() => {
+        const allRecords = filteredSensors.flatMap((sensor) => recordsBySensor[sensor.id] || [])
+        const latestTimestampMs = allRecords.reduce((latest, record) => {
+            const ts = parseTimestampMs(record.timestamp)
+            if (ts === null) return latest
+            return ts > latest ? ts : latest
+        }, Number.NEGATIVE_INFINITY)
+        const nowMs = Date.now()
+        const windowMs = timeWindowSeconds * 1000
+        const anchorMs = useLatestAnchor ? latestTimestampMs : nowMs
+        const hasWindowAnchor = Number.isFinite(anchorMs) && anchorMs > 0
+
         return filteredSensors.map((sensor) => {
             const records = recordsBySensor[sensor.id] || []
-            const values = records
-                .map((r) => (valueMode === 'physical' ? r.physical_value : r.raw_value))
-                .filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
-                .slice(-50)
-            return { id: sensor.id, name: sensor.name, values }
+            const points = records
+                .map((r) => ({
+                    x: r.timestamp,
+                    y: valueMode === 'physical' ? r.physical_value : r.raw_value,
+                    ts: parseTimestampMs(r.timestamp),
+                }))
+                .filter((point): point is { x: string; y: number; ts: number } => {
+                    if (typeof point.y !== 'number' || !Number.isFinite(point.y)) return false
+                    return typeof point.ts === 'number' && Number.isFinite(point.ts)
+                })
+                .filter((point) => {
+                    if (!hasWindowAnchor) return true
+                    return point.ts >= anchorMs - windowMs
+                })
+                .slice(-maxPoints)
+            return {
+                id: sensor.id,
+                name: sensor.name,
+                x: points.map((point) => point.x),
+                y: points.map((point) => point.y),
+            }
         })
-    }, [filteredSensors, recordsBySensor, valueMode])
+    }, [filteredSensors, recordsBySensor, valueMode, maxPoints, timeWindowSeconds, useLatestAnchor])
 
-    const chartWidth = 640
-    const chartHeight = 190
-    const { min, max, paths } = useMemo(() => buildAlignedPaths(seriesData, chartWidth, chartHeight), [seriesData])
+    const plotlyData = useMemo(
+        () =>
+            seriesData.map((series, index) => ({
+                x: series.x,
+                y: series.y,
+                type: 'scattergl' as const,
+                mode: 'lines' as const,
+                name: series.name,
+                line: {
+                    color: SERIES_COLORS[index % SERIES_COLORS.length],
+                    width: 2,
+                },
+                hovertemplate: '%{x}<br>%{y:.3f}<extra></extra>',
+            })),
+        [seriesData]
+    )
+
+    const hasData = useMemo(() => seriesData.some((series) => series.y.length > 0), [seriesData])
+
+    const plotlyLayout = useMemo(
+        () => ({
+            autosize: true,
+            margin: { l: 42, r: 14, t: 12, b: 24 },
+            showlegend: false,
+            paper_bgcolor: 'rgba(0,0,0,0)',
+            plot_bgcolor: 'rgba(15, 23, 42, 0.04)',
+            xaxis: {
+                showgrid: true,
+                zeroline: false,
+                gridcolor: 'rgba(15, 23, 42, 0.12)',
+                tickfont: { size: 10, color: '#475569' },
+                ticks: 'outside' as const,
+                tickcolor: 'rgba(15, 23, 42, 0.12)',
+            },
+            yaxis: {
+                showgrid: true,
+                zeroline: false,
+                gridcolor: 'rgba(15, 23, 42, 0.12)',
+                tickfont: { size: 10, color: '#475569' },
+                ticks: 'outside' as const,
+                tickcolor: 'rgba(15, 23, 42, 0.12)',
+            },
+        }),
+        []
+    )
+
+    const plotlyConfig = useMemo(
+        () => ({
+            responsive: true,
+            displayModeBar: false,
+            displaylogo: false,
+        }),
+        []
+    )
+
+    useEffect(() => {
+        const element = plotRef.current
+        if (!element) return
+        const data = hasData ? plotlyData : []
+        Plotly.react(element, data, plotlyLayout, plotlyConfig)
+    }, [plotlyData, plotlyLayout, plotlyConfig, hasData])
+
+    useEffect(() => {
+        const element = plotRef.current
+        if (!element || typeof ResizeObserver === 'undefined') return
+        const observer = new ResizeObserver(() => {
+            Plotly.Plots.resize(element)
+        })
+        observer.observe(element)
+        return () => observer.disconnect()
+    }, [])
+
+    useEffect(() => {
+        return () => {
+            const element = plotRef.current
+            if (element) Plotly.purge(element)
+        }
+    }, [])
 
     const canStart = selectedSensorIds.length > 0 && status !== 'connecting'
     const availableSensors = sensors.filter((s) => !selectedSensorIds.includes(s.id))
 
     return (
-        <div className="telemetry-panel card" data-panel-id={panelId}>
+        <div
+            ref={panelRef}
+            className="telemetry-panel card"
+            data-panel-id={panelId}
+            style={panelSize ? { width: panelSize.width, height: panelSize.height } : undefined}
+        >
             <div className="telemetry-panel__header">
+                <button
+                    type="button"
+                    className="telemetry-panel__drag-handle"
+                    aria-label="Перетащить панель"
+                    title="Перетащить панель"
+                    {...dragHandleProps}
+                >
+                    ::
+                </button>
                 <input
                     className="telemetry-panel__title"
                     value={panelTitle}
@@ -257,45 +501,17 @@ export default function TelemetryPanel({ panelId, title, sensors, onRemove }: Te
                 </span>
                 <span className="telemetry-panel__meta-item">режим: {valueMode}</span>
                 <span className="telemetry-panel__meta-item">max points: {maxPoints}</span>
+                <span className="telemetry-panel__meta-item">окно: {formatWindow(timeWindowSeconds)}</span>
+                <span className="telemetry-panel__meta-item">якорь: {useLatestAnchor ? 'последние данные' : 'сейчас'}</span>
             </div>
 
             {error && <div className="telemetry-panel__error">{error}</div>}
 
             <div className="telemetry-panel__chart">
-                <svg
-                    className="telemetry-panel__svg"
-                    width="100%"
-                    height="190"
-                    viewBox={`0 0 ${chartWidth} ${chartHeight}`}
-                    role="img"
-                    aria-label="Telemetry chart"
-                    preserveAspectRatio="none"
-                >
-                    <rect x="0" y="0" width={chartWidth} height={chartHeight} className="telemetry-panel__bg" />
-                    <g className="telemetry-panel__grid">
-                        <line x1="42" y1="12" x2="42" y2="166" />
-                        <line x1="42" y1="166" x2="626" y2="166" />
-                        <line x1="42" y1="12" x2="626" y2="12" />
-                        <line x1="42" y1={(12 + (166 - 12) * 0.33).toFixed(2)} x2="626" y2={(12 + (166 - 12) * 0.33).toFixed(2)} />
-                        <line x1="42" y1={(12 + (166 - 12) * 0.66).toFixed(2)} x2="626" y2={(12 + (166 - 12) * 0.66).toFixed(2)} />
-                    </g>
-                    {paths.length === 0 ? (
-                        <g className="telemetry-panel__empty">
-                            <text x="50%" y="50%" dominantBaseline="middle" textAnchor="middle">
-                                Нет данных — нажмите «Старт»
-                            </text>
-                        </g>
-                    ) : (
-                        paths.map((path, index) => (
-                            <path
-                                key={`${seriesData[index]?.id || index}-path`}
-                                d={path || buildLinePath([], min, max, chartWidth, chartHeight)}
-                                stroke={SERIES_COLORS[index % SERIES_COLORS.length]}
-                                className="telemetry-panel__line"
-                            />
-                        ))
-                    )}
-                </svg>
+                <div className="telemetry-panel__chart-area">
+                    <div ref={plotRef} className="telemetry-panel__plotly" />
+                    {!hasData && <div className="telemetry-panel__empty">Нет данных — нажмите «Старт»</div>}
+                </div>
 
                 <div className="telemetry-panel__legend">
                     {seriesData.map((series, index) => (
@@ -305,9 +521,9 @@ export default function TelemetryPanel({ panelId, title, sensors, onRemove }: Te
                                 style={{ background: SERIES_COLORS[index % SERIES_COLORS.length] }}
                             />
                             {series.name}
-                            {series.values.length > 0 && (
+                            {series.y.length > 0 && (
                                 <span className="telemetry-panel__legend-value">
-                                    last={series.values[series.values.length - 1]?.toFixed(3)}
+                                    last={series.y[series.y.length - 1]?.toFixed(3)}
                                 </span>
                             )}
                         </span>
@@ -330,7 +546,9 @@ export default function TelemetryPanel({ panelId, title, sensors, onRemove }: Te
                                 value=""
                                 onChange={(value, event) => {
                                     addSensor(value)
-                                    event.currentTarget.value = ''
+                                    if (event?.currentTarget) {
+                                        event.currentTarget.value = ''
+                                    }
                                 }}
                                 disabled={availableSensors.length === 0}
                             >
@@ -389,6 +607,38 @@ export default function TelemetryPanel({ panelId, title, sensors, onRemove }: Te
                                 max={2000}
                                 onChange={(e) => setMaxPoints(clamp(Number(e.target.value || 200), 50, 2000))}
                             />
+                        </div>
+
+                        <div className="form-group telemetry-panel__inline">
+                            <label>Период</label>
+                            <MaterialSelect
+                                id={`telemetry_panel_window_${panelId}`}
+                                value={String(timeWindowSeconds)}
+                                onChange={(value) => {
+                                    const next = Number(value)
+                                    if (TIME_WINDOWS_SECONDS.includes(next as TimeWindowSeconds)) {
+                                        setTimeWindowSeconds(next as TimeWindowSeconds)
+                                    }
+                                }}
+                            >
+                                {TIME_WINDOWS_SECONDS.map((seconds) => (
+                                    <option key={seconds} value={seconds}>
+                                        {formatWindow(seconds)}
+                                    </option>
+                                ))}
+                            </MaterialSelect>
+                        </div>
+
+                        <div className="form-group telemetry-panel__inline">
+                            <label>Окно от</label>
+                            <label className="telemetry-panel__checkbox">
+                                <input
+                                    type="checkbox"
+                                    checked={useLatestAnchor}
+                                    onChange={(e) => setUseLatestAnchor(e.target.checked)}
+                                />
+                                последних данных
+                            </label>
                         </div>
                     </div>
                 </div>

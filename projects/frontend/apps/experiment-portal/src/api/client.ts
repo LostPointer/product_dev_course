@@ -379,6 +379,10 @@ export const telemetryApi = {
     // Do NOT attach sensor token here (UI doesn't ask for it anymore).
     const url = new URL(`${AUTH_PROXY_URL}/api/v1/telemetry/stream`)
     url.searchParams.set('sensor_id', params.sensor_id)
+    const activeProjectId = getActiveProjectId()
+    if (activeProjectId) {
+      url.searchParams.set('project_id', activeProjectId)
+    }
     if (typeof params.since_id === 'number') url.searchParams.set('since_id', String(params.since_id))
     if (typeof params.max_events === 'number') url.searchParams.set('max_events', String(params.max_events))
     if (typeof params.idle_timeout_seconds === 'number') {

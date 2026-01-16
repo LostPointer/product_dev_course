@@ -3,6 +3,12 @@
     flex-direction: column;
     gap: 12px;
     min-width: 0;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    resize: both;
+    overflow: auto;
+    min-width: 320px;
 }
 
 .telemetry-panel__header {
@@ -10,6 +16,21 @@
     align-items: center;
     gap: 12px;
     justify-content: space-between;
+}
+
+.telemetry-panel__drag-handle {
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    color: #64748b;
+    border-radius: 6px;
+    padding: 4px 6px;
+    font-size: 12px;
+    cursor: grab;
+    line-height: 1;
+}
+
+.telemetry-panel__drag-handle:active {
+    cursor: grabbing;
 }
 
 .telemetry-panel__title {
@@ -64,6 +85,18 @@
     font-size: 13px;
 }
 
+.telemetry-panel__checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #0f172a;
+}
+
+.telemetry-panel__checkbox input {
+    accent-color: #2563eb;
+}
+
 .telemetry-panel__sensor-picker {
     display: flex;
     flex-direction: column;
@@ -101,38 +134,36 @@
 }
 
 .telemetry-panel__chart {
+    display: flex;
+    flex-direction: column;
     border: 1px solid var(--border-color, #e5e7eb);
     border-radius: 10px;
     padding: 12px;
     background: var(--card-bg, #fff);
 }
 
-.telemetry-panel__svg {
-    display: block;
+.telemetry-panel__chart-area {
+    flex: 1 1 auto;
+    min-height: 190px;
+    position: relative;
+}
+
+.telemetry-panel__plotly {
     width: 100%;
-    height: 190px;
-    border-radius: 8px;
-    overflow: hidden;
+    height: 100%;
 }
 
-.telemetry-panel__bg {
-    fill: rgba(15, 23, 42, 0.04);
-}
-
-.telemetry-panel__grid line {
-    stroke: rgba(15, 23, 42, 0.12);
-    stroke-width: 1;
-    shape-rendering: crispEdges;
-}
-
-.telemetry-panel__line {
-    fill: none;
-    stroke-width: 2;
-}
-
-.telemetry-panel__empty text {
-    fill: rgba(15, 23, 42, 0.55);
+.telemetry-panel__empty {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(15, 23, 42, 0.55);
     font-size: 13px;
+    text-align: center;
+    background: rgba(15, 23, 42, 0.04);
+    border-radius: 8px;
 }
 
 .telemetry-panel__legend {
