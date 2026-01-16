@@ -132,7 +132,7 @@
 
 ### Текущее состояние (актуализируется)
 - **✅ Завершено (Foundation):** блок Foundation полностью (миграции, CRUD для `Experiment/Run/CaptureSession`, idempotency, пагинация, OpenAPI, RBAC). Добавлены домены `Sensor` и `ConversionProfile`, статусные машины и покрытие тестами (`tests/test_api_*`). Множественные проекты для датчиков реализованы полностью (backend: миграция `002_sensor_projects_many_to_many.sql`, API endpoints, тесты; frontend: UI для управления проектами в `SensorDetail.tsx`). UI для управления доступом к проектам реализован (`ProjectMembersModal` с тестами). Профиль пользователя реализован (`UserProfileModal` с тестами).
-- **⚠️ Частично реализовано (Runs & Capture Management):** batch-update статусов запусков, расширенная сущность `CaptureSession` с порядковыми номерами и статусной машиной. Валидация переходов статусов реализована. **Bulk tagging реализован**, **проверки инвариантов реализованы**, **аудит-лог реализован для Run/CaptureSession событий**, **webhooks реализованы (MVP + delivery ops)** — см. раздел ниже.
+- **⚠️ Частично реализовано (Runs & Capture Management):** batch-update статусов, `CaptureSession` (ordinal_number + статусы), bulk tagging, audit-log (Run/CaptureSession), webhooks (outbox + dispatcher) — ✅. Остаётся: расширение доменных инвариантов ⚠️ и полноценный backfill/late-data процесс ❌ (см. раздел ниже).
 - **❌ Не реализовано / в backlog:** Telemetry ingest (WebSocket), полноценные сценарии backfill/реплея и доменные политики late-data, фоновые задачи (worker), расширенные фильтры API, экспорт данных, бизнес‑политики доступа, SLO/SLI мониторинг, полная интеграция OpenTelemetry, chaos‑тесты, operational документация.
   - Примечание: **REST ingest** реализован отдельным сервисом `telemetry-ingest-service` (`POST /api/v1/telemetry`).
   - Примечание: **SSE stream (MVP)** реализован в `telemetry-ingest-service` (`GET /api/v1/telemetry/stream`) и используется во фронтенде (например, `TelemetryStreamModal`, `/telemetry` через `TelemetryViewer`/`TelemetryPanel`).
@@ -151,8 +151,8 @@
   - ✅ **Backend:** миграции, обновление модели `Sensor`, API endpoints, RBAC, тесты.
   - ✅ **Frontend:** методы в API клиенте и UI в `SensorDetail.tsx` (добавление/удаление проектов).
 - **Фильтрация датчиков по доступным проектам:** ⚠️ Частично реализовано (backend готов, frontend требует доработки).
-  - ✅ **Backend:** `GET /api/v1/sensors` поддерживает `project_id`, иначе берёт `active_project_id` из заголовков.
-  - ✅ **Frontend:** в `SensorsList.tsx` добавлен выпадающий список проектов.
+  - ⚠️ **Backend:** `GET /api/v1/sensors` поддерживает `project_id`; без него использует `active_project_id`, но “все доступные проекты” пока не реализованы (есть TODO).
+  - ✅ **Frontend:** в `SensorsList.tsx` есть выпадающий список проектов и фильтрация через `project_id`.
 - **Множественные проекты при создании датчика:** ✅ Реализовано (multi-select; первый проект основной).
 - **Валидация состояний и idempotency:** ✅ Реализовано.
 - **RBAC-хуки:** ✅ Реализовано (owner/editor/viewer; project scoping).
@@ -182,16 +182,16 @@
 
 ### 3. Data Integrity & Scaling (итерации 5‑6)
 - **Фоновые задачи (worker):** ❌
-- **Индексы и денормализации:** ✅ Частично
+- **Индексы и денормализации:** ✅ Частично (базовые индексы/GIN есть, но без целевых денормализаций и оптимизации под нагрузку)
 - **TimescaleDB для телеметрии:** ❌ (см. `docs/adr/002-timescaledb-telemetry.md`)
 - **Синхронизация по времени между датчиками:** ❌
-- **Инварианты хранения:** ⚠️ Частично
+- **Инварианты хранения:** ⚠️ Частично (есть DB-констрейнты/уникальности/ссылочная целостность, но нет политик retention/дедупликации/временной синхронизации)
 - **Песочница для нагрузочного тестирования:** ❌
-- **Контроль версий схем:** ⚠️ Частично
+- **Контроль версий схем:** ✅ Реализовано (таблица `schema_migrations` + checksum, применение миграций на старте и через `bin/migrate.py`)
 
 ### 4. Integrations & Collaboration (итерация 7)
 - **Enforcement бизнес-политик:** ❌
-- **Расширенные фильтры API:** ⚠️ Частично
+- **Расширенные фильтры API:** ⚠️ Частично (есть поиск `GET /api/v1/experiments/search`; остальные list endpoints требуют расширения фильтров: status/tags/date ranges и т.п.)
 - **Экспорт данных:** ❌
 - **Подписки на события:** ❌
 
@@ -200,5 +200,5 @@
 - **Трассировка (OpenTelemetry):** ⚠️ Частично (есть только конфиг/заготовки, без полноценной инструментализации)
 - **Chaos-тесты и отказоустойчивость:** ❌
 - **Telemetry ingest disk spool:** ❌
-- **Документация:** ⚠️ Частично
+- **Документация:** ✅ (индекс `docs/README.md`, quickstart `docs/local-dev-docker-setup.md`, demo `docs/demo-flow.md`, E2E чеклист `docs/manual-testing.md`, дебаг `docs/ui-debugging.md`)
 

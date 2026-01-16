@@ -104,31 +104,53 @@ experiment-portal/
 
 ## API Интеграция
 
-Frontend использует Experiment Service API:
+Frontend ходит в backend **через Auth Proxy** (BFF):
 
-- `GET /experiments` - список экспериментов
-- `POST /experiments` - создание эксперимента
-- `GET /experiments/:id` - получение эксперимента
-- `PUT /experiments/:id` - обновление эксперимента
-- `DELETE /experiments/:id` - удаление эксперимента
-- `GET /experiments/search` - поиск экспериментов
-- `GET /experiments/:id/runs` - список запусков
-- `POST /experiments/:id/runs` - создание запуска
-- `GET /runs/:id` - получение запуска
-- `PUT /runs/:id/complete` - завершение запуска
-- `PUT /runs/:id/fail` - пометить как failed
+- `/api/*` → auth-proxy → experiment-service
+- `/projects/*` → auth-proxy → auth-service
+- `/api/v1/telemetry/*` → auth-proxy → telemetry-ingest-service
+
+Ключевые ручки Experiment Service (v1):
+
+- `GET /api/v1/experiments` — список экспериментов (пагинация)
+- `GET /api/v1/experiments/search` — поиск экспериментов
+- `POST /api/v1/experiments` — создание эксперимента
+- `GET /api/v1/experiments/:id` — детали эксперимента
+- `PATCH /api/v1/experiments/:id` — обновление эксперимента
+- `POST /api/v1/experiments/:id/archive` — архивирование
+- `DELETE /api/v1/experiments/:id` — удаление
+- `GET /api/v1/experiments/:id/runs` — список запусков
+- `POST /api/v1/experiments/:id/runs` — создание запуска
+- `GET /api/v1/runs/:id` — детали запуска
+- `PATCH /api/v1/runs/:id` — обновление запуска (в т.ч. смена статуса)
+- `POST /api/v1/runs:batch-status` — массовая смена статуса
+- `POST /api/v1/runs:bulk-tags` — bulk tagging
+- `GET /api/v1/runs/:id/capture-sessions` — список capture sessions
+- `POST /api/v1/runs/:id/capture-sessions` — старт capture session
+- `POST /api/v1/runs/:id/capture-sessions/:cs_id/stop` — стоп capture session
+- `GET /api/v1/sensors` — список датчиков
+- `POST /api/v1/sensors` — создание/регистрация датчика
+- `POST /api/v1/sensors/:id/rotate-token` — ротация токена
 
 ## Аутентификация
 
-Токен аутентификации хранится в `localStorage` под ключом `access_token` и автоматически добавляется в заголовки запросов.
+Аутентификация реализована через **Auth Proxy** и **HttpOnly cookies**:
 
-При получении 401 ошибки происходит автоматический редирект на `/login` (нужно реализовать страницу входа).
+- Frontend делает `POST /auth/login` на auth-proxy (cookies выставляются прокси).
+- Axios настроен с `withCredentials: true`, поэтому cookies автоматически уходят на auth-proxy.
+- При `401` работает auto-refresh через `POST /auth/refresh`; если refresh не удался — редирект на `/login`.
 
 ## CSRF
 
 Auth Proxy использует защиту **double-submit cookie**:
 - после `POST /auth/login` или `POST /auth/refresh` прокси выставляет cookie `csrf_token`
 - frontend автоматически добавляет заголовок `X-CSRF-Token` (значение из cookie) для POST/PUT/PATCH/DELETE запросов
+
+## Debugging (коротко)
+
+- Все запросы содержат `X-Trace-Id` и `X-Request-Id`.
+- При ошибках запросов в dev-режиме показывается debug toast снизу справа с кнопками **Details** и **Copy** (sanitized request/response + correlation ids).
+- По `trace_id`/`request_id` удобно искать логи в Grafana/Loki (см. `docs/logging-flow.md` и `docs/grafana-trace-filtering.md`).
 
 ## Разработка
 

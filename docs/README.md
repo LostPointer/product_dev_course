@@ -17,6 +17,12 @@
 - `demo-flow.md` — сценарий демо (что показать и в каком порядке).
 - `manual-testing.md` — ручной E2E чеклист (Portal → Auth Proxy → Services → DB).
 
+## Дебаг и наблюдаемость
+- `ui-debugging.md` — debug toast в Portal + как искать `trace_id/request_id` в логах.
+- `logging-flow.md` — как логи попадают из сервисов в Grafana/Loki.
+- `grafana-trace-filtering.md` — как фильтровать по `trace_id/request_id`.
+- `alloy-logs-viewing.md` — быстрые подсказки по Alloy/Loki.
+
 ## Спецификации / ТЗ
 - `experiment-tracking-ts.md` — ТЗ на платформу Experiment Tracking.
 - `telemetry-cli-ts.md` — ТЗ на `telemetry-cli` (агент сбора/отправки телеметрии).
