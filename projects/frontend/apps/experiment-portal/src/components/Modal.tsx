@@ -1,4 +1,5 @@
 import { ReactNode, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import './CreateRunModal.css'
 
 interface ModalProps {
@@ -34,7 +35,7 @@ function Modal({ isOpen, onClose, title, children, disabled = false, className =
         }
     }
 
-    return (
+    return createPortal(
         <div className="modal-overlay" onClick={handleOverlayClick}>
             <div className={`modal-content ${className}`} onClick={(e) => e.stopPropagation()}>
                 <div className="modal-header">
@@ -50,7 +51,8 @@ function Modal({ isOpen, onClose, title, children, disabled = false, className =
                 </div>
                 {children}
             </div>
-        </div>
+        </div>,
+        document.body,
     )
 }
 
