@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import ExperimentsList from './ExperimentsList'
 import { experimentsApi, projectsApi } from '../api/client'
+import { pickMaterialSelectOption } from '../testUtils/materialSelect'
 
 // Мокаем API
 vi.mock('../api/client', () => ({
@@ -206,13 +207,9 @@ describe('ExperimentsList', () => {
             expect(screen.getByText('Проект')).toBeInTheDocument()
         }, { timeout: 5000 })
 
-        // Ждем, пока проекты загрузятся в select
+        // Ждем, пока проекты загрузятся в селект
         await waitFor(() => {
-            const projectLabel = screen.getByText('Проект')
-            const projectSelect = projectLabel.parentElement?.querySelector('select')
-            expect(projectSelect).toBeInTheDocument()
-            // Проверяем, что в select есть опции (пустая опция + 2 проекта)
-            expect(projectSelect?.options.length).toBeGreaterThanOrEqual(3)
+            expect(screen.getByLabelText(/проект/i)).toBeInTheDocument()
         }, { timeout: 5000 })
 
         // Мокаем второй вызов после выбора project-123
@@ -230,10 +227,7 @@ describe('ExperimentsList', () => {
             expect(screen.getByText('Проект')).toBeInTheDocument()
         }, { timeout: 5000 })
 
-        const projectLabel = screen.getByText('Проект')
-        const projectSelect = projectLabel.parentElement?.querySelector('select') as HTMLSelectElement
-        expect(projectSelect).toBeInTheDocument()
-        await user.selectOptions(projectSelect, 'project-123')
+        await pickMaterialSelectOption(user, /проект/i, 'Project 123')
 
         // Ждем, пока будет вызов с project_id 'project-123'
         await waitFor(() => {
@@ -297,10 +291,7 @@ describe('ExperimentsList', () => {
             expect(screen.getByText('Статус')).toBeInTheDocument()
         }, { timeout: 5000 })
 
-        const statusLabel = screen.getByText('Статус')
-        const statusSelect = statusLabel.parentElement?.querySelector('select')
-        expect(statusSelect).toBeInTheDocument()
-        await user.selectOptions(statusSelect!, 'running')
+        await pickMaterialSelectOption(user, /статус/i, 'Выполняется')
 
         // Ждем, пока отфильтруются эксперименты - должен остаться только running
         await waitFor(() => {
@@ -483,11 +474,8 @@ describe('ExperimentsList', () => {
         render(<ExperimentsList />, { wrapper: createWrapper() })
 
         await waitFor(() => {
-            const createButtons = screen.getAllByRole('button', { name: /создать эксперимент/i })
-            // Должна быть кнопка в PageHeader
-            const headerButton = createButtons.find(btn => btn.classList.contains('btn-primary'))
-            expect(headerButton).toBeInTheDocument()
-            expect(headerButton).toHaveClass('btn', 'btn-primary')
+            // Кнопка создаётся через FloatingActionButton (portal в document.body)
+            expect(screen.getByRole('button', { name: /создать эксперимент/i })).toBeInTheDocument()
         })
     })
 })

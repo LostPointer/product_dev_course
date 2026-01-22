@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import SensorsList from './SensorsList'
 import { sensorsApi, projectsApi } from '../api/client'
+import { pickMaterialSelectOption } from '../testUtils/materialSelect'
 
 // Мокаем API
 vi.mock('../api/client', () => ({
@@ -154,8 +155,7 @@ describe('SensorsList', () => {
             expect(screen.getByLabelText(/проект/i)).toBeInTheDocument()
         })
 
-        const projectSelect = screen.getByLabelText(/проект/i)
-        await user.selectOptions(projectSelect, 'project-2')
+        await pickMaterialSelectOption(user, /проект/i, 'Project 2')
 
         // Ждем, пока будет вызов с project-2
         await waitFor(() => {
@@ -189,8 +189,7 @@ describe('SensorsList', () => {
             expect(screen.getByLabelText(/статус/i)).toBeInTheDocument()
         })
 
-        const statusSelect = screen.getByLabelText(/статус/i)
-        await user.selectOptions(statusSelect, 'active')
+        await pickMaterialSelectOption(user, /статус/i, 'Активен')
 
         // Ждем debounce и новый вызов API
         await waitFor(() => {

@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import CreateSensor from './CreateSensor'
 import { sensorsApi, projectsApi } from '../api/client'
+import { pickMaterialSelectOption } from '../testUtils/materialSelect'
 
 // Мокаем API
 vi.mock('../api/client', () => ({
@@ -125,7 +126,7 @@ describe('CreateSensor', () => {
         })
         await user.selectOptions(screen.getByLabelText(/проект/i), ['project-1'])
         await user.type(screen.getByLabelText(/название/i), 'Test Sensor')
-        await user.selectOptions(screen.getByLabelText(/тип датчика/i), 'temperature')
+        await pickMaterialSelectOption(user, /тип датчика/i, 'Температура')
         await user.type(screen.getByLabelText(/входная единица измерения/i), 'V')
         await user.type(screen.getByLabelText(/единица отображения/i), '°C')
 
@@ -174,7 +175,7 @@ describe('CreateSensor', () => {
         // Выбираем два проекта (первый будет основным)
         await user.selectOptions(screen.getByLabelText(/проект/i), ['project-1', 'project-2'])
         await user.type(screen.getByLabelText(/название/i), 'Test Sensor')
-        await user.selectOptions(screen.getByLabelText(/тип датчика/i), 'temperature')
+        await pickMaterialSelectOption(user, /тип датчика/i, 'Температура')
         await user.type(screen.getByLabelText(/входная единица измерения/i), 'V')
         await user.type(screen.getByLabelText(/единица отображения/i), '°C')
 
@@ -209,7 +210,7 @@ describe('CreateSensor', () => {
         })
         await user.selectOptions(screen.getByLabelText(/проект/i), ['project-1'])
         await user.type(screen.getByLabelText(/название/i), 'Test Sensor')
-        await user.selectOptions(screen.getByLabelText(/тип датчика/i), 'temperature')
+        await pickMaterialSelectOption(user, /тип датчика/i, 'Температура')
         await user.type(screen.getByLabelText(/входная единица измерения/i), 'V')
         await user.type(screen.getByLabelText(/единица отображения/i), '°C')
 
@@ -247,7 +248,7 @@ describe('CreateSensor', () => {
         })
         await user.selectOptions(screen.getByLabelText(/проект/i), ['project-1'])
         await user.type(screen.getByLabelText(/название/i), 'Test Sensor')
-        await user.selectOptions(screen.getByLabelText(/тип датчика/i), 'temperature')
+        await pickMaterialSelectOption(user, /тип датчика/i, 'Температура')
         await user.type(screen.getByLabelText(/входная единица измерения/i), 'V')
         await user.type(screen.getByLabelText(/единица отображения/i), '°C')
 
@@ -294,7 +295,7 @@ describe('CreateSensor', () => {
         })
         await user.selectOptions(screen.getByLabelText(/проект/i), ['project-1'])
         await user.type(screen.getByLabelText(/название/i), 'Test Sensor')
-        await user.selectOptions(screen.getByLabelText(/тип датчика/i), 'temperature')
+        await pickMaterialSelectOption(user, /тип датчика/i, 'Температура')
         await user.type(screen.getByLabelText(/входная единица измерения/i), 'V')
         await user.type(screen.getByLabelText(/единица отображения/i), '°C')
 

@@ -4,6 +4,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import RunsList from './RunsList'
 import { runsApi } from '../api/client'
+import { pickMaterialSelectOption } from '../testUtils/materialSelect'
 
 // Мокаем runsApi
 vi.mock('../api/client', () => ({
@@ -128,7 +129,7 @@ describe('RunsList', () => {
         await user.click(bulkBtn)
 
         // fill tags and submit
-        await user.selectOptions(screen.getByLabelText('Операция'), 'add')
+        await pickMaterialSelectOption(user, 'Операция', 'Добавить теги')
         await user.type(screen.getByLabelText(/теги/i), 'beta, gamma')
         await user.click(screen.getByRole('button', { name: 'Применить' }))
 

@@ -53,13 +53,16 @@ describe('Layout', () => {
         await waitFor(() => {
             expect(
                 screen.getByRole('heading', {
-                    name: /experiment tracking/i,
+                    name: /эксперименты/i,
                 })
             ).toBeInTheDocument()
         })
 
         expect(screen.getByText('Test content')).toBeInTheDocument()
-        expect(screen.getByRole('link', { name: /эксперименты/i })).toHaveClass('active')
+        const experimentsLinks = screen.getAllByRole('link', { name: /эксперименты/i })
+        const navLink = experimentsLinks.find((el) => el.getAttribute('href') === '/experiments')
+        expect(navLink).toBeInTheDocument()
+        expect(navLink).toHaveClass('active')
     })
 
     it('displays username when user is authenticated', async () => {

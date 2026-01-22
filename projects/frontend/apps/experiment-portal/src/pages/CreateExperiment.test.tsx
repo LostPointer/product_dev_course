@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import CreateExperimentModal from '../components/CreateExperimentModal'
 import { experimentsApi, projectsApi } from '../api/client'
+import { pickMaterialSelectOption } from '../testUtils/materialSelect'
 
 // Мокаем API
 vi.mock('../api/client', () => ({
@@ -70,9 +71,9 @@ describe('CreateExperimentModal', () => {
             expect(screen.getByLabelText(/проект/i)).toBeInTheDocument()
         })
 
-        const projectSelect = screen.getByLabelText(/проект/i) as HTMLSelectElement
         await waitFor(() => {
-            expect(projectSelect.value).toBe('project-1')
+            // MaterialSelect single mode renders a trigger button; assert selected label
+            expect(screen.getByLabelText(/проект/i)).toHaveTextContent(/test project/i)
         })
     })
 
@@ -120,7 +121,7 @@ describe('CreateExperimentModal', () => {
         await waitFor(() => {
             expect(screen.getByLabelText(/проект/i)).toBeInTheDocument()
         })
-        await user.selectOptions(screen.getByLabelText(/проект/i), 'project-1')
+        await pickMaterialSelectOption(user, /проект/i, 'Test Project')
         await user.type(screen.getByPlaceholderText('Например: Аэродинамические испытания крыла'), 'New Experiment')
         await user.type(screen.getByPlaceholderText('Детальное описание эксперимента...'), 'Test description')
 
@@ -161,7 +162,7 @@ describe('CreateExperimentModal', () => {
         await waitFor(() => {
             expect(screen.getByLabelText(/проект/i)).toBeInTheDocument()
         })
-        await user.selectOptions(screen.getByLabelText(/проект/i), 'project-1')
+        await pickMaterialSelectOption(user, /проект/i, 'Test Project')
         await user.type(screen.getByPlaceholderText('Например: Аэродинамические испытания крыла'), 'New Experiment')
         await user.type(screen.getByPlaceholderText(/через запятую/i), 'tag1, tag2, tag3')
 
@@ -198,7 +199,7 @@ describe('CreateExperimentModal', () => {
         await waitFor(() => {
             expect(screen.getByLabelText(/проект/i)).toBeInTheDocument()
         })
-        await user.selectOptions(screen.getByLabelText(/проект/i), 'project-1')
+        await pickMaterialSelectOption(user, /проект/i, 'Test Project')
         await user.type(screen.getByPlaceholderText('Например: Аэродинамические испытания крыла'), 'New Experiment')
         const metadataLabel = screen.getByText('Метаданные (JSON)')
         const metadataTextarea = metadataLabel.parentElement?.querySelector('textarea')
@@ -228,7 +229,7 @@ describe('CreateExperimentModal', () => {
         await waitFor(() => {
             expect(screen.getByLabelText(/проект/i)).toBeInTheDocument()
         })
-        await user.selectOptions(screen.getByLabelText(/проект/i), 'project-1')
+        await pickMaterialSelectOption(user, /проект/i, 'Test Project')
         await user.type(screen.getByPlaceholderText('Например: Аэродинамические испытания крыла'), 'New Experiment')
         const metadataLabel = screen.getByText('Метаданные (JSON)')
         const metadataTextarea = metadataLabel.parentElement?.querySelector('textarea')
@@ -261,7 +262,7 @@ describe('CreateExperimentModal', () => {
         await waitFor(() => {
             expect(screen.getByLabelText(/проект/i)).toBeInTheDocument()
         })
-        await user.selectOptions(screen.getByLabelText(/проект/i), 'project-1')
+        await pickMaterialSelectOption(user, /проект/i, 'Test Project')
         await user.type(screen.getByPlaceholderText('Например: Аэродинамические испытания крыла'), 'New Experiment')
 
         const submitButton = screen.getByRole('button', { name: /создать эксперимент/i })
@@ -290,7 +291,7 @@ describe('CreateExperimentModal', () => {
         await waitFor(() => {
             expect(screen.getByLabelText(/проект/i)).toBeInTheDocument()
         })
-        await user.selectOptions(screen.getByLabelText(/проект/i), 'project-1')
+        await pickMaterialSelectOption(user, /проект/i, 'Test Project')
         await user.type(screen.getByPlaceholderText('Например: Аэродинамические испытания крыла'), 'New Experiment')
 
         const submitButton = screen.getByRole('button', { name: /создать эксперимент/i })
@@ -323,7 +324,7 @@ describe('CreateExperimentModal', () => {
         await waitFor(() => {
             expect(screen.getByLabelText(/проект/i)).toBeInTheDocument()
         })
-        await user.selectOptions(screen.getByLabelText(/проект/i), 'project-1')
+        await pickMaterialSelectOption(user, /проект/i, 'Test Project')
         await user.type(screen.getByPlaceholderText('Например: Аэродинамические испытания крыла'), 'New Experiment')
 
         const submitButton = screen.getByRole('button', { name: /создать эксперимент/i })
@@ -389,9 +390,10 @@ describe('CreateExperimentModal', () => {
         await waitFor(() => {
             expect(screen.getByLabelText(/проект/i)).toBeInTheDocument()
         })
-        await user.selectOptions(screen.getByLabelText(/проект/i), 'project-1')
+        await pickMaterialSelectOption(user, /проект/i, 'Test Project')
+        await pickMaterialSelectOption(user, /проект/i, 'Test Project')
         await user.type(screen.getByPlaceholderText('Например: Аэродинамические испытания крыла'), 'New Experiment')
-        await user.selectOptions(screen.getByLabelText(/тип эксперимента/i), 'benchmark')
+        await pickMaterialSelectOption(user, /тип эксперимента/i, 'Бенчмарк / сравнение')
 
         const submitButton = screen.getByRole('button', { name: /создать эксперимент/i })
         await user.click(submitButton)
@@ -426,7 +428,7 @@ describe('CreateExperimentModal', () => {
         await waitFor(() => {
             expect(screen.getByLabelText(/проект/i)).toBeInTheDocument()
         })
-        await user.selectOptions(screen.getByLabelText(/проект/i), 'project-1')
+        await pickMaterialSelectOption(user, /проект/i, 'Test Project')
         await user.type(screen.getByPlaceholderText('Например: Аэродинамические испытания крыла'), 'New Experiment')
         await user.type(screen.getByPlaceholderText(/через запятую/i), 'tag1, , tag2,  ')
 

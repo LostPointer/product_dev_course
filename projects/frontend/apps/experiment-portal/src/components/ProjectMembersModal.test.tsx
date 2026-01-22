@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import ProjectMembersModal from './ProjectMembersModal'
 import { projectsApi } from '../api/client'
 import { authApi } from '../api/auth'
+import { pickMaterialSelectOption } from '../testUtils/materialSelect'
 
 // Мокаем API
 vi.mock('../api/client', () => ({
@@ -266,8 +267,7 @@ describe('ProjectMembersModal', () => {
         const userIdInput = screen.getByLabelText(/id пользователя/i)
         await user.type(userIdInput, 'new-user-1')
 
-        const roleSelect = screen.getByLabelText(/роль/i)
-        await user.selectOptions(roleSelect, 'viewer')
+        await pickMaterialSelectOption(user, /^роль$/i, 'Наблюдатель')
 
         const addButton = screen.getByRole('button', { name: /добавить участника/i })
         await user.click(addButton)
