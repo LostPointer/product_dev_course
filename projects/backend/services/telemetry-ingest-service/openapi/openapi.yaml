@@ -138,6 +138,7 @@ paths:
             items:
               type: string
               format: uuid
+            maxItems: 50
           style: form
           explode: true
         - name: since_id
@@ -146,12 +147,14 @@ paths:
           schema:
             type: integer
             default: 0
+            minimum: 0
         - name: limit
           in: query
           required: false
           schema:
             type: integer
             default: 2000
+            maximum: 20000
         - name: include_late
           in: query
           required: false
@@ -163,7 +166,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [asc]
+            enum: [asc, desc]
       responses:
         "200":
           description: OK

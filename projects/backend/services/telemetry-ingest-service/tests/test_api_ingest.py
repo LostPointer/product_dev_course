@@ -617,6 +617,109 @@ async def test_query_include_late_filter(service_client, pgsql, fake_auth_servic
     assert len(payload["points"]) == 2
 
 
+async def test_query_rejects_negative_since_id(service_client, fake_auth_service, monkeypatch):
+    from telemetry_ingest_service.settings import settings
+
+    capture_session_id = uuid4()
+    monkeypatch.setattr(settings, "auth_service_url", str(fake_auth_service.make_url("")).rstrip("/"))
+    resp = await service_client.get(
+        f"/api/v1/telemetry/query?capture_session_id={capture_session_id}&since_id=-1",
+        headers={"Authorization": "Bearer a.b.c"},
+    )
+    assert resp.status == 400
+
+
+async def test_query_order_desc_returns_latest_first(service_client, pgsql, fake_auth_service, monkeypatch):
+    from telemetry_ingest_service.settings import settings
+
+    project_id = uuid4()
+    sensor_id = uuid4()
+    run_id = uuid4()
+    capture_session_id = uuid4()
+    token = "sensor-token"
+
+    db_uri = pgsql["telemetry_ingest_service"].conninfo.get_uri()
+    await _seed(
+        db_uri=db_uri,
+        project_id=project_id,
+        sensor_id=sensor_id,
+        token=token,
+        run_id=run_id,
+        capture_session_id=capture_session_id,
+    )
+
+    conn = await asyncpg.connect(db_uri)
+    try:
+        await conn.execute(
+            """
+            INSERT INTO telemetry_records (
+                project_id, sensor_id, run_id, capture_session_id,
+                timestamp, raw_value, physical_value, meta, conversion_status
+            )
+            VALUES ($1, $2, $3, $4, now(), 10.0, NULL, '{}'::jsonb, 'raw_only')
+            """,
+            project_id,
+            sensor_id,
+            run_id,
+            capture_session_id,
+        )
+        await conn.execute(
+            """
+            INSERT INTO telemetry_records (
+                project_id, sensor_id, run_id, capture_session_id,
+                timestamp, raw_value, physical_value, meta, conversion_status
+            )
+            VALUES ($1, $2, $3, $4, now(), 20.0, NULL, '{}'::jsonb, 'raw_only')
+            """,
+            project_id,
+            sensor_id,
+            run_id,
+            capture_session_id,
+        )
+    finally:
+        await conn.close()
+
+    monkeypatch.setattr(settings, "auth_service_url", str(fake_auth_service.make_url("")).rstrip("/"))
+
+    resp = await service_client.get(
+        f"/api/v1/telemetry/query?capture_session_id={capture_session_id}&limit=2&order=desc",
+        headers={"Authorization": "Bearer a.b.c"},
+    )
+    assert resp.status == 200
+    payload = await resp.json()
+    assert len(payload["points"]) == 2
+    assert payload["points"][0]["id"] > payload["points"][1]["id"]
+
+
+async def test_query_rejects_too_many_sensor_ids(service_client, pgsql, fake_auth_service, monkeypatch):
+    from telemetry_ingest_service.settings import settings
+
+    project_id = uuid4()
+    sensor_id = uuid4()
+    run_id = uuid4()
+    capture_session_id = uuid4()
+    token = "sensor-token"
+
+    db_uri = pgsql["telemetry_ingest_service"].conninfo.get_uri()
+    await _seed(
+        db_uri=db_uri,
+        project_id=project_id,
+        sensor_id=sensor_id,
+        token=token,
+        run_id=run_id,
+        capture_session_id=capture_session_id,
+    )
+
+    monkeypatch.setattr(settings, "auth_service_url", str(fake_auth_service.make_url("")).rstrip("/"))
+    sensor_ids = [str(uuid4()) for _ in range(settings.telemetry_query_max_sensors + 1)]
+    params = "&".join([f"sensor_id={sid}" for sid in sensor_ids])
+    resp = await service_client.get(
+        f"/api/v1/telemetry/query?capture_session_id={capture_session_id}&{params}",
+        headers={"Authorization": "Bearer a.b.c"},
+    )
+    assert resp.status == 400
+
+
 async def test_ingest_invalid_token_401(service_client, pgsql):
     project_id = uuid4()
     sensor_id = uuid4()

@@ -308,11 +308,11 @@ async def telemetry_query(request: web.Request) -> web.Response:
 
     Query:
       - capture_session_id (required)
-      - sensor_id (optional, repeatable)
+      - sensor_id (optional, repeatable, max 50)
       - since_id (optional, default 0)
       - limit (optional, default 2000, max 20000)
       - include_late (optional, default true)
-      - order (optional, only 'asc' supported)
+      - order (optional, 'asc' or 'desc')
     """
     token = _extract_stream_token(request)
     if not _looks_like_jwt(token):
@@ -335,17 +335,23 @@ async def telemetry_query(request: web.Request) -> web.Response:
             sensor_ids.append(UUID(value))
         except ValueError as exc:
             raise web.HTTPBadRequest(text="Invalid sensor_id") from exc
+    if len(sensor_ids) > settings.telemetry_query_max_sensors:
+        raise web.HTTPBadRequest(
+            text=f"Too many sensor_id values (max {settings.telemetry_query_max_sensors})"
+        )
 
     since_id = _parse_int(request.rel_url.query.get("since_id"), default=0)
-    limit = _parse_int(request.rel_url.query.get("limit"), default=2000)
+    if since_id < 0:
+        raise web.HTTPBadRequest(text="since_id must be >= 0")
+    limit = _parse_int(request.rel_url.query.get("limit"), default=settings.telemetry_query_default_limit)
     if limit < 1:
         raise web.HTTPBadRequest(text="limit must be >= 1")
-    if limit > 20000:
-        limit = 20000
+    if limit > settings.telemetry_query_max_limit:
+        limit = settings.telemetry_query_max_limit
     include_late = _parse_bool(request.rel_url.query.get("include_late"), default=True)
     order = (request.rel_url.query.get("order") or "asc").lower()
-    if order != "asc":
-        raise web.HTTPBadRequest(text="Only order=asc is supported")
+    if order not in ("asc", "desc"):
+        raise web.HTTPBadRequest(text="Only order=asc or order=desc is supported")
 
     pool = await get_pool()
     async with pool.acquire() as conn:
@@ -375,9 +381,14 @@ async def telemetry_query(request: web.Request) -> web.Response:
     params.append(capture_session_id)
     param_idx += 1
 
-    conditions.append(f"id > ${param_idx}")
-    params.append(since_id)
-    param_idx += 1
+    if order == "asc":
+        conditions.append(f"id > ${param_idx}")
+        params.append(since_id)
+        param_idx += 1
+    elif since_id > 0:
+        conditions.append(f"id < ${param_idx}")
+        params.append(since_id)
+        param_idx += 1
 
     if sensor_ids:
         conditions.append(f"sensor_id = ANY(${param_idx}::uuid[])")
@@ -385,12 +396,13 @@ async def telemetry_query(request: web.Request) -> web.Response:
         param_idx += 1
 
     conditions_sql = " AND ".join(conditions)
+    order_sql = "ASC" if order == "asc" else "DESC"
     sql = f"""
         SELECT id, project_id, sensor_id, timestamp, raw_value, physical_value,
                run_id, capture_session_id, meta
         FROM telemetry_records
         WHERE {conditions_sql}
-        ORDER BY id ASC
+        ORDER BY id {order_sql}
         LIMIT ${param_idx}
     """
     params.append(limit)
