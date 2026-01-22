@@ -59,6 +59,7 @@ function TelemetryViewer() {
     const [historyLoadedCount, setHistoryLoadedCount] = useState(0)
     const [historyWasTruncated, setHistoryWasTruncated] = useState(false)
     const [historySessionFilter, setHistorySessionFilter] = useState('')
+    const [historySensorFilter, setHistorySensorFilter] = useState('')
 
     useEffect(() => {
         if (typeof window === 'undefined') return
@@ -297,6 +298,15 @@ function TelemetryViewer() {
         [sensors, historySensorIds]
     )
 
+    const filteredHistorySensors = useMemo(() => {
+        const query = historySensorFilter.trim().toLowerCase()
+        if (!query) return availableHistorySensors
+        return availableHistorySensors.filter((sensor) => {
+            const hay = `${sensor.name} ${sensor.type} ${sensor.id}`.toLowerCase()
+            return hay.includes(query)
+        })
+    }, [availableHistorySensors, historySensorFilter])
+
     const historySensorsById = useMemo(() => {
         const map = new Map<string, Sensor>()
         sensors.forEach((sensor) => map.set(sensor.id, sensor))
@@ -459,8 +469,21 @@ function TelemetryViewer() {
         setHistorySensorIds((prev) => (prev.includes(sensorId) ? prev : [...prev, sensorId]))
     }
 
+    const addAllHistorySensors = () => {
+        if (availableHistorySensors.length === 0) return
+        setHistorySensorIds((prev) => {
+            const next = new Set(prev)
+            availableHistorySensors.forEach((sensor) => next.add(sensor.id))
+            return Array.from(next)
+        })
+    }
+
     const removeHistorySensor = (sensorId: string) => {
         setHistorySensorIds((prev) => prev.filter((id) => id !== sensorId))
+    }
+
+    const clearHistorySensors = () => {
+        setHistorySensorIds([])
     }
 
     const continueHistoryInLive = () => {
@@ -769,6 +792,17 @@ function TelemetryViewer() {
                 <div className="telemetry-view__history card">
                     <div className="telemetry-view__history-controls">
                         <div className="telemetry-view__history-sensors">
+                            <div className="telemetry-view__sensor-filter">
+                                <label htmlFor="telemetry_history_sensor_filter">Фильтр сенсоров</label>
+                                <input
+                                    id="telemetry_history_sensor_filter"
+                                    type="text"
+                                    className="telemetry-view__text-input"
+                                    value={historySensorFilter}
+                                    onChange={(event) => setHistorySensorFilter(event.target.value)}
+                                    placeholder="Имя, тип, id"
+                                />
+                            </div>
                             <MaterialSelect
                                 id="telemetry_history_sensors"
                                 value=""
@@ -779,15 +813,33 @@ function TelemetryViewer() {
                                         event.currentTarget.value = ''
                                     }
                                 }}
-                                disabled={availableHistorySensors.length === 0}
+                                disabled={filteredHistorySensors.length === 0}
                             >
                                 <option value="">Добавить сенсор</option>
-                                {availableHistorySensors.map((sensor) => (
+                                {filteredHistorySensors.map((sensor) => (
                                     <option key={sensor.id} value={sensor.id}>
                                         {sensor.name} ({sensor.type})
                                     </option>
                                 ))}
                             </MaterialSelect>
+                            <div className="telemetry-view__sensor-actions">
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary btn-xs"
+                                    onClick={addAllHistorySensors}
+                                    disabled={availableHistorySensors.length === 0}
+                                >
+                                    Добавить все
+                                </button>
+                                <button
+                                    type="button"
+                                    className="btn btn-ghost btn-xs"
+                                    onClick={clearHistorySensors}
+                                    disabled={historySensorIds.length === 0}
+                                >
+                                    Очистить
+                                </button>
+                            </div>
                             <div className="telemetry-view__sensor-list">
                                 {historySensorIds.length === 0 && (
                                     <span className="telemetry-view__hint">Сенсоры не выбраны</span>

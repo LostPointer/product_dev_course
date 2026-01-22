@@ -129,6 +129,20 @@
     gap: 8px;
 }
 
+.telemetry-view__sensor-filter label {
+    display: block;
+    font-size: 12px;
+    color: #475569;
+    margin-bottom: 4px;
+}
+
+.telemetry-view__sensor-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
 .telemetry-view__sensor-list {
     display: flex;
     flex-wrap: wrap;
