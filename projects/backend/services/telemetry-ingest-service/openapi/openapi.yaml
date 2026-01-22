@@ -105,6 +105,80 @@ paths:
             text/event-stream:
               schema:
                 type: string
+  /api/v1/telemetry/query:
+    get:
+      summary: Query telemetry records for a capture session
+      description: >
+        Historical query endpoint for telemetry records tied to a capture session.
+        Requires user JWT (via auth-proxy). Supports cursor-based pagination by id.
+      parameters:
+        - name: Authorization
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Bearer user token (auth-proxy injects from cookies)
+        - name: access_token
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Optional token for clients that cannot set Authorization
+        - name: capture_session_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: sensor_id
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+              format: uuid
+          style: form
+          explode: true
+        - name: since_id
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 2000
+        - name: include_late
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: true
+        - name: order
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [asc]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TelemetryQueryResponse"
+        "400":
+          description: Bad request
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found
 components:
   schemas:
     TelemetryReading:
@@ -149,4 +223,46 @@ components:
           maxItems: 10000
           items:
             $ref: "#/components/schemas/TelemetryReading"
+    TelemetryQueryRecord:
+      type: object
+      required: [id, sensor_id, project_id, timestamp, raw_value, meta]
+      properties:
+        id:
+          type: integer
+        project_id:
+          type: string
+          format: uuid
+        sensor_id:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+        raw_value:
+          type: number
+        physical_value:
+          type: number
+          nullable: true
+        run_id:
+          type: string
+          format: uuid
+          nullable: true
+        capture_session_id:
+          type: string
+          format: uuid
+          nullable: true
+        meta:
+          type: object
+          additionalProperties: true
+    TelemetryQueryResponse:
+      type: object
+      required: [points]
+      properties:
+        points:
+          type: array
+          items:
+            $ref: "#/components/schemas/TelemetryQueryRecord"
+        next_since_id:
+          type: integer
+          nullable: true
 

@@ -95,12 +95,44 @@ def _parse_int(value: str | None, *, default: int) -> int:
         raise web.HTTPBadRequest(text="Invalid integer query param") from exc
 
 
+def _parse_bool(value: str | None, *, default: bool) -> bool:
+    if value is None:
+        return default
+    normalized = value.strip().lower()
+    if normalized in ("1", "true", "yes", "on"):
+        return True
+    if normalized in ("0", "false", "no", "off"):
+        return False
+    raise web.HTTPBadRequest(text="Invalid boolean query param")
+
+
+def _parse_since_ts(value: str | None) -> datetime:
+    """
+    Parse RFC3339/ISO8601 timestamp used by SSE cursor.
+    If not provided, defaults to Unix epoch (send all).
+    """
+    if value is None or not value.strip():
+        return datetime.fromtimestamp(0, tz=timezone.utc)
+    raw = value.strip()
+    try:
+        # Support `Z` suffix.
+        if raw.endswith("Z"):
+            raw = raw[:-1] + "+00:00"
+        dt = datetime.fromisoformat(raw)
+    except ValueError as exc:
+        raise web.HTTPBadRequest(text="Invalid since_ts (expected ISO8601/RFC3339)") from exc
+    if dt.tzinfo is None:
+        # Treat naive timestamps as UTC to avoid accidental local-time bugs.
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
 def _looks_like_jwt(token: str) -> bool:
     # JWT is "header.payload.signature" (3 dot-separated parts)
     return token.count(".") == 2
 
 
-async def _authorize_stream_user(*, token: str, project_id: UUID) -> None:
+async def _authorize_user_token(*, token: str, project_id: UUID) -> None:
     """
     Validate that the bearer token belongs to a user that is a member of the given project.
     Uses auth-service:
@@ -142,7 +174,8 @@ async def telemetry_stream(request: web.Request) -> web.StreamResponse:
 
     Query:
       - sensor_id (required)
-      - since_id (optional, default 0): last seen telemetry_records.id
+      - since_ts (optional, default epoch): last seen telemetry_records.timestamp (ISO8601/RFC3339)
+      - since_id (optional, default 0): tie-break for identical timestamps
       - max_events (optional): stop after sending N events (useful for tests)
       - idle_timeout_seconds (optional, default 30): stop after N seconds without new data
     """
@@ -155,6 +188,7 @@ async def telemetry_stream(request: web.Request) -> web.StreamResponse:
     except ValueError as exc:
         raise web.HTTPBadRequest(text="Invalid sensor_id") from exc
 
+    since_ts = _parse_since_ts(request.rel_url.query.get("since_ts"))
     since_id = _parse_int(request.rel_url.query.get("since_id"), default=0)
     max_events_raw = request.rel_url.query.get("max_events")
     max_events = _parse_int(max_events_raw, default=0) if max_events_raw else None
@@ -180,7 +214,7 @@ async def telemetry_stream(request: web.Request) -> web.StreamResponse:
 
     # If token is a user token, enforce membership in the sensor's project.
     if _looks_like_jwt(token):
-        await _authorize_stream_user(token=token, project_id=project_id)
+        await _authorize_user_token(token=token, project_id=project_id)
 
     resp = web.StreamResponse(
         status=200,
@@ -195,7 +229,8 @@ async def telemetry_stream(request: web.Request) -> web.StreamResponse:
     sent = 0
     last_activity = time.monotonic()
     last_heartbeat = time.monotonic()
-    cursor = since_id
+    cursor_ts = since_ts
+    cursor_id = since_id
 
     try:
         while True:
@@ -212,20 +247,25 @@ async def telemetry_stream(request: web.Request) -> web.StreamResponse:
                     """
                     SELECT id, timestamp, raw_value, physical_value, meta, run_id, capture_session_id
                     FROM telemetry_records
-                    WHERE project_id = $1 AND sensor_id = $2 AND id > $3
-                    ORDER BY id ASC
+                    WHERE project_id = $1
+                      AND sensor_id = $2
+                      AND (timestamp, id) > ($3, $4)
+                    ORDER BY timestamp ASC, id ASC
                     LIMIT 100
                     """,
                     project_id,
                     sensor_id,
-                    cursor,
+                    cursor_ts,
+                    cursor_id,
                 )
 
             if rows:
                 for r in rows:
-                    cursor = int(r["id"])
+                    cursor_id = int(r["id"])
+                    if isinstance(r["timestamp"], datetime):
+                        cursor_ts = r["timestamp"].astimezone(timezone.utc)
                     payload = {
-                        "id": cursor,
+                        "id": cursor_id,
                         "sensor_id": str(sensor_id),
                         "project_id": str(project_id),
                         "timestamp": (
@@ -259,3 +299,127 @@ async def telemetry_stream(request: web.Request) -> web.StreamResponse:
         await resp.write(b"data: " + str(exc).encode("utf-8") + b"\n\n")
         return resp
     return resp
+
+
+@routes.get("/api/v1/telemetry/query")
+async def telemetry_query(request: web.Request) -> web.Response:
+    """
+    Query telemetry records for a capture session (historical).
+
+    Query:
+      - capture_session_id (required)
+      - sensor_id (optional, repeatable)
+      - since_id (optional, default 0)
+      - limit (optional, default 2000, max 20000)
+      - include_late (optional, default true)
+      - order (optional, only 'asc' supported)
+    """
+    token = _extract_stream_token(request)
+    if not _looks_like_jwt(token):
+        raise web.HTTPUnauthorized(text="User token is required")
+
+    capture_session_raw = request.rel_url.query.get("capture_session_id")
+    if not capture_session_raw:
+        raise web.HTTPBadRequest(text="capture_session_id is required")
+    try:
+        capture_session_id = UUID(capture_session_raw)
+    except ValueError as exc:
+        raise web.HTTPBadRequest(text="Invalid capture_session_id") from exc
+
+    sensor_ids_raw = request.rel_url.query.getall("sensor_id", [])
+    sensor_ids: list[UUID] = []
+    for value in sensor_ids_raw:
+        if not value:
+            continue
+        try:
+            sensor_ids.append(UUID(value))
+        except ValueError as exc:
+            raise web.HTTPBadRequest(text="Invalid sensor_id") from exc
+
+    since_id = _parse_int(request.rel_url.query.get("since_id"), default=0)
+    limit = _parse_int(request.rel_url.query.get("limit"), default=2000)
+    if limit < 1:
+        raise web.HTTPBadRequest(text="limit must be >= 1")
+    if limit > 20000:
+        limit = 20000
+    include_late = _parse_bool(request.rel_url.query.get("include_late"), default=True)
+    order = (request.rel_url.query.get("order") or "asc").lower()
+    if order != "asc":
+        raise web.HTTPBadRequest(text="Only order=asc is supported")
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT project_id FROM capture_sessions WHERE id = $1",
+            capture_session_id,
+        )
+        if row is None:
+            raise web.HTTPNotFound(text="Capture session not found")
+        project_id = UUID(str(row["project_id"]))
+
+    await _authorize_user_token(token=token, project_id=project_id)
+
+    conditions: list[str] = []
+    params: list[object] = []
+    param_idx = 1
+
+    if include_late:
+        conditions.append(
+            f"(capture_session_id = ${param_idx} OR (meta->'__system'->>'capture_session_id') = ${param_idx}::text)"
+        )
+    else:
+        conditions.append(f"capture_session_id = ${param_idx}")
+        conditions.append(
+            "COALESCE((meta->'__system'->>'late')::boolean, false) = false"
+        )
+    params.append(capture_session_id)
+    param_idx += 1
+
+    conditions.append(f"id > ${param_idx}")
+    params.append(since_id)
+    param_idx += 1
+
+    if sensor_ids:
+        conditions.append(f"sensor_id = ANY(${param_idx}::uuid[])")
+        params.append(sensor_ids)
+        param_idx += 1
+
+    conditions_sql = " AND ".join(conditions)
+    sql = f"""
+        SELECT id, project_id, sensor_id, timestamp, raw_value, physical_value,
+               run_id, capture_session_id, meta
+        FROM telemetry_records
+        WHERE {conditions_sql}
+        ORDER BY id ASC
+        LIMIT ${param_idx}
+    """
+    params.append(limit)
+
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(sql, *params)
+
+    points = []
+    for r in rows:
+        meta = r["meta"]
+        if isinstance(meta, str):
+            meta = json.loads(meta)
+        points.append(
+            {
+                "id": int(r["id"]),
+                "project_id": str(r["project_id"]),
+                "sensor_id": str(r["sensor_id"]),
+                "timestamp": (
+                    r["timestamp"].astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+                    if isinstance(r["timestamp"], datetime)
+                    else str(r["timestamp"])
+                ),
+                "raw_value": r["raw_value"],
+                "physical_value": r["physical_value"],
+                "run_id": str(r["run_id"]) if r["run_id"] else None,
+                "capture_session_id": str(r["capture_session_id"]) if r["capture_session_id"] else None,
+                "meta": meta,
+            }
+        )
+
+    next_since_id = points[-1]["id"] if len(points) == limit else None
+    return web.json_response({"points": points, "next_since_id": next_since_id})
