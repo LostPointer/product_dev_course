@@ -35,7 +35,10 @@ cp .env.example .env
 poetry run python -m experiment_service.main
 
 # тесты + встроенный PostgreSQL через testsuite
-poetry run pytest
+# Для TimescaleDB тесты запускаем, подключаясь к внешней TimescaleDB (например, через root docker-compose).
+# 1) В корне репозитория поднимите БД: docker compose up -d postgres
+# 2) Запустите тесты, передав DSN к postgres (порт по root compose: 5433):
+poetry run pytest --postgresql postgresql://postgres:postgres@localhost:5433/postgres
 ```
 
 Примечание: на Python 3.14 часть DeprecationWarning идёт из `pytest-asyncio` (не из нашего кода) и подавляется через `filterwarnings` в `pyproject.toml`. Убрать фильтры можно будет после обновления `pytest-asyncio`.

@@ -2,18 +2,18 @@
 -- Run `poetry run python bin/export_schema.py` after editing migrations.
 
 BEGIN;
-DROP TABLE IF EXISTS sensor_projects CASCADE;
 DROP TABLE IF EXISTS run_metrics CASCADE;
+DROP TABLE IF EXISTS run_events CASCADE;
+DROP TABLE IF EXISTS webhook_deliveries CASCADE;
+DROP TABLE IF EXISTS webhook_subscriptions CASCADE;
 DROP TABLE IF EXISTS telemetry_records CASCADE;
 DROP TABLE IF EXISTS request_idempotency CASCADE;
 DROP TABLE IF EXISTS artifacts CASCADE;
 DROP TABLE IF EXISTS capture_session_events CASCADE;
-DROP TABLE IF EXISTS run_events CASCADE;
-DROP TABLE IF EXISTS webhook_deliveries CASCADE;
-DROP TABLE IF EXISTS webhook_subscriptions CASCADE;
 DROP TABLE IF EXISTS capture_sessions CASCADE;
 DROP TABLE IF EXISTS run_sensors CASCADE;
 DROP TABLE IF EXISTS conversion_profiles CASCADE;
+DROP TABLE IF EXISTS sensor_projects CASCADE;
 DROP TABLE IF EXISTS sensors CASCADE;
 DROP TABLE IF EXISTS runs CASCADE;
 DROP TABLE IF EXISTS experiments CASCADE;
@@ -27,10 +27,11 @@ DROP FUNCTION IF EXISTS set_updated_at() CASCADE;
 
 -- Migration: 001_initial_schema.sql
 -- 001_initial_schema.sql
--- Initial Experiment Service schema (Foundation scope).
+-- Initial Experiment Service schema (single init; includes TimescaleDB telemetry + later additive migrations).
 
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE EXTENSION IF NOT EXISTS timescaledb;
 
 CREATE OR REPLACE FUNCTION set_updated_at()
 RETURNS TRIGGER AS $$
@@ -82,6 +83,7 @@ CREATE TABLE runs (
     params jsonb NOT NULL DEFAULT '{}'::jsonb,
     git_sha text,
     env text,
+    tags text[] NOT NULL DEFAULT '{}'::text[],
     status run_status NOT NULL DEFAULT 'draft',
     started_at timestamptz,
     finished_at timestamptz,
@@ -97,6 +99,7 @@ CREATE TABLE runs (
 CREATE INDEX runs_project_status_idx ON runs (project_id, status);
 CREATE INDEX runs_project_experiment_idx ON runs (project_id, experiment_id);
 CREATE INDEX runs_git_sha_idx ON runs (git_sha);
+CREATE INDEX runs_tags_gin_idx ON runs USING gin (tags);
 
 CREATE TRIGGER runs_set_updated_at
     BEFORE UPDATE ON runs
@@ -128,6 +131,23 @@ CREATE TRIGGER sensors_set_updated_at
     BEFORE UPDATE ON sensors
     FOR EACH ROW
     EXECUTE FUNCTION set_updated_at();
+
+-- Many-to-many relationship between sensors and projects.
+-- Sensors keep sensors.project_id as the "primary" project for legacy joins and UX defaults.
+CREATE TABLE sensor_projects (
+    sensor_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (sensor_id, project_id),
+    FOREIGN KEY (sensor_id) REFERENCES sensors (id) ON DELETE CASCADE,
+    UNIQUE (sensor_id, project_id)
+);
+
+CREATE INDEX sensor_projects_project_idx ON sensor_projects (project_id);
+CREATE INDEX sensor_projects_sensor_idx ON sensor_projects (sensor_id);
+
+COMMENT ON TABLE sensor_projects IS 'Many-to-many relationship between sensors and projects. Each sensor can belong to multiple projects.';
+COMMENT ON COLUMN sensors.project_id IS 'Primary project for backward compatibility. All projects are tracked in sensor_projects table.';
 
 CREATE TABLE conversion_profiles (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -210,79 +230,6 @@ CREATE TABLE capture_session_events (
 
 CREATE INDEX capture_session_events_session_idx ON capture_session_events (capture_session_id, created_at DESC);
 
--- Migration: 005_run_events.sql
-CREATE TABLE run_events (
-    id bigserial PRIMARY KEY,
-    run_id uuid NOT NULL,
-    event_type text NOT NULL,
-    actor_id uuid NOT NULL,
-    actor_role text NOT NULL,
-    payload jsonb NOT NULL DEFAULT '{}'::jsonb,
-    created_at timestamptz NOT NULL DEFAULT now(),
-    FOREIGN KEY (run_id) REFERENCES runs (id) ON DELETE CASCADE
-);
-
-CREATE INDEX run_events_run_idx ON run_events (run_id, created_at DESC);
-
--- Migration: 004_webhooks.sql
-CREATE TABLE webhook_subscriptions (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    project_id uuid NOT NULL,
-    target_url text NOT NULL,
-    secret text,
-    event_types text[] NOT NULL DEFAULT '{}'::text[],
-    is_active boolean NOT NULL DEFAULT true,
-    created_at timestamptz NOT NULL DEFAULT now(),
-    updated_at timestamptz NOT NULL DEFAULT now()
-);
-
-CREATE INDEX webhook_subscriptions_project_idx
-    ON webhook_subscriptions (project_id, created_at DESC);
-
-CREATE INDEX webhook_subscriptions_event_types_gin_idx
-    ON webhook_subscriptions USING gin (event_types);
-
-CREATE TRIGGER webhook_subscriptions_set_updated_at
-    BEFORE UPDATE ON webhook_subscriptions
-    FOR EACH ROW
-    EXECUTE FUNCTION set_updated_at();
-
-CREATE TABLE webhook_deliveries (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    subscription_id uuid NOT NULL,
-    project_id uuid NOT NULL,
-    event_type text NOT NULL,
-    target_url text NOT NULL,
-    secret text,
-    request_body jsonb NOT NULL,
-    status text NOT NULL DEFAULT 'pending',
-    attempt_count integer NOT NULL DEFAULT 0,
-    last_error text,
-    dedup_key text,
-    locked_at timestamptz,
-    next_attempt_at timestamptz NOT NULL DEFAULT now(),
-    created_at timestamptz NOT NULL DEFAULT now(),
-    updated_at timestamptz NOT NULL DEFAULT now(),
-    FOREIGN KEY (subscription_id) REFERENCES webhook_subscriptions (id) ON DELETE CASCADE
-);
-
-CREATE INDEX webhook_deliveries_pending_idx
-    ON webhook_deliveries (status, next_attempt_at);
-
-CREATE INDEX webhook_deliveries_project_idx
-    ON webhook_deliveries (project_id, created_at DESC);
-
-ALTER TABLE webhook_deliveries
-    ADD CONSTRAINT webhook_deliveries_dedup_key_key UNIQUE (dedup_key);
-
-CREATE INDEX webhook_deliveries_status_next_attempt_idx
-    ON webhook_deliveries (status, next_attempt_at, created_at);
-
-CREATE TRIGGER webhook_deliveries_set_updated_at
-    BEFORE UPDATE ON webhook_deliveries
-    FOR EACH ROW
-    EXECUTE FUNCTION set_updated_at();
-
 CREATE TABLE artifacts (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     run_id uuid NOT NULL,
@@ -321,7 +268,11 @@ CREATE TABLE request_idempotency (
 CREATE INDEX request_idempotency_user_idx ON request_idempotency (user_id, created_at DESC);
 
 CREATE TABLE telemetry_records (
-    id bigserial PRIMARY KEY,
+    -- NOTE: TimescaleDB requires that all UNIQUE indexes include:
+    --  - the time column, and
+    --  - the partitioning column (when using space partitioning).
+    -- We keep an increasing id for debug/cursor tie-breaks; PK includes sensor_id + timestamp.
+    id bigserial NOT NULL,
     project_id uuid NOT NULL,
     sensor_id uuid NOT NULL,
     run_id uuid,
@@ -330,23 +281,121 @@ CREATE TABLE telemetry_records (
     raw_value double precision NOT NULL,
     physical_value double precision,
     meta jsonb NOT NULL DEFAULT '{}'::jsonb,
+    signal text GENERATED ALWAYS AS ((meta->>'signal')) STORED,
     conversion_status telemetry_conversion_status NOT NULL DEFAULT 'raw_only',
     conversion_profile_id uuid,
     ingested_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (sensor_id, timestamp, id),
     FOREIGN KEY (sensor_id) REFERENCES sensors (id) ON DELETE CASCADE,
     FOREIGN KEY (run_id) REFERENCES runs (id) ON DELETE SET NULL,
     FOREIGN KEY (capture_session_id) REFERENCES capture_sessions (id) ON DELETE SET NULL,
     FOREIGN KEY (conversion_profile_id) REFERENCES conversion_profiles (id)
 );
 
+-- Convert telemetry_records into a hypertable.
+-- Chunking/partitioning defaults are a starting point; tune based on real ingestion volume.
+SELECT create_hypertable(
+    'telemetry_records',
+    'timestamp',
+    partitioning_column => 'sensor_id',
+    number_partitions => 8,
+    chunk_time_interval => INTERVAL '1 day',
+    if_not_exists => TRUE
+);
+
+-- Indexes for the main query patterns.
+CREATE INDEX telemetry_records_project_sensor_ts_id_idx
+    ON telemetry_records (project_id, sensor_id, timestamp ASC, id ASC);
+
 CREATE INDEX telemetry_records_sensor_ts_idx
-    ON telemetry_records (sensor_id, timestamp DESC);
+    ON telemetry_records (sensor_id, timestamp DESC, id DESC);
 
 CREATE INDEX telemetry_records_run_ts_idx
-    ON telemetry_records (run_id, timestamp DESC);
+    ON telemetry_records (run_id, timestamp DESC, id DESC);
 
 CREATE INDEX telemetry_records_capture_ts_idx
-    ON telemetry_records (capture_session_id, timestamp DESC);
+    ON telemetry_records (capture_session_id, timestamp DESC, id DESC);
+
+CREATE INDEX telemetry_records_sensor_signal_ts_idx
+    ON telemetry_records (sensor_id, signal, timestamp DESC, id DESC);
+
+-- TimescaleDB compression + retention policies for raw points.
+ALTER TABLE telemetry_records
+    SET (
+        timescaledb.compress,
+        timescaledb.compress_segmentby = 'sensor_id, signal',
+        timescaledb.compress_orderby = 'timestamp DESC'
+    );
+
+SELECT add_compression_policy('telemetry_records', INTERVAL '7 days');
+SELECT add_retention_policy('telemetry_records', INTERVAL '90 days');
+
+-- Webhooks schema (final, hardened).
+CREATE TABLE webhook_subscriptions (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id uuid NOT NULL,
+    target_url text NOT NULL,
+    event_types text[] NOT NULL DEFAULT '{}'::text[],
+    secret text,
+    is_active boolean NOT NULL DEFAULT true,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX webhook_subscriptions_project_active_idx
+    ON webhook_subscriptions (project_id, is_active);
+
+CREATE INDEX webhook_subscriptions_event_types_gin_idx
+    ON webhook_subscriptions USING gin (event_types);
+
+CREATE TRIGGER webhook_subscriptions_set_updated_at
+    BEFORE UPDATE ON webhook_subscriptions
+    FOR EACH ROW
+    EXECUTE FUNCTION set_updated_at();
+
+CREATE TABLE webhook_deliveries (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    subscription_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    event_type text NOT NULL,
+    target_url text NOT NULL,
+    secret text,
+    request_body jsonb NOT NULL DEFAULT '{}'::jsonb,
+    dedup_key text UNIQUE,
+    status text NOT NULL DEFAULT 'pending', -- pending|in_progress|succeeded|dead_lettered
+    attempt_count integer NOT NULL DEFAULT 0,
+    last_error text,
+    locked_at timestamptz,
+    next_attempt_at timestamptz NOT NULL DEFAULT now(),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    FOREIGN KEY (subscription_id) REFERENCES webhook_subscriptions (id) ON DELETE CASCADE
+);
+
+CREATE INDEX webhook_deliveries_project_status_idx
+    ON webhook_deliveries (project_id, status, created_at DESC);
+
+CREATE INDEX webhook_deliveries_status_next_attempt_idx
+    ON webhook_deliveries (status, next_attempt_at, created_at);
+
+CREATE TRIGGER webhook_deliveries_set_updated_at
+    BEFORE UPDATE ON webhook_deliveries
+    FOR EACH ROW
+    EXECUTE FUNCTION set_updated_at();
+
+-- Audit log for run actions (status changes, bulk tag updates, etc.)
+CREATE TABLE run_events (
+    id bigserial PRIMARY KEY,
+    run_id uuid NOT NULL,
+    event_type text NOT NULL,
+    actor_id uuid NOT NULL,
+    actor_role text NOT NULL,
+    payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    FOREIGN KEY (run_id) REFERENCES runs (id) ON DELETE CASCADE
+);
+
+CREATE INDEX run_events_run_idx ON run_events (run_id, created_at DESC);
 
 CREATE TABLE run_metrics (
     id bigserial PRIMARY KEY,
@@ -365,59 +414,4 @@ CREATE INDEX run_metrics_run_name_step_idx
 
 CREATE INDEX run_metrics_project_name_idx
     ON run_metrics (project_id, name);
-
--- Migration: 002_sensor_projects_many_to_many.sql
--- 002_sensor_projects_many_to_many.sql
--- Migration to support many-to-many relationship between sensors and projects.
--- This allows a sensor to be associated with multiple projects.
-
-
--- Step 1: Create the sensor_projects junction table
-CREATE TABLE IF NOT EXISTS sensor_projects (
-    sensor_id uuid NOT NULL,
-    project_id uuid NOT NULL,
-    created_at timestamptz NOT NULL DEFAULT now(),
-    PRIMARY KEY (sensor_id, project_id),
-    FOREIGN KEY (sensor_id) REFERENCES sensors (id) ON DELETE CASCADE,
-    -- Note: project_id references auth_service.projects, but we can't add FK here
-    -- as it's in a different database. We rely on application-level validation.
-    UNIQUE (sensor_id, project_id)
-);
-
--- Create indexes only if they don't exist
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'sensor_projects_project_idx') THEN
-        CREATE INDEX sensor_projects_project_idx ON sensor_projects (project_id);
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'sensor_projects_sensor_idx') THEN
-        CREATE INDEX sensor_projects_sensor_idx ON sensor_projects (sensor_id);
-    END IF;
-END $$;
-
--- Step 2: Migrate existing data from sensors.project_id to sensor_projects
--- For each sensor, create a corresponding entry in sensor_projects
-INSERT INTO sensor_projects (sensor_id, project_id, created_at)
-SELECT id, project_id, created_at
-FROM sensors
-ON CONFLICT (sensor_id, project_id) DO NOTHING;
-
--- Step 3: We keep sensors.project_id as NOT NULL for now to maintain backward compatibility
--- with existing foreign keys. In a future migration, we could make it nullable or remove it
--- after updating all dependent tables.
-
--- Step 4: Add a comment explaining the dual structure during migration
-COMMENT ON TABLE sensor_projects IS 'Many-to-many relationship between sensors and projects. Each sensor can belong to multiple projects.';
-COMMENT ON COLUMN sensors.project_id IS 'Primary project for backward compatibility. All projects are tracked in sensor_projects table.';
-
--- Migration: 003_add_run_tags.sql
--- 003_add_run_tags.sql
--- Add tags support for runs to enable bulk tagging operations.
-
-
-ALTER TABLE runs
-    ADD COLUMN IF NOT EXISTS tags text[] NOT NULL DEFAULT '{}'::text[];
-
--- Optional: speed up tag filtering in future
-CREATE INDEX IF NOT EXISTS runs_tags_gin_idx ON runs USING gin (tags);
 COMMIT;

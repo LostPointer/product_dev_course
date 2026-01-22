@@ -14,6 +14,16 @@ pytest_plugins = (
 
 PG_SCHEMAS_PATH = Path(__file__).parent / "schemas" / "postgresql"
 
+class _TimescaleInternalTables:
+    """
+    testsuite truncates all BASE TABLEs between tests, based on information_schema.tables.
+    After `CREATE EXTENSION timescaledb`, internal schemas like `_timescaledb_catalog` appear.
+    Truncating those internal tables can crash or corrupt the DB; we exclude them by prefix.
+    """
+
+    def __contains__(self, item: object) -> bool:  # used by testsuite ConnectionWrapper.initialize()
+        return isinstance(item, str) and item.startswith("_timescaledb_")
+
 
 @pytest.fixture(scope="session")
 def event_loop():
@@ -29,6 +39,12 @@ def pgsql_local(pgsql_local_create):
         schema_dirs=[PG_SCHEMAS_PATH],
     )
     return pgsql_local_create(list(databases.values()))
+
+
+@pytest.fixture(scope="session")
+def pgsql_cleanup_exclude_tables():
+    # Exclude TimescaleDB internal schemas from testsuite TRUNCATE list.
+    return _TimescaleInternalTables()
 
 
 @pytest.fixture
