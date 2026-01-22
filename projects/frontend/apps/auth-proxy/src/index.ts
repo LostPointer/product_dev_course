@@ -432,10 +432,12 @@ export async function buildServer(config: Config) {
         }
     })
 
-    // Ensure telemetry stream requests always carry a valid bearer token.
+    // Ensure telemetry read requests always carry a valid bearer token.
     app.addHook('preHandler', async (request, reply) => {
         const url = request.url || ''
-        if (!url.startsWith('/api/v1/telemetry/stream')) return
+        const isTelemetryRead =
+            url.startsWith('/api/v1/telemetry/stream') || url.startsWith('/api/v1/telemetry/query')
+        if (!isTelemetryRead) return
 
         if (request.headers?.authorization) return
 
@@ -916,10 +918,11 @@ export async function buildServer(config: Config) {
                 newHeaders['X-Request-Id'] = outgoingHeaders['X-Request-Id']
 
                 const url = String(req.url || '')
-                const isTelemetryStream = url.startsWith('/api/v1/telemetry/stream')
+                const isTelemetryRead =
+                    url.startsWith('/api/v1/telemetry/stream') || url.startsWith('/api/v1/telemetry/query')
 
                 // If stream request has no Authorization, use session cookie access token
-                if (isTelemetryStream && !newHeaders['authorization']) {
+                if (isTelemetryRead && !newHeaders['authorization']) {
                     const cookies = parseCookies(req.headers.cookie as string | undefined)
                     const access = cookies[config.accessCookieName]
                     if (access) {
