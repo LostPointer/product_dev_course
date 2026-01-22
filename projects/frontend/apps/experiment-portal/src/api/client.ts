@@ -21,6 +21,7 @@ import type {
   CaptureSessionsListResponse,
   TelemetryIngest,
   TelemetryIngestResponse,
+  TelemetryQueryResponse,
   Project,
   ProjectCreate,
   ProjectUpdate,
@@ -34,7 +35,12 @@ import { generateRequestId } from '../utils/uuid'
 import { getTraceId } from '../utils/trace'
 import { getActiveProjectId } from '../utils/activeProject'
 import { getCsrfToken } from '../utils/csrf'
-import { maybeEmitHttpErrorToastFromAxiosError } from '../utils/httpDebug'
+import {
+  buildHttpDebugInfoFromFetch,
+  maybeEmitHttpErrorToast,
+  maybeEmitHttpErrorToastFromAxiosError,
+  truncateString,
+} from '../utils/httpDebug'
 
 // API работает через Auth Proxy, который автоматически добавляет токен из куки
 const AUTH_PROXY_URL = import.meta.env.VITE_AUTH_PROXY_URL || 'http://localhost:8080'
@@ -370,6 +376,7 @@ export const telemetryApi = {
   stream: async (
     params: {
       sensor_id: string
+      since_ts?: string
       since_id?: number
       max_events?: number
       idle_timeout_seconds?: number
@@ -382,6 +389,9 @@ export const telemetryApi = {
     const activeProjectId = getActiveProjectId()
     if (activeProjectId) {
       url.searchParams.set('project_id', activeProjectId)
+    }
+    if (typeof params.since_ts === 'string' && params.since_ts) {
+      url.searchParams.set('since_ts', params.since_ts)
     }
     if (typeof params.since_id === 'number') url.searchParams.set('since_id', String(params.since_id))
     if (typeof params.max_events === 'number') url.searchParams.set('max_events', String(params.max_events))
@@ -441,6 +451,60 @@ export const telemetryApi = {
       e.debug = debug
       throw e
     }
+  },
+
+  query: async (params: {
+    capture_session_id: string
+    sensor_id?: string[]
+    since_id?: number
+    limit?: number
+    include_late?: boolean
+  }): Promise<TelemetryQueryResponse> => {
+    const TELEMETRY_BASE_URL =
+      import.meta.env.VITE_TELEMETRY_INGEST_URL || AUTH_PROXY_URL
+    const url = new URL(`${TELEMETRY_BASE_URL}/api/v1/telemetry/query`)
+    url.searchParams.set('capture_session_id', params.capture_session_id)
+    if (Array.isArray(params.sensor_id)) {
+      params.sensor_id.forEach((id) => {
+        if (id) url.searchParams.append('sensor_id', id)
+      })
+    }
+    if (typeof params.since_id === 'number') url.searchParams.set('since_id', String(params.since_id))
+    if (typeof params.limit === 'number') url.searchParams.set('limit', String(params.limit))
+    if (typeof params.include_late === 'boolean') {
+      url.searchParams.set('include_late', params.include_late ? 'true' : 'false')
+    }
+
+    const headers = {
+      'X-Trace-Id': getTraceId(),
+      'X-Request-Id': generateRequestId(),
+    }
+
+    const resp = await fetch(url.toString(), {
+      method: 'GET',
+      headers,
+      credentials: 'include',
+    })
+
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => '')
+      const bodyText = truncateString(text || '')
+      maybeEmitHttpErrorToast(
+        buildHttpDebugInfoFromFetch({
+          message: text || `Ошибка запроса: HTTP ${resp.status}`,
+          request: { method: 'GET', url: url.toString(), headers },
+          response: {
+            status: resp.status,
+            statusText: resp.statusText,
+            headers: Object.fromEntries(resp.headers.entries()),
+            body: bodyText,
+          },
+        })
+      )
+      throw new Error(text || `Ошибка запроса: HTTP ${resp.status}`)
+    }
+
+    return (await resp.json()) as TelemetryQueryResponse
   },
 }
 

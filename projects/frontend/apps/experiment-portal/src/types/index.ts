@@ -1,4 +1,5 @@
 /** Типы для экспериментов и runs */
+import type { TelemetryQueryRecord } from './telemetry'
 
 export interface Experiment {
   id: string
@@ -229,7 +230,12 @@ export interface TelemetryIngestResponse {
   accepted: number
 }
 
-export type { TelemetryStreamRecord } from './telemetry'
+export type { TelemetryStreamRecord, TelemetryQueryRecord } from './telemetry'
+
+export interface TelemetryQueryResponse {
+  points: TelemetryQueryRecord[]
+  next_since_id: number | null
+}
 
 /** Типы для проектов */
 

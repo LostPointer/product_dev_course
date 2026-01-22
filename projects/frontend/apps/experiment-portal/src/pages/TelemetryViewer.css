@@ -98,6 +98,117 @@
     background: #f1f5f9;
 }
 
+.telemetry-view__mode {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.telemetry-view__mode-toggle {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.telemetry-view__history {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.telemetry-view__history-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.telemetry-view__history-sensors {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.telemetry-view__sensor-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.telemetry-view__sensor-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: #e2e8f0;
+    font-size: 12px;
+}
+
+.telemetry-view__sensor-pill button {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+}
+
+.telemetry-view__hint {
+    color: #64748b;
+    font-size: 12px;
+}
+
+.telemetry-view__history-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+}
+
+.telemetry-view__history-options label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+}
+
+.telemetry-view__history-options input[type="number"] {
+    width: 120px;
+}
+
+.telemetry-view__checkbox {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.telemetry-view__history-chart {
+    position: relative;
+    min-height: 360px;
+}
+
+.telemetry-view__plotly {
+    width: 100%;
+    height: 360px;
+}
+
+.telemetry-view__empty {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #64748b;
+    font-size: 14px;
+    background: rgba(248, 250, 252, 0.9);
+    border-radius: 12px;
+}
+
+.telemetry-view__error {
+    color: #b91c1c;
+    font-size: 13px;
+}
+
 .telemetry-view__panels {
     display: grid;
     grid-template-columns: repeat(2, minmax(320px, 1fr));
