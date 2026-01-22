@@ -1,0 +1,9 @@
+ERC report (2026-01-23T00:52:32+0300, Encoding UTF8)
+
+***** Sheet /
+[pin_to_pin]: Pins of type Bidirectional and Power output are connected
+    ; warning
+    @(8600 mils, 1300 mils): Symbol U3 Pin 2 [SDX, Bidirectional, Line]
+    @(950 mils, 900 mils): Symbol #FLG02 Pin 1 [Power output, Line]
+
+ ** ERC messages: 1  Errors 0  Warnings 1
