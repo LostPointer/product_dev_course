@@ -83,6 +83,9 @@
 - Телеметрия: добавить управление `capture_session` (старт/стоп) в контекстном меню
 - Просмотр исторических данных для пуска/отсчёта
 
+#### Мобильный клиент (Android)
+- Сделать приложение для Android для просмотра результатов (Experiments/Runs) и телеметрии (live + historical)
+
 ---
 
 ## Cross-cutting backlog (Frontend + BFF/Auth Proxy)
