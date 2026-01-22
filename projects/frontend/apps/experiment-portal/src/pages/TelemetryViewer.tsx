@@ -7,7 +7,7 @@ import { EmptyState, Error as ErrorComponent, FloatingActionButton, Loading, Mat
 import TelemetryPanel from '../components/TelemetryPanel'
 import { setActiveProjectId } from '../utils/activeProject'
 import { generateUUID } from '../utils/uuid'
-import type { Sensor, TelemetryQueryRecord } from '../types'
+import type { CaptureSession, Sensor, TelemetryQueryRecord } from '../types'
 import './TelemetryViewer.css'
 
 type TelemetryViewerState = {
@@ -15,10 +15,18 @@ type TelemetryViewerState = {
     experimentId: string
     runId: string
     filtersOpen: boolean
+    viewMode: TelemetryViewMode
 }
 
 type TelemetryViewMode = 'live' | 'history'
 type HistoryValueMode = 'physical' | 'raw'
+type TelemetryHistoryState = {
+    captureSessionId: string
+    sensorIds: string[]
+    valueMode: HistoryValueMode
+    includeLate: boolean
+    maxPoints: number
+}
 
 const HISTORY_MAX_POINTS_DEFAULT = 5000
 const HISTORY_PAGE_SIZE = 2000
@@ -34,6 +42,7 @@ function TelemetryViewer() {
     const [dragOverPanelId, setDragOverPanelId] = useState<string | null>(null)
     const panelsLoadedRef = useRef(false)
     const viewerStateLoadedRef = useRef(false)
+    const historyStateLoadedRef = useRef(false)
     const [panelSizes, setPanelSizes] = useState<Record<string, { width: number; height: number }>>({})
     const panelsWrapRef = useRef<HTMLDivElement | null>(null)
     const [panelsWrapWidth, setPanelsWrapWidth] = useState(0)
@@ -47,6 +56,9 @@ function TelemetryViewer() {
     const [historyLoading, setHistoryLoading] = useState(false)
     const [historyError, setHistoryError] = useState<string | null>(null)
     const [historyPoints, setHistoryPoints] = useState<TelemetryQueryRecord[]>([])
+    const [historyLoadedCount, setHistoryLoadedCount] = useState(0)
+    const [historyWasTruncated, setHistoryWasTruncated] = useState(false)
+    const [historySessionFilter, setHistorySessionFilter] = useState('')
 
     useEffect(() => {
         if (typeof window === 'undefined') return
@@ -81,6 +93,7 @@ function TelemetryViewer() {
             if (typeof parsed.experimentId === 'string') setExperimentId(parsed.experimentId)
             if (typeof parsed.runId === 'string') setRunId(parsed.runId)
             if (typeof parsed.filtersOpen === 'boolean') setFiltersOpen(parsed.filtersOpen)
+            if (parsed.viewMode === 'live' || parsed.viewMode === 'history') setViewMode(parsed.viewMode)
         } catch {
             // ignore malformed local storage
         } finally {
@@ -95,9 +108,48 @@ function TelemetryViewer() {
             experimentId,
             runId,
             filtersOpen,
+            viewMode,
         }
         window.localStorage.setItem('telemetry_viewer_state', JSON.stringify(payload))
-    }, [projectId, experimentId, runId, filtersOpen])
+    }, [projectId, experimentId, runId, filtersOpen, viewMode])
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return
+        const raw = window.localStorage.getItem('telemetry_history_state')
+        if (!raw) {
+            historyStateLoadedRef.current = true
+            return
+        }
+        try {
+            const parsed = JSON.parse(raw) as Partial<TelemetryHistoryState>
+            if (typeof parsed.captureSessionId === 'string') setHistoryCaptureSessionId(parsed.captureSessionId)
+            if (Array.isArray(parsed.sensorIds)) {
+                const next = parsed.sensorIds.filter((id) => typeof id === 'string' && id.trim().length > 0)
+                setHistorySensorIds(next)
+            }
+            if (parsed.valueMode === 'physical' || parsed.valueMode === 'raw') setHistoryValueMode(parsed.valueMode)
+            if (typeof parsed.includeLate === 'boolean') setHistoryIncludeLate(parsed.includeLate)
+            if (typeof parsed.maxPoints === 'number' && Number.isFinite(parsed.maxPoints)) {
+                setHistoryMaxPoints(Math.max(100, Math.min(20000, Math.round(parsed.maxPoints))))
+            }
+        } catch {
+            // ignore malformed local storage
+        } finally {
+            historyStateLoadedRef.current = true
+        }
+    }, [])
+
+    useEffect(() => {
+        if (typeof window === 'undefined' || !historyStateLoadedRef.current) return
+        const payload: TelemetryHistoryState = {
+            captureSessionId: historyCaptureSessionId,
+            sensorIds: historySensorIds,
+            valueMode: historyValueMode,
+            includeLate: historyIncludeLate,
+            maxPoints: historyMaxPoints,
+        }
+        window.localStorage.setItem('telemetry_history_state', JSON.stringify(payload))
+    }, [historyCaptureSessionId, historySensorIds, historyValueMode, historyIncludeLate, historyMaxPoints])
 
     useEffect(() => {
         if (typeof window === 'undefined' || !panelsLoadedRef.current) return
@@ -272,6 +324,54 @@ function TelemetryViewer() {
         })
     }, [historyPoints, historySensorsById, historyValueMode])
 
+    const historyEffectiveSensorIds = useMemo(() => {
+        if (historySensorIds.length > 0) return historySensorIds
+        const unique = new Set<string>()
+        historyPoints.forEach((point) => unique.add(point.sensor_id))
+        return Array.from(unique)
+    }, [historySensorIds, historyPoints])
+
+    const historyLastTimestamp = useMemo(() => {
+        let latest = 0
+        historyPoints.forEach((point) => {
+            const parsed = Date.parse(point.timestamp)
+            if (Number.isFinite(parsed) && parsed > latest) latest = parsed
+        })
+        return latest > 0 ? new Date(latest).toISOString() : null
+    }, [historyPoints])
+
+    const historySessionOptions = useMemo(() => {
+        const query = historySessionFilter.trim().toLowerCase()
+        const formatTimestamp = (value?: string | null) => {
+            if (!value) return '—'
+            const date = new Date(value)
+            return Number.isNaN(date.getTime()) ? value : date.toLocaleString()
+        }
+        const matchesQuery = (session: CaptureSession) => {
+            if (!query) return true
+            const parts = [
+                session.id,
+                session.ordinal_number,
+                session.status,
+                session.notes,
+                session.started_at,
+                session.stopped_at,
+            ]
+                .filter(Boolean)
+                .join(' ')
+                .toLowerCase()
+            return parts.includes(query)
+        }
+        return captureSessions
+            .filter(matchesQuery)
+            .map((session) => ({
+                id: session.id,
+                label: `#${session.ordinal_number} · ${session.status} · ${formatTimestamp(session.started_at)} → ${formatTimestamp(
+                    session.stopped_at
+                )}`,
+            }))
+    }, [captureSessions, historySessionFilter])
+
     const historyHasData = useMemo(
         () => historySeriesData.some((series) => series.y.length > 0),
         [historySeriesData]
@@ -363,16 +463,39 @@ function TelemetryViewer() {
         setHistorySensorIds((prev) => prev.filter((id) => id !== sensorId))
     }
 
+    const continueHistoryInLive = () => {
+        if (typeof window === 'undefined') return
+        const sensorIds = historyEffectiveSensorIds
+        if (sensorIds.length === 0) return
+        const panelId = generateUUID()
+        const payload = {
+            title: 'History -> Live',
+            selectedSensorIds: sensorIds,
+            valueMode: historyValueMode,
+            maxPoints: 500,
+            timeWindowSeconds: 300,
+            useLatestAnchor: true,
+            startFromTimestamp: historyLastTimestamp ?? undefined,
+        }
+        window.localStorage.setItem(`telemetry_panel_state_${panelId}`, JSON.stringify(payload))
+        setPanelIds((prev) => [...prev, panelId])
+        setViewMode('live')
+    }
+
     const loadHistory = async () => {
         if (!historyCaptureSessionId) return
         setHistoryError(null)
         setHistoryLoading(true)
         setHistoryPoints([])
+        setHistoryLoadedCount(0)
+        setHistoryWasTruncated(false)
         try {
             let sinceId = 0
             const collected: TelemetryQueryRecord[] = []
-            while (collected.length < historyMaxPoints) {
-                const pageLimit = Math.min(HISTORY_PAGE_SIZE, historyMaxPoints - collected.length)
+            const safeMaxPoints = Number.isFinite(historyMaxPoints) && historyMaxPoints > 0 ? historyMaxPoints : HISTORY_MAX_POINTS_DEFAULT
+            let lastHasMore = false
+            while (collected.length < safeMaxPoints) {
+                const pageLimit = Math.min(HISTORY_PAGE_SIZE, safeMaxPoints - collected.length)
                 const resp = await telemetryApi.query({
                     capture_session_id: historyCaptureSessionId,
                     sensor_id: historySensorIds.length > 0 ? historySensorIds : undefined,
@@ -381,10 +504,13 @@ function TelemetryViewer() {
                     include_late: historyIncludeLate,
                 })
                 collected.push(...resp.points)
-                if (!resp.next_since_id || resp.points.length === 0) break
-                sinceId = resp.next_since_id
+                setHistoryLoadedCount(collected.length)
+                lastHasMore = !!resp.next_since_id && resp.points.length > 0
+                if (!lastHasMore) break
+                sinceId = resp.next_since_id ?? sinceId
             }
             setHistoryPoints(collected)
+            setHistoryWasTruncated(lastHasMore && collected.length >= safeMaxPoints)
         } catch (err: any) {
             setHistoryError(err?.message || 'Ошибка загрузки истории')
         } finally {
@@ -485,6 +611,20 @@ function TelemetryViewer() {
                             </MaterialSelect>
 
                             {viewMode === 'history' && (
+                                <div className="form-group">
+                                    <label htmlFor="telemetry_capture_session_filter">Фильтр сессий</label>
+                                    <input
+                                        id="telemetry_capture_session_filter"
+                                        type="text"
+                                        className="telemetry-view__text-input"
+                                        value={historySessionFilter}
+                                        onChange={(event) => setHistorySessionFilter(event.target.value)}
+                                        placeholder="Номер, статус, заметка, дата"
+                                    />
+                                </div>
+                            )}
+
+                            {viewMode === 'history' && (
                                 <MaterialSelect
                                     id="telemetry_capture_session_id"
                                     label="Capture session"
@@ -493,9 +633,16 @@ function TelemetryViewer() {
                                     placeholder="Выберите сессию"
                                     disabled={!runId || captureSessionsLoading}
                                 >
-                                    {captureSessions.map((session) => (
+                                    {historySessionOptions.length === 0 && (
+                                        <option value="" disabled>
+                                            {historySessionFilter.trim()
+                                                ? 'Ничего не найдено'
+                                                : 'Нет доступных сессий'}
+                                        </option>
+                                    )}
+                                    {historySessionOptions.map((session) => (
                                         <option key={session.id} value={session.id}>
-                                            #{session.ordinal_number} · {session.status}
+                                            {session.label}
                                         </option>
                                     ))}
                                 </MaterialSelect>
@@ -541,6 +688,13 @@ function TelemetryViewer() {
                                 }
                             />
                         )}
+                        {viewMode === 'history' &&
+                            !captureSessionsLoading &&
+                            !captureSessionsError &&
+                            runId &&
+                            captureSessions.length === 0 && (
+                                <EmptyState message="В выбранном запуске нет capture sessions." />
+                            )}
                     </div>
 
 
@@ -699,13 +853,39 @@ function TelemetryViewer() {
                             >
                                 {historyLoading ? 'Загрузка...' : 'Загрузить'}
                             </button>
+                            <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                onClick={continueHistoryInLive}
+                                disabled={historyLoading || historyEffectiveSensorIds.length === 0 || !historyLastTimestamp}
+                                title="Переключиться в live и продолжить с последних точек истории"
+                            >
+                                Продолжить в live
+                            </button>
                         </div>
                     </div>
 
                     {historyError && <div className="telemetry-view__error">{historyError}</div>}
+                    {(historyLoadedCount > 0 || historyWasTruncated) && (
+                        <div className="telemetry-view__history-summary">
+                            Загружено точек: {historyLoadedCount}
+                            {historyWasTruncated && ` (показаны первые ${historyMaxPoints})`}
+                        </div>
+                    )}
 
                     <div className="telemetry-view__history-chart">
                         <div ref={historyPlotRef} className="telemetry-view__plotly" />
+                        {historyLoading && (
+                            <div className="telemetry-view__history-loading">
+                                Загрузка истории…
+                                {historyLoadedCount > 0 && (
+                                    <span>
+                                        {' '}
+                                        {historyLoadedCount} / {historyMaxPoints}
+                                    </span>
+                                )}
+                            </div>
+                        )}
                         {!historyHasData && !historyLoading && (
                             <div className="telemetry-view__empty">Нет данных — нажмите «Загрузить»</div>
                         )}

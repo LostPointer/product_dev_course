@@ -176,6 +176,20 @@
     width: 120px;
 }
 
+.telemetry-view__text-input {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #cbd5f5;
+    border-radius: 10px;
+    font-size: 13px;
+    background: #fff;
+}
+
+.telemetry-view__history-summary {
+    font-size: 12px;
+    color: #475569;
+}
+
 .telemetry-view__checkbox {
     display: inline-flex;
     gap: 6px;
@@ -201,6 +215,19 @@
     color: #64748b;
     font-size: 14px;
     background: rgba(248, 250, 252, 0.9);
+    border-radius: 12px;
+}
+
+.telemetry-view__history-loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #1e293b;
+    font-size: 14px;
+    font-weight: 500;
+    background: rgba(248, 250, 252, 0.75);
     border-radius: 12px;
 }
 

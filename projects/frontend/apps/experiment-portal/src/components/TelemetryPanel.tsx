@@ -27,6 +27,7 @@ type TelemetryPanelState = {
     maxPoints: number
     timeWindowSeconds: TimeWindowSeconds
     useLatestAnchor: boolean
+    startFromTimestamp?: string
     size?: { width: number; height: number }
 }
 
@@ -77,6 +78,7 @@ export default function TelemetryPanel({
     const [recordsBySensor, setRecordsBySensor] = useState<Record<string, TelemetryStreamRecord[]>>({})
     const [showSettings, setShowSettings] = useState(false)
     const [panelSize, setPanelSize] = useState<{ width: number; height: number } | null>(null)
+    const [startFromTimestamp, setStartFromTimestamp] = useState<string | null>(null)
 
     const abortControllers = useRef<Record<string, AbortController>>({})
     const runningRef = useRef<Record<string, boolean>>({})
@@ -96,6 +98,7 @@ export default function TelemetryPanel({
             maxPoints,
             timeWindowSeconds,
             useLatestAnchor,
+            startFromTimestamp: startFromTimestamp ?? undefined,
             size: panelSize ?? undefined,
         }
         window.localStorage.setItem(storageKey, JSON.stringify(payload))
@@ -137,6 +140,9 @@ export default function TelemetryPanel({
             }
             if (typeof parsed.useLatestAnchor === 'boolean') {
                 setUseLatestAnchor(parsed.useLatestAnchor)
+            }
+            if (typeof parsed.startFromTimestamp === 'string') {
+                setStartFromTimestamp(parsed.startFromTimestamp)
             }
             if (
                 parsed.size &&
@@ -194,11 +200,22 @@ export default function TelemetryPanel({
             maxPoints,
             timeWindowSeconds,
             useLatestAnchor,
+            startFromTimestamp: startFromTimestamp ?? undefined,
             size: panelSize ?? undefined,
         }
         window.localStorage.setItem(storageKey, JSON.stringify(payload))
         console.debug('[TelemetryPanel] saved state', { panelId, storageKey, payload })
-    }, [panelTitle, selectedSensorIds, valueMode, maxPoints, timeWindowSeconds, useLatestAnchor, panelSize, storageKey])
+    }, [
+        panelTitle,
+        selectedSensorIds,
+        valueMode,
+        maxPoints,
+        timeWindowSeconds,
+        useLatestAnchor,
+        startFromTimestamp,
+        panelSize,
+        storageKey,
+    ])
 
     useEffect(() => {
         if (panelSize) onSizeChange?.(panelSize)
@@ -266,7 +283,7 @@ export default function TelemetryPanel({
         setStatus('idle')
     }
 
-    const startStreamForSensor = async (sensorId: string) => {
+    const startStreamForSensor = async (sensorId: string, sinceTs: string) => {
         const abort = new AbortController()
         abortControllers.current[sensorId] = abort
         runningRef.current[sensorId] = true
@@ -274,7 +291,7 @@ export default function TelemetryPanel({
         try {
             const { response: resp } = await telemetryApi.stream({
                 sensor_id: sensorId,
-                since_ts: new Date().toISOString(),
+                since_ts: sinceTs,
                 since_id: 0,
                 idle_timeout_seconds: 30,
             })
@@ -321,12 +338,14 @@ export default function TelemetryPanel({
         setError(null)
         setRecordsBySensor({})
         setStatus('connecting')
+        const sinceTs = startFromTimestamp ?? new Date().toISOString()
 
         selectedSensorIds.forEach((sensorId) => {
-            startStreamForSensor(sensorId)
+            startStreamForSensor(sensorId, sinceTs)
         })
 
         setStatus('streaming')
+        if (startFromTimestamp) setStartFromTimestamp(null)
     }
 
     const filteredSensors = useMemo(() => {
