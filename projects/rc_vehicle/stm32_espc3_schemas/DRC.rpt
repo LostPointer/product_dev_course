@@ -1,0 +1,18 @@
+** Drc report for stm32_car_telemetry.kicad_pcb **
+** Created on 2026-01-24T00:31:46+0300 **
+
+** Found 0 DRC violations **
+
+** Found 2 unconnected pads **
+[unconnected_items]: Отсутствует соединение между элементами
+    Переопределено локально; error
+    @(116,0000 mm, 45,2500 mm): Зона [GND] на F.Cu и B.Cu, приоритет 0
+    @(116,0000 mm, 45,2500 mm): Зона [GND] на F.Cu и B.Cu, приоритет 0
+[unconnected_items]: Отсутствует соединение между элементами
+    Переопределено локально; error
+    @(116,0000 mm, 45,2500 mm): Зона [GND] на F.Cu и B.Cu, приоритет 0
+    @(116,0000 mm, 45,2500 mm): Зона [GND] на F.Cu и B.Cu, приоритет 0
+
+** Found 0 Footprint errors **
+
+** End of Report **

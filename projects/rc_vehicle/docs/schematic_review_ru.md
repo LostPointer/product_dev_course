@@ -16,17 +16,22 @@
 
 ### 1. PWM выходы (генерация для ESC и серво)
 
-**Рекомендуемая распиновка (из `stm32g431_pinout_ru.md`):**
+**Рекомендуемая распиновка:**
 
-- **ESC (Throttle)**: `PA8` (Output) → `TIM1_CH1` (AF2)
-- **Servo (Steering)**: `PA9` (Output) → `TIM1_CH2` (AF2)
+**Вариант 1 (рекомендуемый): PA0 + PA1**
+- **ESC (Throttle)**: `PA0` (Output) → `TIM2_CH1` (AF1)
+- **Servo (Steering)**: `PA1` (Output) → `TIM2_CH2` (AF1)
+
+**Вариант 2: PA2 + PA3**
+- **ESC (Throttle)**: `PA2` (Output) → `TIM15_CH1` (AF5)
+- **Servo (Steering)**: `PA3` (Output) → `TIM15_CH2` (AF5)
 
 **Проверить в схеме:**
 
-- [ ] PA8 подключен к разъёму для ESC (Signal)
-- [ ] PA9 подключен к разъёму для Servo (Signal)
-- [ ] TIM1 настроен для генерации PWM 50 Hz
-- [ ] Нет конфликтов с другими функциями на PA8/PA9
+- [ ] PA0 или PA2 подключен к разъёму для ESC (Signal)
+- [ ] PA1 или PA3 подключен к разъёму для Servo (Signal)
+- [ ] TIM2 или TIM15 настроен для генерации PWM 50 Hz
+- [ ] Нет конфликтов с другими функциями на выбранных пинах
 - [ ] **Уровни сигналов:** Добавлен TXS0104E для преобразования 3.3V ↔ 5V
 
 **⚠️ ВАЖНО: Уровни сигналов для ESC и серво**
@@ -55,9 +60,9 @@
   GND → общая земля
 
   PWM выходы (STM32 → ESC/Servo):
-  - A1 → PA8 (STM32 PWM выход, TIM1_CH1)
+  - A1 → PA0 или PA2 (STM32 PWM выход, TIM2_CH1 или TIM15_CH1)
   - B1 → ESC Signal (5V)
-  - A2 → PA9 (STM32 PWM выход, TIM1_CH2)
+  - A2 → PA1 или PA3 (STM32 PWM выход, TIM2_CH2 или TIM15_CH2)
   - B2 → Servo Signal (5V)
 
   PWM входы (RC приёмник → STM32):
@@ -80,11 +85,11 @@
     3. Если не найдено, скачайте с SnapEDA или Ultra Librarian (см. инструкцию ниже)
   - **Рекомендуемый корпус:** TSSOP-14 (TXS0104EPWR) — удобен для пайки
 
-**Альтернативные варианты (если PA8/PA9 заняты):**
+**Примечания:**
 
-- PA0/PA1 (Output) → TIM2_CH1/TIM2_CH2
-- PA6/PA7 (Output) → TIM3_CH1/TIM3_CH2
-- PB6/PB7 (Output) → TIM4_CH1/TIM4_CH2
+- **Вариант 1 (PA0/PA1):** TIM2 — 32-bit timer с высокой точностью, оба канала синхронизированы
+- **Вариант 2 (PA2/PA3):** TIM15 — advanced timer с высокой точностью, оба канала синхронизированы
+- Оба варианта обеспечивают синхронизированные PWM сигналы на одном таймере
 
 ### 2. PWM входы (чтение с RC приёмника)
 
@@ -119,28 +124,28 @@
 
 **Рекомендуемая распиновка:**
 
-- **STM32 TX**: `PA2` (Output) → `USART2_TX` (AF7)
-- **STM32 RX**: `PA3` (Input) → `USART2_RX` (AF7)
+- **STM32 TX**: `PA9` (Output) → `USART1_TX` (AF7)
+- **STM32 RX**: `PA10` (Input) → `USART1_RX` (AF7)
 
 **Проверить в схеме:**
 
-- [ ] PA2 (USART2_TX) подключен к RX на ESP32-C3
-- [ ] PA3 (USART2_RX) подключен к TX на ESP32-C3
+- [ ] PA9 (USART1_TX) подключен к RX на ESP32-C3
+- [ ] PA10 (USART1_RX) подключен к TX на ESP32-C3
 - [ ] Общая земля (GND) между STM32 и ESP32-C3
 - [ ] Скорость UART: 115200 baud (или другая, согласованная с прошивкой)
 
 **Варианты подключения UART:**
 
-#### Вариант 1 (рекомендуемый): USART2 ↔ UART1 (альтернативные GPIO)
+#### Вариант 1 (рекомендуемый): USART1 ↔ UART1 (альтернативные GPIO)
 
 **STM32 сторона:**
 
-- `PA2` (USART2_TX) → **ESP32-C3 GPIO4** (UART1 RX) — переназначенный
-- `PA3` (USART2_RX) ← **ESP32-C3 GPIO5** (UART1 TX) — переназначенный
+- `PA9` (USART1_TX) → **ESP32-C3 GPIO4** (UART1 RX) — переназначенный
+- `PA10` (USART1_RX) ← **ESP32-C3 GPIO5** (UART1 TX) — переназначенный
 
 **Преимущества:**
 
-- USART2 на STM32 не конфликтует с PWM (PA8/PA9)
+- USART1 на STM32 не конфликтует с PWM выходами (PA0/PA1 или PA2/PA3)
 - GPIO4/5 на ESP32-C3 — безопасные пины для общего использования
 - Не конфликтует с USB (GPIO18/19) и не использует strapping пины
 - UART1 можно переназначить на любые доступные GPIO программно
@@ -161,52 +166,6 @@
 - GPIO20/21 — если уже используются для других целей
 - GPIO5 — ADC2 конфликтует с Wi-Fi (но для UART можно использовать)
 
-#### Вариант 2: USART1 ↔ UART1 (альтернативные GPIO)
-
-**STM32 сторона:**
-
-- `PA9` (USART1_TX) → **ESP32-C3 GPIO4** (UART1 RX) — переназначенный
-- `PA10` (USART1_RX) ← **ESP32-C3 GPIO5** (UART1 TX) — переназначенный
-
-**Ограничения:**
-
-- PA9 может конфликтовать с TIM1_CH2 (PWM для Servo)
-- Используйте только если PA9 не используется для PWM
-
-**Альтернативные GPIO:** те же варианты, что и для Варианта 1 (GPIO0/1, GPIO3/4, GPIO6/7, GPIO10/0)
-
-#### Вариант 3: USART2 ↔ UART1 (GPIO6/7)
-
-**STM32 сторона:**
-
-- `PA2` (Output, USART2_TX) → **ESP32-C3 GPIO6** (Input, UART1 RX) — переназначенный
-- `PA3` (Input, USART2_RX) ← **ESP32-C3 GPIO7** (Output, UART1 TX) — переназначенный
-
-**Преимущества:**
-
-- GPIO6/7 — безопасные пины для общего использования
-- Не конфликтует с другими функциями
-
-**Примечание:** UART1 на ESP32-C3 можно программно переназначить на любые доступные GPIO через GPIO matrix.
-
-#### Вариант 4: Альтернативные USART на STM32
-
-Если PA2/PA3 заняты, можно использовать другие USART:
-
-**USART3:**
-
-- `PB10` (Output, USART3_TX) → **ESP32-C3 GPIO4** (Input, UART1 RX) — переназначенный
-- `PB11` (Input, USART3_RX) ← **ESP32-C3 GPIO5** (Output, UART1 TX) — переназначенный
-
-**Ограничения:**
-
-- PB10/PB11 могут конфликтовать с I2C2 или SPI2
-- Проверьте, что эти пины не используются для других функций
-
-**USART4 (если доступен в LQFP48):**
-
-- `PC10` (USART4_TX) → **ESP32-C3 GPIO4** (UART1 RX) — переназначенный
-- `PC11` (USART4_RX) ← **ESP32-C3 GPIO5** (UART1 TX) — переназначенный
 
 **Важные замечания:**
 
@@ -259,12 +218,7 @@
 
 | Вариант | STM32 TX (Out) | STM32 RX (In) | ESP32-C3 RX (In) | ESP32-C3 TX (Out) | UART | Конфликты | Рекомендация |
 |---------|----------------|---------------|------------------|-------------------|------|-----------|--------------|
-| **1A (рекомендуемый)** | PA2 (USART2) | PA3 (USART2) | GPIO4 (UART1) | GPIO5 (UART1) | UART1 | Нет | ✅ Использовать |
-| **1B** | PA2 (USART2) | PA3 (USART2) | GPIO0 (UART1) | GPIO1 (UART1) | UART1 | Нет | ✅ Альтернатива |
-| **1C** | PA2 (USART2) | PA3 (USART2) | GPIO6 (UART1) | GPIO7 (UART1) | UART1 | Нет | ✅ Альтернатива |
-| **2** | PA9 (USART1) | PA10 (USART1) | GPIO4 (UART1) | GPIO5 (UART1) | UART1 | PA9 = TIM1_CH2 (PWM) | ⚠️ Только если PA9 не для PWM |
-| **3** | PB10 (USART3) | PB11 (USART3) | GPIO4 (UART1) | GPIO5 (UART1) | UART1 | PB10/PB11 = I2C2/SPI2 | ⚠️ Проверить конфликты |
-| **4** | PC10 (USART4) | PC11 (USART4) | GPIO4 (UART1) | GPIO5 (UART1) | UART1 | Может быть недоступен в LQFP48 | ⚠️ Проверить доступность |
+| **1 (рекомендуемый)** | PA9 (USART1) | PA10 (USART1) | GPIO4 (UART1) | GPIO5 (UART1) | UART1 | Нет | ✅ **Использовать** |
 
 **⚠️ ВАЖНО:**
 
@@ -272,6 +226,7 @@
 - **НЕ используйте GPIO2, GPIO8, GPIO9** — strapping пины (контроль загрузки)
 - **GPIO20/21** — стандартные для UART0/UART1, но можно переназначить UART1 на другие GPIO
 - **Рекомендуемые GPIO для UART1:** GPIO0, GPIO1, GPIO3, GPIO4, GPIO5, GPIO6, GPIO7, GPIO10
+- **PA9/PA10** не конфликтуют с PWM выходами (PA0/PA1 или PA2/PA3)
 
 ### 4. SPI (подключение IMU LSM6DSM)
 
@@ -293,11 +248,101 @@
 - [ ] Настройка SPI: режим 3 (CPOL=1, CPHA=1) или режим 0 (CPOL=0, CPHA=0) — проверьте datasheet LSM6DSM
 - [ ] Частота SPI: до 10 MHz (типично для LSM6DSM)
 
-**Альтернативные варианты:**
+**Альтернативные варианты подключения LSM6DSM:**
 
-- **SPI1**: PA5 (Output, SCK) → LSM6DSM SCL/SPC (Pin 13), PA6 (Input, MISO) → LSM6DSM SDO/SA0 (Pin 1), PA7 (Output, MOSI) → LSM6DSM SDA/SDI (Pin 14) — если PA6/PA7 не используются для PWM
-- **SPI3**: PC10 (Output, SCK) → LSM6DSM SCL/SPC (Pin 13), PC11 (Input, MISO) → LSM6DSM SDO/SA0 (Pin 1), PC12 (Output, MOSI) → LSM6DSM SDA/SDI (Pin 14) — если доступны в LQFP48 корпусе
-- **CS пин**: можно использовать любой свободный GPIO (Output) (PB0, PB1, PC6, PC7 и т.д.) → LSM6DSM CS (Pin 12)
+#### Варианты подключения через SPI (4-wire)
+
+**Вариант 1 (текущий): SPI2**
+- **SCK**: `PB13` (Output, SPI2_SCK, AF5) → LSM6DSM **SCL/SPC** (Pin 13)
+- **MOSI**: `PB15` (Output, SPI2_MOSI, AF5) → LSM6DSM **SDA/SDI** (Pin 14)
+- **MISO**: `PB14` (Input, SPI2_MISO, AF5) → LSM6DSM **SDO/SA0** (Pin 1)
+- **CS**: `PB12` (Output, GPIO) → LSM6DSM **CS** (Pin 12, активный LOW)
+- **Примечание:** PB12 может использоваться как SPI2_NSS (опционально), но обычно CS управляется программно через GPIO
+
+**Вариант 2: SPI1**
+- **SCK**: `PA5` (Output, SPI1_SCK, AF5) → LSM6DSM **SCL/SPC** (Pin 13)
+- **MISO**: `PA6` (Input, SPI1_MISO, AF5) → LSM6DSM **SDO/SA0** (Pin 1)
+- **MOSI**: `PA7` (Output, SPI1_MOSI, AF5) → LSM6DSM **SDA/SDI** (Pin 14)
+- **CS**: любой свободный GPIO (Output) → LSM6DSM **CS** (Pin 12)
+  - Рекомендуемые для CS: `PB0`, `PB1`, `PC6`, `PC7`, `PC8`, `PC9`, `PA4`, `PA11`, `PA12`
+- **⚠️ Конфликты:** PA6/PA7 могут использоваться для PWM (TIM3_CH1/TIM3_CH2) или Input Capture
+- **✅ Преимущества:** Хороший вариант, если PB13-PB15 заняты или неудобны для разводки
+
+**Вариант 3: SPI3** (если доступен в LQFP48)
+- **SCK**: `PC10` (Output, SPI3_SCK, AF6) → LSM6DSM **SCL/SPC** (Pin 13)
+- **MOSI**: `PC12` (Output, SPI3_MOSI, AF6) → LSM6DSM **SDA/SDI** (Pin 14)
+- **MISO**: `PC11` (Input, SPI3_MISO, AF6) → LSM6DSM **SDO/SA0** (Pin 1)
+- **CS**: любой свободный GPIO (Output) → LSM6DSM **CS** (Pin 12)
+  - Рекомендуемые для CS: `PB0`, `PB1`, `PC6`, `PC7`, `PC8`, `PC9`, `PA4`
+- **⚠️ Конфликты:** PC10/PC11 могут использоваться для USART4 (если доступен)
+- **✅ Преимущества:** Хороший вариант, если SPI1 и SPI2 заняты
+
+**Вариант 4: SPI2 с альтернативным CS**
+- Используйте те же пины SPI2 (PB13, PB14, PB15), но CS подключите к другому GPIO:
+- **SCK**: `PB13` (Output, SPI2_SCK, AF5) → LSM6DSM **SCL/SPC** (Pin 13)
+- **MOSI**: `PB15` (Output, SPI2_MOSI, AF5) → LSM6DSM **SDA/SDI** (Pin 14)
+- **MISO**: `PB14` (Input, SPI2_MISO, AF5) → LSM6DSM **SDO/SA0** (Pin 1)
+- **CS**: `PB0`, `PB1`, `PC6`, `PC7`, `PC8`, `PC9`, `PA4`, `PA11`, `PA12` (Output, GPIO) → LSM6DSM **CS** (Pin 12)
+- **✅ Преимущества:** Если PB12 занят или неудобен для разводки, можно использовать другой GPIO для CS
+
+#### Варианты подключения через I2C (альтернатива SPI)
+
+**Вариант 5: I2C1**
+- **SCL**: `PB6` (Output, I2C1_SCL, AF4) → LSM6DSM **SCL** (Pin 13, для I2C режима)
+- **SDA**: `PB7` (Input/Output, I2C1_SDA, AF4) → LSM6DSM **SDA** (Pin 14, для I2C режима)
+- **CS**: `PB12` или другой GPIO → **HIGH** (3.3V) для выбора I2C режима (CS Pin 12 должен быть HIGH для I2C)
+- **⚠️ Конфликты:** PB6/PB7 могут использоваться для PWM (TIM4_CH1/TIM4_CH2) или Input Capture
+- **⚠️ Важно:** Для I2C режима CS (Pin 12) должен быть подключен к HIGH (3.3V), а не к GPIO
+- **✅ Преимущества:** Всего 2 провода (SCL, SDA), проще разводка, но медленнее чем SPI
+
+**Вариант 6: I2C2**
+- **SCL**: `PB10` (Output, I2C2_SCL, AF4) → LSM6DSM **SCL** (Pin 13, для I2C режима)
+- **SDA**: `PB11` (Input/Output, I2C2_SDA, AF4) → LSM6DSM **SDA** (Pin 14, для I2C режима)
+- **CS**: `PB12` или другой GPIO → **HIGH** (3.3V) для выбора I2C режима (CS Pin 12 должен быть HIGH для I2C)
+- **⚠️ Конфликты:** PB10/PB11 могут использоваться для USART3 или других функций
+- **⚠️ Важно:** Для I2C режима CS (Pin 12) должен быть подключен к HIGH (3.3V), а не к GPIO
+- **✅ Преимущества:** Всего 2 провода (SCL, SDA), проще разводка, но медленнее чем SPI
+
+**Примечание о I2C:**
+- LSM6DSM поддерживает I2C с адресами 0x6A (SA0 = LOW) или 0x6B (SA0 = HIGH)
+- Для I2C режима CS (Pin 12) должен быть подключен к HIGH (3.3V), а не управляться GPIO
+- I2C медленнее SPI, но требует меньше проводов (2 вместо 4)
+- Для I2C нужны подтягивающие резисторы 4.7kΩ на SCL и SDA (если не встроены в модуль)
+
+#### Рекомендации по выбору варианта
+
+**Для удобной разводки платы рекомендуется:**
+
+1. **Если PB13-PB15 неудобны для разводки:**
+   - ✅ **Вариант 2 (SPI1):** PA5, PA6, PA7 — часто удобнее для разводки
+   - ✅ **Вариант 3 (SPI3):** PC10, PC11, PC12 — если доступны
+
+2. **Если нужна минимальная разводка:**
+   - ✅ **Вариант 5 или 6 (I2C):** Всего 2 провода вместо 4, но медленнее
+
+3. **Если PB12 занят:**
+   - ✅ **Вариант 4:** Используйте SPI2, но CS подключите к другому GPIO (PB0, PB1, PC6, PC7 и т.д.)
+
+4. **Для максимальной скорости:**
+   - ✅ **SPI варианты (1-4):** До 10 MHz, быстрее чем I2C (обычно до 400 kHz Fast Mode)
+
+**Таблица всех вариантов подключения:**
+
+| Вариант | Интерфейс | SCK/SCL | MOSI/SDA | MISO | CS | Конфликты | Рекомендация |
+|---------|-----------|---------|----------|------|-----|-----------|--------------|
+| **1 (текущий)** | SPI2 | PB13 | PB15 | PB14 | PB12 | Нет | ✅ Использовать, если удобно |
+| **2** | SPI1 | PA5 | PA7 | PA6 | Любой GPIO | PA6/PA7 = TIM3 (PWM) | ✅ Хорошая альтернатива |
+| **3** | SPI3 | PC10 | PC12 | PC11 | Любой GPIO | PC10/PC11 = USART4 | ✅ Если доступен |
+| **4** | SPI2 | PB13 | PB15 | PB14 | Другой GPIO | Нет | ✅ Если PB12 занят |
+| **5** | I2C1 | PB6 | PB7 | - | HIGH (3.3V) | PB6/PB7 = TIM4 (PWM) | ⚠️ Медленнее, но проще |
+| **6** | I2C2 | PB10 | PB11 | - | HIGH (3.3V) | PB10/PB11 = USART3 | ⚠️ Медленнее, но проще |
+
+**Свободные GPIO для CS (если нужен другой пин):**
+- `PB0`, `PB1` — обычно свободны
+- `PC6`, `PC7`, `PC8`, `PC9` — обычно свободны
+- `PA4` — обычно свободен
+- `PA11`, `PA12` — могут использоваться для USB (если не используется USB)
+- `PC0`, `PC1`, `PC2`, `PC3` — могут использоваться для ADC (если не используется ADC)
 
 **Названия пинов на LSM6DSM (LGA-14L корпус) для основного SPI 4-wire интерфейса:**
 
@@ -469,15 +514,17 @@
 
 **Рекомендуемое подключение UART:**
 
-**Вариант 1 (рекомендуемый):**
+**⚠️ ВАЖНО: Если PA2/PA3 используются для PWM (TIM15_CH1/TIM15_CH2), используйте альтернативные варианты!**
+
+**Вариант 1 (рекомендуемый, если PA2/PA3 свободны):**
 
 - STM32 PA2 (Output, USART2_TX) → ESP32-C3 GPIO4 (Input, UART1 RX) — переназначенный
 - STM32 PA3 (Input, USART2_RX) ← ESP32-C3 GPIO5 (Output, UART1 TX) — переназначенный
 
-**Альтернативные варианты:**
+**Рекомендуемое подключение UART:**
 
-- USART1 на STM32 (PA9/PA10) ↔ UART1 на ESP32-C3 (GPIO4/5 или другие GPIO)
-- USART3 на STM32 (PB10/PB11) ↔ UART1 на ESP32-C3 (GPIO4/5 или другие GPIO)
+- STM32 PA9 (Output, USART1_TX) → ESP32-C3 GPIO4 (Input, UART1 RX) — переназначенный
+- STM32 PA10 (Input, USART1_RX) ← ESP32-C3 GPIO5 (Output, UART1 TX) — переназначенный
 - Другие GPIO для UART1: GPIO0/1, GPIO3/4, GPIO6/7, GPIO10/0
 
 **Важно:**
@@ -488,14 +535,17 @@
 
 ## Таблица соответствия распиновки
 
-| Функция | Рекомендуемый пин STM32 | Альтернатива 1 | Альтернатива 2 | Проверено в схеме |
-|---------|------------------------|----------------|----------------|-------------------|
-| PWM ESC (Throttle) | PA8 (Out, TIM1_CH1) | PA0 (Out, TIM2_CH1) | PA6 (Out, TIM3_CH1) | [ ] |
-| PWM Servo (Steering) | PA9 (Out, TIM1_CH2) | PA1 (Out, TIM2_CH2) | PA7 (Out, TIM3_CH2) | [ ] |
-| RC Throttle In | PA0 (In, TIM2_CH1) | PA6 (In, TIM3_CH1) | PB6 (In, TIM4_CH1) | [ ] |
-| RC Steering In | PA1 (In, TIM2_CH2) | PA7 (In, TIM3_CH2) | PB7 (In, TIM4_CH2) | [ ] |
-| UART TX → ESP32 | PA2 (Out, USART2_TX) → GPIO4 | PA9 (Out, USART1_TX) → GPIO4 | PB10 (Out, USART3_TX) → GPIO4 | [ ] |
-| UART RX ← ESP32 | PA3 (In, USART2_RX) ← GPIO5 | PA10 (In, USART1_RX) ← GPIO5 | PB11 (In, USART3_RX) ← GPIO5 | [ ] |
+| Функция | Рекомендуемый пин STM32 | Альтернатива 1 | Альтернатива 2 | Альтернатива 3 | Проверено в схеме |
+|---------|------------------------|----------------|----------------|----------------|-------------------|
+| PWM ESC (Throttle) | PA0 (Out, TIM2_CH1) | PA2 (Out, TIM15_CH1) | - | - | [ ] |
+| PWM Servo (Steering) | PA1 (Out, TIM2_CH2) | PA3 (Out, TIM15_CH2) | - | - | [ ] |
+| RC Throttle In | PA0 (In, TIM2_CH1) | PA6 (In, TIM3_CH1) | PB6 (In, TIM4_CH1) | - | [ ] |
+| RC Steering In | PA1 (In, TIM2_CH2) | PA7 (In, TIM3_CH2) | PB7 (In, TIM4_CH2) | - | [ ] |
+| UART TX → ESP32 | PA9 (Out, USART1_TX) → GPIO4 | - | - | - | [ ] |
+| UART RX ← ESP32 | PA10 (In, USART1_RX) ← GPIO5 | - | - | - | [ ] |
+
+**Примечания:**
+- PA9/PA10 (USART1) используются для UART и не конфликтуют с PWM выходами (PA0/PA1 или PA2/PA3)
 | SPI SCK → IMU | PB13 (Out) → SCL/SPC (Pin 13) | PA5 (Out) → SCL/SPC (Pin 13) | PC10 (Out) → SCL/SPC (Pin 13) | [ ] |
 | SPI MOSI → IMU | PB15 (Out) → SDA/SDI (Pin 14) | PA7 (Out) → SDA/SDI (Pin 14) | PC12 (Out) → SDA/SDI (Pin 14) | [ ] |
 | SPI MISO ← IMU | PB14 (In) ← SDO/SA0 (Pin 1) | PA6 (In) ← SDO/SA0 (Pin 1) | PC11 (In) ← SDO/SA0 (Pin 1) | [ ] |

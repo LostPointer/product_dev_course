@@ -493,8 +493,8 @@
         "pcb_color": "rgba(0, 0, 0, 0.000)",
         "priority": 1,
         "schematic_color": "rgba(0, 0, 0, 0.000)",
-        "track_width": 0.5,
-        "via_diameter": 0.6,
+        "track_width": 0.3,
+        "via_diameter": 0.5,
         "via_drill": 0.3
       },
       {
@@ -513,7 +513,7 @@
         "pcb_color": "rgba(0, 0, 0, 0.000)",
         "priority": 2,
         "schematic_color": "rgba(0, 0, 0, 0.000)",
-        "track_width": 0.5,
+        "track_width": 0.4,
         "via_diameter": 0.6,
         "via_drill": 0.3
       },
@@ -539,12 +539,24 @@
         "pattern": "3V3"
       },
       {
-        "netclass": "SPI",
+        "netclass": "Power_5V",
         "pattern": "5V"
       },
       {
         "netclass": "GND",
         "pattern": "GND"
+      },
+      {
+        "netclass": "Power_5V",
+        "pattern": "/5V"
+      },
+      {
+        "netclass": "Default",
+        "pattern": ""
+      },
+      {
+        "netclass": "Power",
+        "pattern": "5V"
       }
     ]
   },
