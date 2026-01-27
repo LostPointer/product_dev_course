@@ -1,0 +1,83 @@
+@import './colors';
+
+// Base table styles
+%table-base {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+%table-cell-base {
+    padding: 12px 16px;
+    text-align: left;
+    border-bottom: 1px solid var(--outline);
+}
+
+%table-header-base {
+    background-color: var(--surface-variant);
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+%table-row-hover {
+    background-color: var(--surface-variant);
+}
+
+%table-row-alt {
+    background-color: $surface-row-alt;
+}
+
+// Common table patterns
+.projects-list,
+.members-table,
+.user-profile-modal .projects-list {
+    overflow-x: auto;
+}
+
+.projects-list table,
+.members-table table,
+.user-profile-modal .projects-list table {
+    @extend %table-base;
+}
+
+.projects-list th,
+.projects-list td,
+.members-table th,
+.members-table td,
+.user-profile-modal .projects-list th,
+.user-profile-modal .projects-list td {
+    @extend %table-cell-base;
+}
+
+.projects-list th,
+.members-table th,
+.user-profile-modal .projects-list th {
+    @extend %table-header-base;
+}
+
+.projects-list tr:nth-child(even),
+.user-profile-modal .projects-list tr:nth-child(even) {
+    @extend %table-row-alt;
+}
+
+.projects-list tr:hover,
+.members-table tr:hover,
+.user-profile-modal .projects-list tr:hover {
+    @extend %table-row-hover;
+}
+
+// Specific overrides
+.members-table th {
+    font-size: 0.875rem;
+    text-transform: uppercase;
+}
+
+.members-table td {
+    vertical-align: middle;
+}
+
+.user-profile-modal .projects-list th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}

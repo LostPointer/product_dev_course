@@ -1,4 +1,5 @@
 @import '../styles/colors';
+@import '../styles/components';
 
 .sensors-list {
     display: flex;
@@ -32,34 +33,17 @@
     margin: 16px 0;
 }
 
-.info-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+.sensor-info .info-row {
+    border-bottom: none;
     font-size: 14px;
 }
 
-.info-row strong {
-    color: var(--text-secondary);
-    font-weight: 500;
-}
-
-.info-row span {
-    color: var(--text);
+.sensor-info .info-row strong {
+    min-width: auto;
 }
 
 .sensor-meta {
     margin-top: auto;
     padding-top: 12px;
     border-top: 1px solid var(--outline);
-}
-
-.badge-warning {
-    background-color: var(--warning-container);
-    color: $text-warning;
-}
-
-.mono {
-    font-family: 'Courier New', monospace;
-    font-size: 12px;
 }

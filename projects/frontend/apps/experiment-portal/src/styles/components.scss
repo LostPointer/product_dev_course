@@ -1,0 +1,100 @@
+@import './colors';
+
+// Badge variants (already in App.scss, but extracted for reuse)
+.badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: var(--radius-pill);
+    font-size: 12px;
+    font-weight: 600;
+    background-color: var(--surface-variant);
+    color: var(--text-secondary);
+}
+
+.badge-primary {
+    background-color: var(--primary-container);
+    color: var(--primary);
+}
+
+.badge-success {
+    background-color: var(--success-container);
+    color: var(--success);
+}
+
+.badge-warning {
+    background-color: var(--warning-container);
+    color: $text-warning;
+}
+
+.badge-danger {
+    background-color: var(--error-container);
+    color: var(--error);
+}
+
+.badge-info {
+    background-color: var(--info-container);
+    color: var(--info);
+}
+
+.badge-secondary {
+    background-color: var(--surface-variant);
+    color: var(--text-secondary);
+}
+
+// Button sizes
+.btn-sm {
+    padding: 4px 12px;
+    font-size: 0.875rem;
+}
+
+// Text utilities
+.text-muted {
+    color: var(--text-secondary);
+    font-style: italic;
+    font-size: 0.875rem;
+}
+
+// Section header
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.section-header h3 {
+    margin: 0;
+    color: var(--text);
+    font-size: 18px;
+    font-weight: 600;
+}
+
+// Info row (common pattern)
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--outline);
+}
+
+.info-row:last-child {
+    border-bottom: none;
+}
+
+.info-row strong {
+    color: var(--text-secondary);
+    font-weight: 500;
+    min-width: 200px;
+}
+
+.info-row span {
+    color: var(--text);
+    text-align: right;
+}
+
+// Mono text
+.mono {
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+}

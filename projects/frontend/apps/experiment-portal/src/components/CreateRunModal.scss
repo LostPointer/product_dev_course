@@ -1,4 +1,6 @@
 @import '../styles/colors';
+@import '../styles/components';
+@import '../styles/tables';
 @import './Modal';
 
 .modal-content {
@@ -28,62 +30,12 @@
     text-align: center;
 }
 
-.members-table {
-    overflow-x: auto;
+.members-table th {
+    padding: 12px;
 }
 
-.members-table table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.members-table th,
 .members-table td {
     padding: 12px;
-    text-align: left;
-    border-bottom: 1px solid var(--outline);
-}
-
-.members-table th {
-    background-color: var(--surface-variant);
-    font-weight: 600;
-    color: var(--text-secondary);
-    font-size: 0.875rem;
-    text-transform: uppercase;
-}
-
-.members-table td {
-    vertical-align: middle;
-}
-
-.members-table tr:hover {
-    background-color: var(--surface-variant);
-}
-
-.badge {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 12px;
-    font-size: 0.75rem;
-    font-weight: 500;
-    margin-left: 8px;
-    background-color: var(--surface-variant);
-    color: var(--text-secondary);
-}
-
-.badge-primary {
-    background-color: var(--primary-container);
-    color: var(--primary);
-}
-
-.text-muted {
-    color: var(--text-secondary);
-    font-size: 0.875rem;
-}
-
-.btn-sm {
-    padding: 4px 12px;
-    font-size: 0.875rem;
 }
 
 .btn-danger {
@@ -212,14 +164,4 @@
 
 .user-profile-modal .projects-list tr:hover {
     background-color: var(--surface-variant);
-}
-
-.badge-info {
-    background-color: var(--info-container);
-    color: var(--info);
-}
-
-.text-muted {
-    color: var(--text-secondary);
-    font-style: italic;
 }
