@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
@@ -11,7 +11,6 @@ import {
     Error,
     EmptyState,
     Pagination,
-    PageHeader,
     FloatingActionButton,
     MaterialSelect,
     sensorStatusMap,
@@ -34,14 +33,6 @@ function SensorsList() {
         queryFn: () => projectsApi.list(),
     })
 
-    // Автоматически выбираем первый проект, если project_id не указан
-    useEffect(() => {
-        if (!projectId && projectsData?.projects && projectsData.projects.length > 0) {
-            const id = projectsData.projects[0].id
-            setProjectId(id)
-            setActiveProjectId(id)
-        }
-    }, [projectId, projectsData])
 
     const { data, isLoading, error } = useQuery({
         queryKey: ['sensors', projectId, status, page],
@@ -52,7 +43,7 @@ function SensorsList() {
                 page,
                 page_size: pageSize,
             }),
-        enabled: !!projectId, // Запрос выполняется только если project_id выбран
+        enabled: true, // Без project_id auth-proxy передаёт все проекты пользователя (X-Project-Ids)
     })
 
     const formatLastHeartbeat = (heartbeat?: string | null) => {
@@ -85,7 +76,7 @@ function SensorsList() {
                 <EmptyState message="У вас нет проектов. Создайте проект, чтобы начать работу с датчиками." />
             )}
 
-            {!isLoading && !error && projectId && (
+            {!isLoading && !error && (projectId || (projectsData?.projects?.length ?? 0) > 0) && (
                 <>
                     <div className="filters card">
                         <div className="filters-grid">
@@ -100,6 +91,7 @@ function SensorsList() {
                                 }}
                                 disabled={projectsLoading || isLoading}
                             >
+                                <option value="">Все проекты</option>
                                 {projectsData?.projects.map((project) => (
                                     <option key={project.id} value={project.id}>
                                         {project.name}

@@ -134,7 +134,7 @@
 - Zero-downtime миграции для всех новых схем.
 
 ### Текущее состояние (актуализируется)
-- **✅ Завершено (Foundation):** блок Foundation полностью (миграции, CRUD для `Experiment/Run/CaptureSession`, idempotency, пагинация, OpenAPI, RBAC). Добавлены домены `Sensor` и `ConversionProfile`, статусные машины и покрытие тестами (`tests/test_api_*`). Множественные проекты для датчиков реализованы полностью (backend: миграция `002_sensor_projects_many_to_many.sql`, API endpoints, тесты; frontend: UI для управления проектами в `SensorDetail.tsx`). UI для управления доступом к проектам реализован (`ProjectMembersModal` с тестами). Профиль пользователя реализован (`UserProfileModal` с тестами).
+- **✅ Завершено (Foundation):** блок Foundation полностью (миграции, CRUD для `Experiment/Run/CaptureSession`, idempotency, пагинация, OpenAPI, RBAC). Добавлены домены `Sensor` и `ConversionProfile`, статусные машины и покрытие тестами (`tests/test_api_*`). Множественные проекты для датчиков реализованы полностью (backend: таблица `sensor_projects` в миграции `001_initial_schema.sql`, API endpoints, тесты; frontend: UI для управления проектами в `SensorDetail.tsx`). UI для управления доступом к проектам реализован (`ProjectMembersModal` с тестами). Профиль пользователя реализован (`UserProfileModal` с тестами).
 - **⚠️ Частично реализовано (Runs & Capture Management):** batch-update статусов, `CaptureSession` (ordinal_number + статусы), bulk tagging, audit-log (Run/CaptureSession), webhooks (outbox + dispatcher) — ✅. Остаётся: расширение доменных инвариантов ⚠️ и полноценный backfill/late-data процесс ❌ (см. раздел ниже).
 - **❌ Не реализовано / в backlog:** Telemetry ingest (WebSocket), полноценные сценарии backfill/реплея и доменные политики late-data, фоновые задачи (worker), расширенные фильтры API, экспорт данных, бизнес‑политики доступа, SLO/SLI мониторинг, полная интеграция OpenTelemetry, chaos‑тесты, operational документация.
   - Примечание: **REST ingest** реализован отдельным сервисом `telemetry-ingest-service` (`POST /api/v1/telemetry`).
@@ -142,7 +142,7 @@
   - Примечание: **SSE auth (MVP)**: `telemetry-ingest-service` принимает токен как sensor token, так и user JWT (через auth-proxy); для клиентов без возможности выставить заголовок поддержан query `access_token`.
   - Примечание: **MVP late-data политика**: данные после stop capture session не “приклеиваются” обратно к сессии (помечаются в `meta.__system` как late); ingest запрещён для `archived`.
   - В `experiment-service` публичной ручки `/api/v1/telemetry` больше нет; real-time режимы со стороны `experiment-service` и полноценная интеграция со сценариями backfill/реплея — в backlog.
-- **Зависимости:** сервис собран на `aiohttp 3.10`, `asyncpg 0.29`, `pydantic-settings 2.4`, `structlog`, тестируется через `pytest`, `pytest-aiohttp`, `yandex-taxi-testsuite[postgresql]`, кодоген осуществляется `openapi-generator-cli 7.17`.
+- **Зависимости:** сервис собран на `aiohttp 3.10`, `asyncpg 0.31`, `pydantic-settings 2.4`, `structlog`, тестируется через `pytest`, `pytest-aiohttp`, `yandex-taxi-testsuite[postgresql]`, кодоген осуществляется `openapi-generator-cli 7.17`.
 
 ---
 
@@ -151,11 +151,12 @@
 ### 1. Foundation (итерации 1‑2)
 - **Доменные модели и CRUD:** ✅ Реализовано. Доменные модели `Experiment`, `Run`, `CaptureSession`, базовые CRUD-ручки c привязкой к проектам. Реализовано в `experiment-service/api/routes/experiments.py`, `runs.py`, `capture_sessions.py`.
 - **Множественные проекты для датчиков:** ✅ Реализовано.
-  - ✅ **Backend:** миграции, обновление модели `Sensor`, API endpoints, RBAC, тесты.
+  - ✅ **Backend:** таблица `sensor_projects` в миграции `001_initial_schema.sql`, обновление модели `Sensor`, API endpoints, RBAC, тесты.
   - ✅ **Frontend:** методы в API клиенте и UI в `SensorDetail.tsx` (добавление/удаление проектов).
-- **Фильтрация датчиков по доступным проектам:** ⚠️ Частично реализовано (backend готов, frontend требует доработки).
-  - ⚠️ **Backend:** `GET /api/v1/sensors` поддерживает `project_id`; без него использует `active_project_id`, но “все доступные проекты” пока не реализованы (есть TODO).
-  - ✅ **Frontend:** в `SensorsList.tsx` есть выпадающий список проектов и фильтрация через `project_id`.
+- **Фильтрация датчиков по доступным проектам:** ✅ Реализовано.
+  - ✅ **Backend:** `GET /api/v1/sensors` поддерживает `project_id` (один проект) или без него — тогда experiment-service использует заголовок `X-Project-Ids` (список UUID от auth-proxy) и возвращает датчики по всем доступным проектам пользователя; при прямом вызове без заголовка — fallback на `active_project_id` или пустой список.
+  - ✅ **Auth-proxy:** при `GET /api/v1/sensors` без `project_id` в query запрашивает у auth-service список проектов пользователя и передаёт их в заголовке `X-Project-Ids`.
+  - ✅ **Frontend:** в `SensorsList.tsx` есть выпадающий список проектов и фильтрация через `project_id`; при выборе «все проекты» (или без выбора проекта) запрос идёт без `project_id` и пользователь видит датчики из всех своих проектов.
 - **Множественные проекты при создании датчика:** ✅ Реализовано (multi-select; первый проект основной).
 - **Валидация состояний и idempotency:** ✅ Реализовано.
 - **RBAC-хуки:** ✅ Реализовано (owner/editor/viewer; project scoping).

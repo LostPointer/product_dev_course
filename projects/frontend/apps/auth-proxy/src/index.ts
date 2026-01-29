@@ -819,6 +819,37 @@ export async function buildServer(config: Config) {
                         }
                     }
                 }
+            } else if (
+                (request.method === 'GET' || request.method === 'get') &&
+                request.url.startsWith('/api/v1/sensors')
+            ) {
+                // GET /api/v1/sensors без project_id: запрашиваем все проекты пользователя
+                // и передаём их в experiment-service через X-Project-Ids
+                const cookies = parseCookies(request.headers.cookie as string | undefined)
+                const access = cookies[config.accessCookieName]
+                if (access) {
+                    try {
+                        const { traceId } = getTraceContext(request)
+                        const outgoingHeaders = getOutgoingRequestHeaders(traceId)
+                        const res = await fetch(`${config.authUrl}/projects`, {
+                            method: 'GET',
+                            headers: {
+                                authorization: `Bearer ${access}`,
+                                ...outgoingHeaders,
+                            },
+                        })
+                        if (res.ok) {
+                            const data = (await res.json()) as { projects?: Array<{ id: string }> }
+                            const projects = data.projects ?? []
+                                ; (request as any).allProjectIds = projects.map((p) => p.id)
+                        }
+                    } catch (err) {
+                        app.log.warn(
+                            { err: err instanceof Error ? err.message : String(err), url: request.url },
+                            'Failed to fetch user projects for X-Project-Ids'
+                        )
+                    }
+                }
             }
         }
     })
@@ -1012,6 +1043,12 @@ export async function buildServer(config: Config) {
                     if (decoded?.user_id) {
                         newHeaders['X-User-Id'] = decoded.user_id
                     }
+                }
+
+                // Список всех проектов пользователя (для GET /api/v1/sensors без project_id)
+                const allProjectIds = (req as any).allProjectIds
+                if (Array.isArray(allProjectIds) && allProjectIds.length > 0) {
+                    newHeaders['X-Project-Ids'] = allProjectIds.join(',')
                 }
 
                 // Добавляем project_id в заголовки только если он найден

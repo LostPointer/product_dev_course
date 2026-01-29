@@ -1,6 +1,8 @@
 """Sensor management endpoints."""
 from __future__ import annotations
 
+from uuid import UUID
+
 from aiohttp import web
 from pydantic import ValidationError
 
@@ -84,6 +86,22 @@ async def register_sensor(request: web.Request):
     return web.json_response(payload, status=201)
 
 
+def _parse_project_ids_header(header_value: str | None) -> list[UUID]:
+    """Parse X-Project-Ids header (comma-separated UUIDs). Returns list of UUIDs, empty if invalid."""
+    if not header_value or not header_value.strip():
+        return []
+    result = []
+    for part in header_value.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            result.append(UUID(part))
+        except (ValueError, TypeError):
+            continue
+    return result
+
+
 @routes.get("/api/v1/sensors")
 async def list_sensors(request: web.Request):
     user = await require_current_user(request)
@@ -96,12 +114,18 @@ async def list_sensors(request: web.Request):
         project_id = resolve_project_id(user, project_id_query)
         sensors, total = await service.list_sensors(project_id, limit=limit, offset=offset)
     else:
-        # Get all projects user has access to
-        # For now, we'll use active_project_id if available, or return empty
-        # TODO: Get all accessible projects from auth-service
-        if user.active_project_id:
+        # When auth-proxy sets X-Project-Ids (list of user's project IDs), use them
+        project_ids_header = request.headers.get("X-Project-Ids")
+        project_ids = _parse_project_ids_header(project_ids_header)
+        if project_ids:
+            sensors, total = await service.list_sensors_by_projects(
+                project_ids, limit=limit, offset=offset
+            )
+        elif user.active_project_id:
             ensure_project_access(user, user.active_project_id)
-            sensors, total = await service.list_sensors(user.active_project_id, limit=limit, offset=offset)
+            sensors, total = await service.list_sensors(
+                user.active_project_id, limit=limit, offset=offset
+            )
         else:
             sensors, total = [], 0
 

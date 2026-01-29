@@ -547,3 +547,56 @@ async def test_list_sensors_without_project_id(service_client):
     sensors_data = await resp.json()
     assert sensors_data["total"] >= 1
 
+
+@pytest.mark.asyncio
+async def test_list_sensors_with_x_project_ids_returns_all_accessible(service_client):
+    """Test listing sensors with X-Project-Ids returns sensors from all listed projects."""
+    user_id = uuid.uuid4()
+    project1_id = uuid.uuid4()
+    project2_id = uuid.uuid4()
+
+    # Create sensor in project1
+    resp1 = await service_client.post(
+        "/api/v1/sensors",
+        json={
+            "project_id": str(project1_id),
+            "name": "sensor-in-project1",
+            "type": "thermocouple",
+            "input_unit": "mV",
+            "display_unit": "C",
+        },
+        headers=make_headers(project1_id, user_id=user_id),
+    )
+    assert resp1.status == 201
+    body1 = await resp1.json()
+    sensor1_id = body1["sensor"]["id"]
+
+    # Create sensor in project2
+    resp2 = await service_client.post(
+        "/api/v1/sensors",
+        json={
+            "project_id": str(project2_id),
+            "name": "sensor-in-project2",
+            "type": "thermocouple",
+            "input_unit": "mV",
+            "display_unit": "C",
+        },
+        headers=make_headers(project2_id, user_id=user_id),
+    )
+    assert resp2.status == 201
+    body2 = await resp2.json()
+    sensor2_id = body2["sensor"]["id"]
+
+    # List sensors with X-Project-Ids (no project_id in query) — should see both projects
+    headers_all = {
+        "X-User-Id": str(user_id),
+        "X-Project-Ids": f"{project1_id},{project2_id}",
+    }
+    resp = await service_client.get("/api/v1/sensors", headers=headers_all)
+    assert resp.status == 200
+    data = await resp.json()
+    assert data["total"] >= 2
+    sensor_ids = [s["id"] for s in data["sensors"]]
+    assert sensor1_id in sensor_ids
+    assert sensor2_id in sensor_ids
+
