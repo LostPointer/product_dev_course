@@ -1,0 +1,6 @@
+# Black Pill / STM32F411CE (Cortex-M4, 512K Flash, 128K RAM)
+set(OPENCM3_TARGET stm32f4)
+set(LD_SCRIPT_DIR f4)
+set(LD_SCRIPT stm32f411xe.ld)
+set(MCU_DEFINE STM32F4)
+set(MCU_CFLAGS -mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16)

@@ -1,0 +1,6 @@
+# Blue Pill / STM32F103C8 (Cortex-M3, 64K Flash, 20K RAM)
+set(OPENCM3_TARGET stm32f1)
+set(LD_SCRIPT_DIR f1)
+set(LD_SCRIPT stm32f103x8.ld)
+set(MCU_DEFINE STM32F1)
+set(MCU_CFLAGS -mcpu=cortex-m3 -mthumb)
