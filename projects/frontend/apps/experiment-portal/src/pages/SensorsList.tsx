@@ -59,10 +59,14 @@ function SensorsList() {
         return format(date, 'dd MMM yyyy HH:mm')
     }
 
+    const isBusy = (projectsLoading && !projectsData) || isLoading
+    const loadingMessage =
+        projectsLoading && !projectsData ? 'Загрузка проектов...' : 'Загрузка датчиков...'
+
     return (
         <div className="sensors-list">
-            {isLoading && <Loading message="Загрузка датчиков..." />}
-            {error && (
+            {isBusy && <Loading message={loadingMessage} />}
+            {!isBusy && error && (
                 <Error
                     message={
                         error instanceof Error
@@ -72,11 +76,11 @@ function SensorsList() {
                 />
             )}
 
-            {!projectId && projectsData?.projects && projectsData.projects.length === 0 && (
+            {!isBusy && !projectId && projectsData?.projects && projectsData.projects.length === 0 && (
                 <EmptyState message="У вас нет проектов. Создайте проект, чтобы начать работу с датчиками." />
             )}
 
-            {!isLoading && !error && (projectId || (projectsData?.projects?.length ?? 0) > 0) && (
+            {!isBusy && !error && (projectId || (projectsData?.projects?.length ?? 0) > 0) && (
                 <>
                     <div className="filters card">
                         <div className="filters-grid">

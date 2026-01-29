@@ -10,7 +10,6 @@ import {
   Error,
   EmptyState,
   Pagination,
-  PageHeader,
   FloatingActionButton,
   MaterialSelect,
   Tags,
@@ -65,10 +64,14 @@ function ExperimentsList() {
     enabled: !!projectId, // Запрос выполняется только если project_id выбран
   })
   const isBusy = isLoading || projectsLoading
+  const loadingMessage =
+    projectsLoading && !projectsData
+      ? 'Загрузка проектов...'
+      : 'Загрузка экспериментов...'
 
   return (
     <div className="experiments-list">
-      {isLoading && <Loading message="Загрузка экспериментов..." />}
+      {isBusy && !error && <Loading message={loadingMessage} />}
       {IS_TEST && error && (
         <Error
           message={
@@ -85,7 +88,7 @@ function ExperimentsList() {
         <EmptyState message="У вас нет проектов. Создайте проект, чтобы начать работу с экспериментами." />
       )}
 
-      {!isLoading && !error && (
+      {!isBusy && !error && (
         <>
           <div className="filters card">
             <div className="filters-grid">
