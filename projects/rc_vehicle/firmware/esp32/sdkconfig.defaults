@@ -1,0 +1,2 @@
+# WebSocket support for esp_http_server (required for /ws handler)
+CONFIG_HTTPD_WS_SUPPORT=y

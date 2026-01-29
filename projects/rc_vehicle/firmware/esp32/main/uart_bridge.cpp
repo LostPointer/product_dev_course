@@ -5,79 +5,67 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
-#include "freertos/task.h"
-#include "protocol.hpp"
+#include "uart_bridge_base.hpp"
 
-static const char* TAG = "uart_bridge";
+static const char *TAG = "uart_bridge";
 static QueueHandle_t uart_queue = NULL;
 
+class Esp32UartBridge : public UartBridgeBase {
+ public:
+  int Init() override {
+    uart_config_t uart_config = {
+        .baud_rate = UART_BAUD_RATE,
+        .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .rx_flow_ctrl_thresh = 0,
+        .source_clk = UART_SCLK_DEFAULT,
+        .flags = {},
+    };
+    esp_err_t e = uart_driver_install(UART_PORT_NUM, RX_BUF_SIZE * 2, 0, 20,
+                                      &uart_queue, 0);
+    if (e != ESP_OK) return -1;
+    e = uart_param_config(UART_PORT_NUM, &uart_config);
+    if (e != ESP_OK) return -1;
+    e = uart_set_pin(UART_PORT_NUM, UART_TX_PIN, UART_RX_PIN,
+                     UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+    if (e != ESP_OK) return -1;
+    rx_pos_ = 0;
+    ESP_LOGI(TAG, "UART bridge initialized (baud: %d)", UART_BAUD_RATE);
+    return 0;
+  }
+
+  int Write(const uint8_t *data, size_t len) override {
+    if (data == nullptr) return -1;
+    int n = uart_write_bytes(UART_PORT_NUM, data, len);
+    return (n == static_cast<int>(len)) ? 0 : -1;
+  }
+
+  int ReadAvailable(uint8_t *buf, size_t max_len) override {
+    if (buf == nullptr || max_len == 0) return 0;
+    int n = uart_read_bytes(UART_PORT_NUM, buf, max_len, 0);
+    return (n >= 0) ? n : -1;
+  }
+};
+
+static Esp32UartBridge s_bridge;
+
 esp_err_t UartBridgeInit(void) {
-  // Конфигурация UART
-  uart_config_t uart_config = {
-      .baud_rate = UART_BAUD_RATE,
-      .data_bits = UART_DATA_8_BITS,
-      .parity = UART_PARITY_DISABLE,
-      .stop_bits = UART_STOP_BITS_1,
-      .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
-      .source_clk = UART_SCLK_DEFAULT,
-  };
-
-  ESP_ERROR_CHECK(uart_driver_install(UART_PORT_NUM, UART_BUF_SIZE * 2, 0, 20,
-                                      &uart_queue, 0));
-  ESP_ERROR_CHECK(uart_param_config(UART_PORT_NUM, &uart_config));
-  ESP_ERROR_CHECK(uart_set_pin(UART_PORT_NUM, UART_TX_PIN, UART_RX_PIN,
-                               UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
-
-  ESP_LOGI(TAG, "UART bridge initialized (baud: %d, TX: %d, RX: %d)",
-           UART_BAUD_RATE, UART_TX_PIN, UART_RX_PIN);
-
-  return ESP_OK;
+  return s_bridge.Init() == 0 ? ESP_OK : ESP_FAIL;
 }
 
 esp_err_t UartBridgeSendCommand(float throttle, float steering) {
-  // Ограничение значений
   if (throttle > 1.0f) throttle = 1.0f;
   if (throttle < -1.0f) throttle = -1.0f;
   if (steering > 1.0f) steering = 1.0f;
   if (steering < -1.0f) steering = -1.0f;
-
-  // Формирование кадра COMMAND через протокол
-  uint8_t frame[64];
-  size_t frame_len =
-      ProtocolBuildCommand(frame, sizeof(frame), throttle, steering);
-
-  if (frame_len == 0) {
-    ESP_LOGE(TAG, "Failed to build command frame");
-    return ESP_FAIL;
-  }
-
-  // Отправка через UART
-  int len = uart_write_bytes(UART_PORT_NUM, frame, frame_len);
-  if (len != frame_len) {
-    ESP_LOGE(TAG, "Failed to send command (sent %d/%zu bytes)", len, frame_len);
-    return ESP_FAIL;
-  }
-
-  return ESP_OK;
+  return s_bridge.SendCommand(throttle, steering) == 0 ? ESP_OK : ESP_FAIL;
 }
 
-esp_err_t UartBridgeReceiveTelem(void* telem_data) {
-  if (uart_queue == NULL) {
-    return ESP_ERR_INVALID_STATE;
-  }
-
-  uart_event_t event;
-  if (xQueueReceive(uart_queue, &event, 0) == pdTRUE) {
-    if (event.type == UART_DATA) {
-      uint8_t data[UART_BUF_SIZE];
-      int len = uart_read_bytes(UART_PORT_NUM, data, event.size, 0);
-      if (len > 0) {
-        // Парсинг телеметрии через протокол
-        // TODO: реализовать парсинг кадров TELEM
-        ESP_LOGI(TAG, "Received %d bytes from RP2040", len);
-      }
-    }
-  }
-
-  return ESP_ERR_NOT_FOUND;
+esp_err_t UartBridgeReceiveTelem(void *telem_data) {
+  if (telem_data == nullptr) return ESP_ERR_INVALID_ARG;
+  return s_bridge.ReceiveTelem(static_cast<TelemetryData *>(telem_data)) == 0
+             ? ESP_OK
+             : ESP_ERR_NOT_FOUND;
 }

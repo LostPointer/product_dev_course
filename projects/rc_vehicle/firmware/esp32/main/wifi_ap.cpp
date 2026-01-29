@@ -1,6 +1,7 @@
 #include "wifi_ap.hpp"
 
 #include "config.hpp"
+#include "esp_event.h"
 #include "esp_log.h"
 #include "esp_mac.h"
 #include "esp_netif.h"
@@ -20,8 +21,10 @@ esp_err_t WiFiApInit(void) {
   }
   ESP_ERROR_CHECK(ret);
 
-  // Инициализация сетевого интерфейса
+  // Инициализация сетевого интерфейса и цикла событий (порядок как в softAP
+  // example)
   ESP_ERROR_CHECK(esp_netif_init());
+  ESP_ERROR_CHECK(esp_event_loop_create_default());
   ap_netif = esp_netif_create_default_wifi_ap();
 
   // Конфигурация Wi-Fi

@@ -1,5 +1,7 @@
 #include <stdio.h>
 
+#include <cstddef>
+
 #include "config.hpp"
 #include "esp_err.h"
 #include "esp_log.h"
@@ -13,7 +15,7 @@
 static const char* TAG = "main";
 
 extern "C" void app_main(void) {
-  ESP_LOGI(TAG, "RC Vehicle ESP32-S3 firmware starting...");
+  ESP_LOGI(TAG, "RC Vehicle ESP32-C3 firmware starting...");
 
   // Инициализация Wi-Fi AP
   ESP_LOGI(TAG, "Initializing Wi-Fi AP...");
@@ -44,6 +46,15 @@ extern "C" void app_main(void) {
   }
 
   ESP_LOGI(TAG, "All systems initialized. Ready for connections.");
+
+  char ap_ip[16];
+  if (WiFiApGetIp(ap_ip, sizeof(ap_ip)) == ESP_OK) {
+    ESP_LOGI(TAG, "----------------------------------------");
+    ESP_LOGI(TAG, "  Подключитесь к Wi-Fi и откройте в браузере:");
+    ESP_LOGI(TAG, "  http://%s", ap_ip);
+    ESP_LOGI(TAG, "  WebSocket: ws://%s:%d/ws", ap_ip, WEBSOCKET_SERVER_PORT);
+    ESP_LOGI(TAG, "----------------------------------------");
+  }
 
   // Основной цикл (задачи работают в отдельных потоках)
   while (1) {

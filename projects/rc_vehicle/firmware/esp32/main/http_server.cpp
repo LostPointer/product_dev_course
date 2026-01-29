@@ -5,7 +5,6 @@
 #include "config.hpp"
 #include "esp_http_server.h"
 #include "esp_log.h"
-#include "esp_spiffs.h"
 
 static const char* TAG = "http_server";
 static httpd_handle_t server_handle = NULL;
@@ -58,7 +57,13 @@ esp_err_t HttpServerInit(void) {
     httpd_uri_t root_uri = {.uri = "/",
                             .method = HTTP_GET,
                             .handler = root_get_handler,
-                            .user_ctx = NULL};
+                            .user_ctx = NULL,
+#if CONFIG_HTTPD_WS_SUPPORT
+                            .is_websocket = false,
+                            .handle_ws_control_frames = false,
+                            .supported_subprotocol = NULL,
+#endif
+    };
     httpd_register_uri_handler(server_handle, &root_uri);
 
     ESP_LOGI(TAG, "HTTP server started");

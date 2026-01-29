@@ -76,11 +76,15 @@ static const httpd_uri_t ws_uri = {.uri = "/ws",
                                    .method = HTTP_GET,
                                    .handler = ws_handler,
                                    .user_ctx = NULL,
-                                   .is_websocket = true};
+                                   .is_websocket = true,
+                                   .handle_ws_control_frames = false,
+                                   .supported_subprotocol = NULL};
 
 esp_err_t WebSocketServerInit(void) {
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
   config.server_port = WEBSOCKET_SERVER_PORT;
+  config.ctrl_port =
+      ESP_HTTPD_DEF_CTRL_PORT + 1;  // Отличается от HTTP-сервера (порт 80)
 
   ESP_LOGI(TAG, "Starting WebSocket server on port %d", config.server_port);
 
@@ -99,8 +103,11 @@ esp_err_t WebSocketSendTelem(const char* telem_json) {
     return ESP_ERR_INVALID_ARG;
   }
 
-  size_t clients = httpd_get_client_count(ws_server_handle);
-  if (clients == 0) {
+  int client_fds[WEBSOCKET_MAX_CLIENTS];
+  size_t client_count = WEBSOCKET_MAX_CLIENTS;
+  if (httpd_get_client_list(ws_server_handle, &client_count, client_fds) !=
+          ESP_OK ||
+      client_count == 0) {
     return ESP_OK;  // Нет клиентов, нечего отправлять
   }
 
@@ -114,5 +121,11 @@ uint8_t WebSocketGetClientCount(void) {
   if (ws_server_handle == NULL) {
     return 0;
   }
-  return httpd_get_client_count(ws_server_handle);
+  int client_fds[WEBSOCKET_MAX_CLIENTS];
+  size_t client_count = WEBSOCKET_MAX_CLIENTS;
+  if (httpd_get_client_list(ws_server_handle, &client_count, client_fds) !=
+      ESP_OK) {
+    return 0;
+  }
+  return (uint8_t)client_count;
 }
