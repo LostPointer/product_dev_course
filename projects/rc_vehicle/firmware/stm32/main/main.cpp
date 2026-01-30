@@ -5,55 +5,19 @@
 #include "protocol.hpp"
 #include "pwm_control.hpp"
 #include "rc_input.hpp"
+#include "slew_rate.hpp"
 #include "uart_bridge.hpp"
 
-#include <libopencm3/cm3/nvic.h>
-#include <libopencm3/cm3/systick.h>
-#include <libopencm3/stm32/gpio.h>
-#include <libopencm3/stm32/rcc.h>
-
 #if defined(STM32F1)
-#include <libopencm3/stm32/f1/rcc.h>
+#include <stm32f1xx.h>
+#elif defined(STM32F4)
+#include <stm32f4xx.h>
+#elif defined(STM32G4)
+#include <stm32g4xx.h>
 #endif
-#if defined(STM32F4)
-#include <libopencm3/stm32/f4/rcc.h>
-#endif
-#if defined(STM32G4)
-#include <libopencm3/stm32/g4/rcc.h>
-#endif
-
-static const char *TAG = "main";
-static float current_throttle = 0.0f;
-static float current_steering = 0.0f;
-static bool rc_active = false;
-static bool wifi_active = false;
-
-static float ApplySlewRate(float target, float current, float max_per_sec,
-                           uint32_t dt_ms) {
-  float max_change = max_per_sec * (dt_ms / 1000.0f);
-  float diff = target - current;
-  if (diff > max_change)
-    return current + max_change;
-  if (diff < -max_change)
-    return current - max_change;
-  return target;
-}
-
-static void clock_setup(void) {
-#if defined(STM32F1)
-  rcc_clock_setup_pll(&rcc_hse_8mhz_3v3[RCC_CLOCK_3V3_72MHZ]);
-#endif
-#if defined(STM32F4)
-  rcc_clock_setup_pll(&rcc_hse_25mhz_3v3[RCC_CLOCK_3V3_168MHZ]);
-#endif
-#if defined(STM32G4)
-  // TODO: настройте тактирование G4 под вашу плату (HSE + PLL). См. примеры
-  // libopencm3-examples.
-#endif
-}
 
 int main(void) {
-  clock_setup();
+  SystemInit();
   platform_init();
 
   PwmControlInit();
@@ -68,6 +32,11 @@ int main(void) {
   uint32_t last_telem = platform_get_time_ms();
   uint32_t last_failsafe = platform_get_time_ms();
 
+  float current_throttle = 0.0f;
+  float current_steering = 0.0f;
+  bool rc_active = false;
+  bool wifi_active = false;
+
   ImuData imu_data = {0};
   TelemetryData telem_data = {0};
   uint16_t telem_seq = 0;
@@ -78,10 +47,12 @@ int main(void) {
     if (now - last_pwm >= PWM_UPDATE_INTERVAL_MS) {
       uint32_t dt = now - last_pwm;
       last_pwm = now;
-      float tt = ApplySlewRate(current_throttle, current_throttle,
-                               SLEW_RATE_THROTTLE_MAX_PER_SEC, dt);
-      float ts = ApplySlewRate(current_steering, current_steering,
-                               SLEW_RATE_STEERING_MAX_PER_SEC, dt);
+      float tt = ApplySlewRate(
+          current_throttle, current_throttle,
+          SLEW_RATE_THROTTLE_MAX_PER_SEC, dt);
+      float ts = ApplySlewRate(
+          current_steering, current_steering,
+          SLEW_RATE_STEERING_MAX_PER_SEC, dt);
       current_throttle = tt;
       current_steering = ts;
       PwmControlSetThrottle(current_throttle);

@@ -10,8 +10,8 @@
 #define RC_IN_PULSE_NEUTRAL_US 1500
 #define RC_IN_TIMEOUT_MS 250
 
-#define I2C_FREQUENCY_HZ 400000
-#define IMU_I2C_ADDRESS 0x68
+// IMU (MPU-6050) по SPI — пины и периферия в board_pins.hpp
+#define IMU_SPI_PRESCALER 32  // APB clock / 32 (настраивается под частоту шины)
 
 #define PWM_UPDATE_INTERVAL_MS 20
 #define RC_IN_POLL_INTERVAL_MS 20
