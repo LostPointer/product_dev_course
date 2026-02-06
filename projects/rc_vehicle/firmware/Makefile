@@ -4,14 +4,17 @@
 
 FIRMWARE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 ESP32_DIR    := $(FIRMWARE_DIR)esp32
+ESP32_S3_DIR := $(FIRMWARE_DIR)esp32_s3
 RP2040_DIR   := $(FIRMWARE_DIR)rp2040
 STM32_DIR    := $(FIRMWARE_DIR)stm32
 
 # Порты (опционально): задайте при заливке/мониторе, если автоопределение не подходит
 # ESP32:    make flash-esp32 ESP32_PORT=/dev/cu.usbserial-0001
+# ESP32-S3: make flash-esp32-s3 ESP32_S3_PORT=/dev/cu.usbserial-0002
 # RP2040:   make flash-rp2040 RP2040_UF2_VOL=/Volumes/RPI-RP2  ;  make monitor-rp2040 RP2040_PORT=/dev/cu.usbmodem*
 # STM32:    make flash-stm32  (st-flash)  ;  make monitor-stm32 STM32_PORT=/dev/cu.usbserial-*
 ESP32_PORT      ?=
+ESP32_S3_PORT   ?= $(ESP32_PORT)
 RP2040_PORT     ?=
 RP2040_UF2_VOL  ?= /Volumes/RPI-RP2
 STM32_PORT      ?=
@@ -29,11 +32,11 @@ STM32CUBE_G4_PATH ?=
 # Пример: make build-esp32 IDF_PATH=$$HOME/esp/esp-idf
 IDF_PATH ?=
 
-.PHONY: all build-all build-esp32 build-rp2040 build-stm32
-.PHONY: clean clean-esp32 clean-rp2040 clean-stm32 clean-all
-.PHONY: flash-esp32 flash-rp2040 flash-stm32
-.PHONY: monitor-esp32 monitor-rp2040 monitor-stm32
-.PHONY: flash-monitor-esp32 flash-monitor-rp2040 flash-monitor-stm32
+.PHONY: all build-all build-esp32 build-esp32-s3 build-rp2040 build-stm32
+.PHONY: clean clean-esp32 clean-esp32-s3 clean-rp2040 clean-stm32 clean-all
+.PHONY: flash-esp32 flash-esp32-s3 flash-rp2040 flash-stm32
+.PHONY: monitor-esp32 monitor-esp32-s3 monitor-rp2040 monitor-stm32
+.PHONY: flash-monitor-esp32 flash-monitor-esp32-s3 flash-monitor-rp2040 flash-monitor-stm32
 .PHONY: help
 
 # По умолчанию — справка
@@ -43,37 +46,40 @@ help:
 	@echo "RC Vehicle firmware — сборка, заливка, монитор"
 	@echo ""
 	@echo "Сборка:"
-	@echo "  make build-all       — собрать все прошивки (ESP32, RP2040, STM32)"
-	@echo "  make build-esp32     — только ESP32 (задайте IDF_PATH или . export.sh в shell)"
+	@echo "  make build-all       — собрать все прошивки (ESP32-C3, ESP32-S3, RP2040, STM32)"
+	@echo "  make build-esp32     — только ESP32-C3 (задайте IDF_PATH или . export.sh в shell)"
+	@echo "  make build-esp32-s3  — только ESP32-S3 (задайте IDF_PATH или . export.sh в shell)"
 	@echo "  make build-rp2040   — только RP2040 (нужен PICO_SDK_PATH)"
 	@echo "  make build-stm32    — только STM32 (задайте STM32CUBE_F1_PATH или F4/G4 для MCU, опц. STM32_MCU=...)"
 	@echo ""
 	@echo "Очистка:"
 	@echo "  make clean-all       — очистить все платформы"
-	@echo "  make clean-esp32    make clean-rp2040    make clean-stm32"
+	@echo "  make clean-esp32    make clean-esp32-s3    make clean-rp2040    make clean-stm32"
 	@echo ""
 	@echo "Заливка (flash):"
 	@echo "  make flash-esp32    [ESP32_PORT=/dev/cu.usbserial-XXX]"
+	@echo "  make flash-esp32-s3 [ESP32_S3_PORT=/dev/cu.usbserial-XXX]"
 	@echo "  make flash-rp2040   (копирование .uf2 в RPI-RP2; задайте RP2040_UF2_VOL при другом пути)"
 	@echo "  make flash-stm32    (st-flash; перед этим make build-stm32)"
 	@echo ""
 	@echo "Монитор логов (после заливки):"
 	@echo "  make monitor-esp32   [ESP32_PORT=...]   — выход: Ctrl+]"
+	@echo "  make monitor-esp32-s3 [ESP32_S3_PORT=...] — выход: Ctrl+]"
 	@echo "  make monitor-rp2040 [RP2040_PORT=...]   — 115200 8N1"
 	@echo "  make monitor-stm32  [STM32_PORT=...]   — 115200 8N1 (если UART выведен)"
 	@echo ""
 	@echo "Заливка + монитор одной командой:"
-	@echo "  make flash-monitor-esp32   make flash-monitor-rp2040   make flash-monitor-stm32"
+	@echo "  make flash-monitor-esp32   make flash-monitor-esp32-s3   make flash-monitor-rp2040   make flash-monitor-stm32"
 	@echo ""
-	@echo "Переменные: IDF_PATH, STM32CUBE_F1_PATH/F4/G4, ESP32_PORT, RP2040_PORT, RP2040_UF2_VOL, STM32_PORT, STM32_MCU"
+	@echo "Переменные: IDF_PATH, STM32CUBE_F1_PATH/F4/G4, ESP32_PORT, ESP32_S3_PORT, RP2040_PORT, RP2040_UF2_VOL, STM32_PORT, STM32_MCU"
 
 # --- Сборка ---
-build-all: build-esp32 build-rp2040 build-stm32
+build-all: build-esp32 build-esp32-s3 build-rp2040 build-stm32
 
 # Подгрузить ESP-IDF (если IDF_PATH задан) и выполнить idf.py; при отсутствии idf.py — подсказка
 define run_idf
 	export IDF_PATH="$(IDF_PATH)"; \
-	cd "$(ESP32_DIR)" && bash -c '\
+	cd "$(2)" && bash -c '\
 	if [ -n "$$IDF_PATH" ] && [ -f "$$IDF_PATH/export.sh" ]; then . "$$IDF_PATH/export.sh"; fi; \
 	if ! command -v idf.py >/dev/null 2>&1; then \
 		echo ">>> idf.py не найден. Задайте путь к ESP-IDF:"; \
@@ -85,8 +91,12 @@ define run_idf
 endef
 
 build-esp32:
-	@echo ">>> Сборка ESP32..."
-	@$(call run_idf,build)
+	@echo ">>> Сборка ESP32-C3..."
+	@$(call run_idf,build,$(ESP32_DIR))
+
+build-esp32-s3:
+	@echo ">>> Сборка ESP32-S3..."
+	@$(call run_idf,build,$(ESP32_S3_DIR))
 
 build-rp2040:
 	@echo ">>> Сборка RP2040..."
@@ -103,11 +113,15 @@ build-stm32:
 		STM32CUBE_G4_PATH="$(STM32CUBE_G4_PATH)"
 
 # --- Очистка ---
-clean-all: clean-esp32 clean-rp2040 clean-stm32
+clean-all: clean-esp32 clean-esp32-s3 clean-rp2040 clean-stm32
 
 clean-esp32:
-	@echo ">>> Очистка ESP32..."
+	@echo ">>> Очистка ESP32-C3..."
 	@export IDF_PATH="$(IDF_PATH)"; cd "$(ESP32_DIR)" && bash -c 'if [ -n "$$IDF_PATH" ] && [ -f "$$IDF_PATH/export.sh" ]; then . "$$IDF_PATH/export.sh"; fi; idf.py fullclean 2>/dev/null' || true
+
+clean-esp32-s3:
+	@echo ">>> Очистка ESP32-S3..."
+	@export IDF_PATH="$(IDF_PATH)"; cd "$(ESP32_S3_DIR)" && bash -c 'if [ -n "$$IDF_PATH" ] && [ -f "$$IDF_PATH/export.sh" ]; then . "$$IDF_PATH/export.sh"; fi; idf.py fullclean 2>/dev/null' || true
 
 clean-rp2040:
 	@echo ">>> Очистка RP2040..."
@@ -119,8 +133,12 @@ clean-stm32:
 
 # --- Заливка ---
 flash-esp32: build-esp32
-	@echo ">>> Заливка ESP32..."
-	@$(call run_idf,$(if $(ESP32_PORT),-p $(ESP32_PORT),) flash)
+	@echo ">>> Заливка ESP32-C3..."
+	@$(call run_idf,$(if $(ESP32_PORT),-p $(ESP32_PORT),) flash,$(ESP32_DIR))
+
+flash-esp32-s3: build-esp32-s3
+	@echo ">>> Заливка ESP32-S3..."
+	@$(call run_idf,$(if $(ESP32_S3_PORT),-p $(ESP32_S3_PORT),) flash,$(ESP32_S3_DIR))
 
 flash-rp2040: build-rp2040
 	@echo ">>> Заливка RP2040 (копирование .uf2 в $(RP2040_UF2_VOL))..."
@@ -140,8 +158,12 @@ flash-stm32: build-stm32
 
 # --- Монитор ---
 monitor-esp32:
-	@echo ">>> Монитор ESP32 (выход: Ctrl+])..."
-	@$(call run_idf,$(if $(ESP32_PORT),-p $(ESP32_PORT),) monitor)
+	@echo ">>> Монитор ESP32-C3 (выход: Ctrl+])..."
+	@$(call run_idf,$(if $(ESP32_PORT),-p $(ESP32_PORT),) monitor,$(ESP32_DIR))
+
+monitor-esp32-s3:
+	@echo ">>> Монитор ESP32-S3 (выход: Ctrl+])..."
+	@$(call run_idf,$(if $(ESP32_S3_PORT),-p $(ESP32_S3_PORT),) monitor,$(ESP32_S3_DIR))
 
 monitor-rp2040:
 	@echo ">>> Монитор RP2040 (115200). Выход: Ctrl+A K (screen) или Ctrl+C (miniterm)..."
@@ -167,7 +189,10 @@ monitor-stm32:
 
 # --- Заливка + монитор ---
 flash-monitor-esp32: flash-esp32
-	@$(call run_idf,$(if $(ESP32_PORT),-p $(ESP32_PORT),) monitor)
+	@$(call run_idf,$(if $(ESP32_PORT),-p $(ESP32_PORT),) monitor,$(ESP32_DIR))
+
+flash-monitor-esp32-s3: flash-esp32-s3
+	@$(call run_idf,$(if $(ESP32_S3_PORT),-p $(ESP32_S3_PORT),) monitor,$(ESP32_S3_DIR))
 
 flash-monitor-rp2040: flash-rp2040
 	@sleep 2
