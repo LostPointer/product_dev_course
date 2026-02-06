@@ -5,7 +5,11 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
+#include "freertos/task.h"
 #include "uart_bridge_base.hpp"
+
+static constexpr TickType_t PONG_TIMEOUT_TICKS = pdMS_TO_TICKS(PONG_TIMEOUT_MS);
+static TickType_t s_last_pong_tick = 0;
 
 static const char *TAG = "uart_bridge";
 static QueueHandle_t uart_queue = NULL;
@@ -63,10 +67,23 @@ esp_err_t UartBridgeSendCommand(float throttle, float steering) {
   return s_bridge.SendCommand(throttle, steering) == 0 ? ESP_OK : ESP_FAIL;
 }
 
-esp_err_t UartBridgeReceiveTelem(void *telem_data) {
-  if (telem_data == nullptr) return ESP_ERR_INVALID_ARG;
-  auto opt = s_bridge.ReceiveTelem();
-  if (!opt) return ESP_ERR_NOT_FOUND;
-  *static_cast<TelemetryData *>(telem_data) = *opt;
-  return ESP_OK;
+std::optional<TelemetryData> UartBridgeReceiveTelem(void) {
+  return s_bridge.ReceiveTelem();
+}
+
+esp_err_t UartBridgeSendPing(void) {
+  return s_bridge.SendPing() == 0 ? ESP_OK : ESP_FAIL;
+}
+
+esp_err_t UartBridgeReceivePong(void) {
+  if (s_bridge.ReceivePong()) {
+    s_last_pong_tick = xTaskGetTickCount();
+    return ESP_OK;
+  }
+  return ESP_ERR_NOT_FOUND;
+}
+
+bool UartBridgeIsMcuConnected(void) {
+  if (s_last_pong_tick == 0) return false;
+  return (xTaskGetTickCount() - s_last_pong_tick) < PONG_TIMEOUT_TICKS;
 }

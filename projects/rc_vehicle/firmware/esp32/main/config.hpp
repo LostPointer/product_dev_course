@@ -28,6 +28,8 @@
 #define TELEM_SEND_INTERVAL_MS \
   50  // 20 Hz - частота отправки телеметрии в браузер
 #define UART_RESPONSE_TIMEOUT_MS 100  // Таймаут ожидания ответа от RP2040
+#define PING_INTERVAL_MS 5000         // Интервал PING для проверки связи с MCU (5 с)
+#define PONG_TIMEOUT_MS 6000          // Таймаут «связь есть» после PONG (> PING_INTERVAL_MS)
 
 // Протокол UART
 #define UART_FRAME_PREFIX_0 0xAA
@@ -40,9 +42,9 @@
 #define UART_MSG_TYPE_PING 0x03
 #define UART_MSG_TYPE_PONG 0x04
 
-// Размеры буферов
-#define WS_RX_BUFFER_SIZE 512
-#define WS_TX_BUFFER_SIZE 512
+// Размеры буферов (RX — входящие команды от браузера; «WS Message too long» при малом буфере)
+#define WS_RX_BUFFER_SIZE 1024
+#define WS_TX_BUFFER_SIZE 1024
 #define UART_RX_BUFFER_SIZE 1024
 #define UART_TX_BUFFER_SIZE 512
 

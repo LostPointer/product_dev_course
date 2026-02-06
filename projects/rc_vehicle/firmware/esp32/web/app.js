@@ -5,7 +5,7 @@ const WS_URL = `ws://${window.location.hostname}:81/ws`;
 
 // Элементы UI
 const wsStatusEl = document.getElementById('ws-status');
-const rp2040StatusEl = document.getElementById('rp2040-status');
+const mcuStatusEl = document.getElementById('mcu-status');
 const throttleSlider = document.getElementById('throttle');
 const steeringSlider = document.getElementById('steering');
 const throttleValueEl = document.getElementById('throttle-value');
@@ -17,6 +17,9 @@ const telemDataEl = document.getElementById('telem-data');
 // Состояние
 let lastCommandSeq = 0;
 let commandSendInterval = null;
+let lastTelemTime = 0;
+const MCU_TIMEOUT_MS = 1500;
+let mcuStatusCheckInterval = null;
 
 // Подключение к WebSocket
 function connectWebSocket() {
@@ -25,11 +28,12 @@ function connectWebSocket() {
 
         ws.onopen = () => {
             console.log('WebSocket connected');
-            wsStatusEl.textContent = 'Connected';
+            wsStatusEl.textContent = 'Подключено';
             wsStatusEl.className = 'status-value connected';
             clearInterval(wsReconnectInterval);
-
-            // Запуск отправки команд
+            lastTelemTime = 0;
+            setMcuStatus('unknown');
+            startMcuStatusCheck();
             startCommandSending();
         };
 
@@ -50,9 +54,11 @@ function connectWebSocket() {
 
         ws.onclose = () => {
             console.log('WebSocket disconnected');
-            wsStatusEl.textContent = 'Disconnected';
+            wsStatusEl.textContent = 'Отключено';
             wsStatusEl.className = 'status-value disconnected';
             stopCommandSending();
+            stopMcuStatusCheck();
+            setMcuStatus('unknown');
 
             // Переподключение через 2 секунды
             wsReconnectInterval = setInterval(connectWebSocket, 2000);
@@ -97,16 +103,44 @@ function stopCommandSending() {
     }
 }
 
-// Обновление телеметрии
-function updateTelem(data) {
-    if (data.link) {
-        if (data.link.rc_ok || data.link.wifi_ok) {
-            rp2040StatusEl.textContent = 'OK';
-            rp2040StatusEl.className = 'status-value connected';
-        } else {
-            rp2040StatusEl.textContent = 'Error';
-            rp2040StatusEl.className = 'status-value disconnected';
+// Статус подключения Pico/STM (по факту прихода телеметрии по UART)
+function setMcuStatus(state) {
+    if (!mcuStatusEl) return;
+    if (state === 'connected') {
+        mcuStatusEl.textContent = 'Подключено';
+        mcuStatusEl.className = 'status-value connected';
+    } else if (state === 'disconnected') {
+        mcuStatusEl.textContent = 'Нет связи';
+        mcuStatusEl.className = 'status-value disconnected';
+    } else {
+        mcuStatusEl.textContent = '—';
+        mcuStatusEl.className = 'status-value unknown';
+    }
+}
+
+function startMcuStatusCheck() {
+    if (mcuStatusCheckInterval) clearInterval(mcuStatusCheckInterval);
+    mcuStatusCheckInterval = setInterval(() => {
+        if (lastTelemTime && (Date.now() - lastTelemTime > MCU_TIMEOUT_MS)) {
+            setMcuStatus('disconnected');
         }
+    }, 500);
+}
+
+function stopMcuStatusCheck() {
+    if (mcuStatusCheckInterval) {
+        clearInterval(mcuStatusCheckInterval);
+        mcuStatusCheckInterval = null;
+    }
+}
+
+// Обновление телеметрии (статус Pico/STM: по mcu_pong_ok с ESP32 или по факту прихода телеметрии)
+function updateTelem(data) {
+    lastTelemTime = Date.now();
+    if (data.mcu_pong_ok !== undefined) {
+        setMcuStatus(data.mcu_pong_ok ? 'connected' : 'disconnected');
+    } else {
+        setMcuStatus('connected');
     }
 
     let html = '';

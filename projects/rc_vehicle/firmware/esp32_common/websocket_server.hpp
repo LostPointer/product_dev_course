@@ -4,6 +4,13 @@
 
 #include "esp_err.h"
 
+/** Колбэк обработки команды управления из WebSocket. */
+using WebSocketCommandHandler = void (*)(float throttle, float steering);
+
+/** Установить обработчик команд (можно вызывать до/после WebSocketServerInit).
+ */
+void WebSocketSetCommandHandler(WebSocketCommandHandler handler);
+
 /**
  * Инициализация WebSocket сервера
  * @return ESP_OK при успехе, иначе код ошибки

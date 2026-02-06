@@ -8,29 +8,26 @@
 
 ## Технологии
 
-- **Язык**: C++23
+- **Язык**: C++23 (C++26 при поддержке тулчейна)
 - **Фреймворк**: ESP-IDF v5.5 (требуется)
 - **Целевая плата**: ESP32-C3 (DevKitM-1, WROOM-02 и совместимые)
 
 ## Структура проекта
 
 ```
-firmware/esp32/
-├── main/
-│   ├── main.cpp               # Точка входа
-│   ├── wifi_ap.cpp/hpp        # Wi-Fi Access Point
-│   ├── http_server.cpp/hpp    # HTTP сервер (раздача веб-интерфейса)
-│   ├── websocket_server.cpp/hpp # WebSocket сервер
-│   ├── uart_bridge.cpp/hpp    # UART мост к RP2040
-│   ├── protocol.cpp/hpp       # Парсинг/формирование UART кадров
-│   └── config.hpp             # Конфигурация (SSID, порты, частоты)
-├── web/
-│   ├── index.html             # Веб-интерфейс управления
-│   ├── style.css              # Стили
-│   └── app.js                 # JavaScript логика
-├── CMakeLists.txt             # Для ESP-IDF
-├── sdkconfig.defaults          # Настройки по умолчанию
-└── README.md
+firmware/
+├── esp32/                      # ESP32-C3 (шлюз UART→MCU)
+│   ├── main/
+│   │   ├── main.cpp            # Точка входа
+│   │   ├── uart_bridge.cpp/hpp # UART мост к MCU
+│   │   └── config.hpp          # Конфигурация (SSID, порты, UART пины)
+│   ├── CMakeLists.txt
+│   ├── sdkconfig.defaults
+│   └── README.md
+└── esp32_common/               # Общий код Wi‑Fi/HTTP/WebSocket для ESP‑IDF
+    ├── wifi_ap.cpp/hpp
+    ├── http_server.cpp/hpp     # Включает веб‑UI + REST API для настройки STA
+    └── websocket_server.cpp/hpp
 ```
 
 ## Сборка

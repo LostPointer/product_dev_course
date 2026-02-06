@@ -1,6 +1,9 @@
 #pragma once
 
+#include <optional>
+
 #include "esp_err.h"
+#include "protocol.hpp"
 
 /**
  * Инициализация UART моста к RP2040
@@ -18,8 +21,24 @@ esp_err_t UartBridgeSendCommand(float throttle, float steering);
 
 /**
  * Получить телеметрию от RP2040 (неблокирующий вызов)
- * @param telem_data указатель на структуру для данных (будет заполнена при
- * наличии)
- * @return ESP_OK если данные получены, ESP_ERR_NOT_FOUND если нет данных
+ * @return данные телеметрии или std::nullopt, если нет данных
  */
-esp_err_t UartBridgeReceiveTelem(void* telem_data);
+std::optional<TelemetryData> UartBridgeReceiveTelem(void);
+
+/**
+ * Отправить PING на MCU (Pico/STM32)
+ * @return ESP_OK при успехе
+ */
+esp_err_t UartBridgeSendPing(void);
+
+/**
+ * Получить PONG от MCU (неблокирующий)
+ * @return ESP_OK если PONG получен, ESP_ERR_NOT_FOUND если нет
+ */
+esp_err_t UartBridgeReceivePong(void);
+
+/**
+ * Связь с MCU по PONG (PING был отправлен, PONG получен недавно)
+ * @return true если PONG получен в последние ~1.5 с
+ */
+bool UartBridgeIsMcuConnected(void);

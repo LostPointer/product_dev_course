@@ -49,3 +49,6 @@ Thumbs.db
 # Cache
 .cache/
 
+# ESP-IDF Component Manager
+managed_components/
+
