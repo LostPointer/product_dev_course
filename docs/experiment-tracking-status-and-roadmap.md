@@ -210,6 +210,115 @@
 - **Песочница для нагрузочного тестирования:** ❌
 - **Контроль версий схем:** ✅ Реализовано (таблица `schema_migrations` + checksum, применение миграций на старте и через `bin/migrate.py`)
 
+### 3.5 Схемы преобразования датчиков (Conversion Profiles)
+
+> **Статус:** ⚠️ Инфраструктура готова, сквозной пайплайн не реализован.
+> **Приоритет:** Высокий — ключевая фича ТЗ (раздел 6.2).
+
+#### Что уже есть
+
+- ✅ **DB-схема:** таблица `conversion_profiles` (id, sensor_id, version, kind, payload JSONB, status, valid_from/to, created_by, published_by); FK `sensors.active_profile_id` → conversion_profiles; FK `telemetry_records.conversion_profile_id`; enum `telemetry_conversion_status` (raw_only, converted, client_provided, conversion_failed).
+- ✅ **Backend (experiment-service):**
+  - Repository: `ConversionProfileRepository` — CRUD, `publish_profile()` (atomic: activate + deprecate old + update sensor.active_profile_id).
+  - Service: `ConversionProfileService` — list, create, publish; `SensorService.register_sensor()` принимает optional `initial_profile`.
+  - State machine: `draft → {scheduled, active, deprecated}`, `scheduled → {active, deprecated}`, `active → {deprecated}`.
+  - API routes: `POST /api/v1/sensors/{sensor_id}/conversion-profiles`, `GET .../conversion-profiles`, `POST .../conversion-profiles/{id}/publish`.
+  - `TelemetryService._apply_conversion()` для `kind=linear` (`physical = a * raw + b`) — **мёртвый код**, не подключён ни к одному endpoint.
+- ✅ **Frontend types:** `ConversionProfileInput` (version, kind, payload, status, valid_from/to); `SensorCreate.conversion_profile` (опциональное поле).
+- ⚠️ **Telemetry ingest:** вставляет `conversion_status = 'client_provided'` (если клиент прислал physical_value) или `'raw_only'`; **conversion_profile_id всегда NULL**; никакого серверного преобразования.
+
+#### Что нужно реализовать
+
+##### Этап 1: Серверное преобразование при ingest (real-time)
+
+**Цель:** при получении `raw_value` без `physical_value` telemetry-ingest-service автоматически применяет активный профиль датчика.
+
+1. **Загрузка и кэширование профилей** в telemetry-ingest-service:
+   - При старте/первом использовании: `SELECT cp.* FROM conversion_profiles cp JOIN sensors s ON s.active_profile_id = cp.id WHERE s.id = $1`.
+   - In-memory кэш `{sensor_id → ConversionProfile}` с TTL (например, 60 сек) или инвалидацией через webhook/event при публикации нового профиля.
+   - Fallback: если профиля нет → оставить `physical_value = NULL`, `conversion_status = 'raw_only'`.
+
+2. **Применение преобразования** (в `_bulk_insert` перед INSERT):
+   - Если `reading.physical_value IS NOT NULL` → `client_provided` (приоритет клиента).
+   - Иначе если `active_profile` для этого `sensor_id`:
+     - `kind = 'linear'`: `physical = payload.a * raw + payload.b`.
+     - `kind = 'polynomial'`: `physical = Σ(payload.coefficients[i] * raw^i)`.
+     - `kind = 'lookup_table'`: линейная интерполяция по `payload.table` (`[{raw, physical}, ...]`).
+   - При успехе: `conversion_status = 'converted'`, `conversion_profile_id = profile.id`.
+   - При ошибке: `conversion_status = 'conversion_failed'`, `physical_value = NULL`.
+
+3. **Поддерживаемые виды (`kind`)**:
+
+| Kind | Payload (JSONB) | Формула |
+|------|----------------|---------|
+| `linear` | `{"a": float, "b": float}` | `physical = a * raw + b` |
+| `polynomial` | `{"coefficients": [c0, c1, c2, ...]}` | `physical = c0 + c1*x + c2*x² + ...` |
+| `lookup_table` | `{"table": [{"raw": r, "physical": p}, ...]}` | Линейная интерполяция; экстраполяция за границами — clamp к крайним значениям |
+
+4. **Невалидный payload** → `conversion_failed` + лог с деталями.
+
+##### Этап 2: Frontend — управление профилями
+
+1. **API client**: `conversionProfilesApi.list(sensorId)`, `.create(sensorId, data)`, `.publish(sensorId, profileId)`.
+2. **Sensor Detail** — секция «Профили преобразования»:
+   - Таблица: version, kind, status, valid_from/to, created_by, published_by.
+   - Бейдж активного профиля.
+   - Кнопка «Создать профиль» → модалка:
+     - Выбор kind (linear / polynomial / lookup_table).
+     - Редактор payload (JSON или специализированные поля для каждого kind).
+     - Предпросмотр: ввести raw → показать physical (live-калькулятор).
+   - Кнопка «Опубликовать» (owner only) → POST `.../publish`.
+3. **CreateSensor** — добавить optional секцию «Начальный профиль преобразования» (kind + payload).
+
+##### Этап 3: Backfill engine (пересчёт при смене профиля)
+
+**Цель:** при публикации нового профиля пользователь может запустить пересчёт `physical_value` для исторических данных.
+
+1. **API:**
+   - `POST /api/v1/sensors/{sensor_id}/conversion-profiles/{profile_id}/backfill` — запускает пересчёт.
+   - Body: `{"scope": "all" | "capture_sessions", "capture_session_ids": [...], "time_from": "...", "time_to": "..."}`.
+   - Возвращает `backfill_task_id`.
+
+2. **Хранение задач:**
+   - Таблица `conversion_backfill_tasks` (id, sensor_id, profile_id, scope, status [pending/running/succeeded/failed], total_records, processed_records, error, created_at, finished_at).
+   - Статус: `pending → running → succeeded | failed`.
+
+3. **Выполнение:**
+   - Background worker task: `conversion_backfill_worker`.
+   - Читает `telemetry_records` батчами (ORDER BY timestamp ASC, LIMIT 1000).
+   - Для каждой записи: загружает профиль, применяет конверсию, UPDATE `physical_value`, `conversion_profile_id`, `conversion_status`.
+   - Сохраняет прогресс (processed_records) в таблицу задач.
+   - **Идемпотентность:** повторный запуск продолжает с последней обработанной записи.
+   - **Сохранение аудита:** старая `conversion_profile_id` логируется (или хранится в `meta.__system.prev_profile_id`).
+
+4. **Frontend:**
+   - После publish → предложить «Пересчитать historical данные?».
+   - Диалог выбора scope (все данные / конкретные capture sessions).
+   - Прогресс-бар (poll GET `/backfill-tasks/{id}`).
+
+5. **Webhook/audit events:** `conversion_profile.backfill_started`, `conversion_profile.backfill_completed`.
+
+##### Этап 4: Расширения (backlog)
+
+- **Scheduled profiles:** автоматическая активация по `valid_from` (worker task проверяет `status = 'scheduled'` с `valid_from <= now()`).
+- **Custom formula:** пользовательское Python-выражение в sandbox (eval ограничен whitelist операций, без imports).
+- **A/B профили:** два active профиля с split по run_id / capture_session_id для сравнения формул.
+- **Валидация при создании:** проверка payload schema по kind (a/b для linear, coefficients для polynomial, table format для lookup).
+- **Batch ingest с конверсией:** при batch insert > 100 readings — параллельная конверсия с пулом.
+
+#### Зависимости
+
+- Этап 1 зависит от: существующих API профилей в experiment-service (✅), загрузки профиля в telemetry-ingest-service.
+- Этап 2 зависит от: существующих API (✅), нового API-клиента на фронте.
+- Этап 3 зависит от: worker-инфраструктуры (✅ `BackgroundWorker`), новой таблицы `conversion_backfill_tasks`.
+
+#### Критерии готовности (минимум для «реализовано»)
+
+- [ ] Ingest с `raw_value` без `physical_value` → сервер применяет active linear profile → `physical_value` != NULL, `conversion_status = 'converted'`.
+- [ ] Frontend: список профилей в Sensor Detail, создание linear-профиля, публикация.
+- [ ] Backfill: пересчёт за выбранный диапазон, прогресс видим в UI.
+- [ ] Тесты: unit (конверсия) + integration (ingest → query → verify physical_value).
+
 ### 4. Integrations & Collaboration (итерация 7)
 - **Enforcement бизнес-политик:** ❌
 - **Расширенные фильтры API:** ✅ Реализовано: `GET /api/v1/experiments` поддерживает `?status=`, `?tags=` (comma-separated, @> containment), `?created_after=`, `?created_before=` (ISO-8601); `GET /api/v1/experiments/{id}/runs` — те же фильтры; `GET /api/v1/sensors` — `?status=`, `?created_after=`, `?created_before=`; поиск по тексту — `GET /api/v1/experiments/search?q=`.
