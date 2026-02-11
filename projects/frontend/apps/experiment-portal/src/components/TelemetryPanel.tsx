@@ -93,6 +93,7 @@ export default function TelemetryPanel({
     const abortControllers = useRef<Record<string, AbortController>>({})
     const runningRef = useRef<Record<string, boolean>>({})
     const plotRef = useRef<HTMLDivElement | null>(null)
+    const scrollAnimRef = useRef<number | null>(null)
     const panelRef = useRef<HTMLDivElement | null>(null)
     const stateLoadedRef = useRef(false)
     const skipInitialSaveRef = useRef(true)
@@ -434,8 +435,12 @@ export default function TelemetryPanel({
 
     const hasData = useMemo(() => seriesData.some((series) => series.y.length > 0), [seriesData])
 
-    const plotlyLayout = useMemo(
-        () => ({
+    const plotlyLayout = useMemo(() => {
+        const isStreaming = status === 'streaming'
+        const nowMs = Date.now()
+        const windowMs = timeWindowSeconds * 1000
+
+        return {
             autosize: true,
             margin: { l: 42, r: 14, t: 12, b: 24 },
             showlegend: false,
@@ -448,6 +453,15 @@ export default function TelemetryPanel({
                 tickfont: { size: 10, color: '#475569' },
                 ticks: 'outside' as const,
                 tickcolor: 'rgba(15, 23, 42, 0.12)',
+                ...(isStreaming
+                    ? {
+                          range: [
+                              new Date(nowMs - windowMs).toISOString(),
+                              new Date(nowMs).toISOString(),
+                          ],
+                          autorange: false,
+                      }
+                    : { autorange: true }),
             },
             yaxis: {
                 showgrid: true,
@@ -457,9 +471,8 @@ export default function TelemetryPanel({
                 ticks: 'outside' as const,
                 tickcolor: 'rgba(15, 23, 42, 0.12)',
             },
-        }),
-        []
-    )
+        }
+    }, [status, timeWindowSeconds])
 
     const plotlyConfig = useMemo(
         () => ({
@@ -487,10 +500,57 @@ export default function TelemetryPanel({
         return () => observer.disconnect()
     }, [])
 
+    // ---- Smooth x-axis scroll during live streaming ----
+    useEffect(() => {
+        if (status !== 'streaming') {
+            // When streaming stops, restore auto-range so the chart fits the data
+            if (scrollAnimRef.current !== null) {
+                cancelAnimationFrame(scrollAnimRef.current)
+                scrollAnimRef.current = null
+            }
+            const element = plotRef.current
+            if (element && hasData) {
+                Plotly.relayout(element, { 'xaxis.autorange': true })
+            }
+            return
+        }
+
+        const element = plotRef.current
+        if (!element) return
+
+        const FRAME_INTERVAL_MS = 50 // ~20 fps
+        let lastFrame = 0
+
+        const animate = (timestamp: number) => {
+            if (timestamp - lastFrame >= FRAME_INTERVAL_MS) {
+                lastFrame = timestamp
+                const nowMs = Date.now()
+                const windowMs = timeWindowSeconds * 1000
+                const startIso = new Date(nowMs - windowMs).toISOString()
+                const endIso = new Date(nowMs).toISOString()
+                Plotly.relayout(element, {
+                    'xaxis.range': [startIso, endIso],
+                    'xaxis.autorange': false,
+                })
+            }
+            scrollAnimRef.current = requestAnimationFrame(animate)
+        }
+
+        scrollAnimRef.current = requestAnimationFrame(animate)
+
+        return () => {
+            if (scrollAnimRef.current !== null) {
+                cancelAnimationFrame(scrollAnimRef.current)
+                scrollAnimRef.current = null
+            }
+        }
+    }, [status, timeWindowSeconds, hasData])
+
     useEffect(() => {
         return () => {
             const element = plotRef.current
             if (element) Plotly.purge(element)
+            if (scrollAnimRef.current !== null) cancelAnimationFrame(scrollAnimRef.current)
         }
     }, [])
 
