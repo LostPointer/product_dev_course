@@ -340,12 +340,6 @@ async function* sseFetchStream(
     }
 }
 
-function sensorIntervalMs(ss: PersistedSettings): number {
-    const effRate = clamp(ss.rateHz, 1, 10_000)
-    const effBatch = clamp(ss.batchSize, 1, 10_000)
-    return clamp(Math.round((1000 * effBatch) / effRate), 50, 60_000)
-}
-
 export function App() {
     const initial = useMemo(() => {
         const loaded = loadPersistedState()
@@ -369,8 +363,6 @@ export function App() {
     const seqBySensorRef = useRef<Map<string, number>>(new Map())
     const lastTimestampBySensorRef = useRef<Map<string, number>>(new Map())
     const rngBySensorRef = useRef<Map<string, { seed: number; rng: () => number }>>(new Map())
-    const lastSendBySensorRef = useRef<Map<string, number>>(new Map())
-
     const latestRef = useRef<{ sensors: SensorConfig[] }>({ sensors: [] })
     latestRef.current = { sensors }
 
@@ -556,75 +548,46 @@ export function App() {
         const active = sensorsNow.filter(sensorIsReady)
         if (!active.length) return
         setIsRunning(true)
-        lastSendBySensorRef.current.clear()
         const summaries = active.map((s) => `${sensorDisplayName(s)}(${s.settings.scenario})`).join(', ')
         appendLog(`[${nowIso()}] ▶️ start sensors=${active.length} [${summaries}]`)
 
         const startMs = Date.now()
 
-        const scheduleNext = () => {
+        const tick = async () => {
             const now = Date.now()
             const elapsedSec = Math.floor((now - startMs) / 1000)
             const sensorsSnap = latestRef.current.sensors
             const activeSnap = sensorsSnap.filter(sensorIsReady)
 
-            // Calculate the smallest remaining wait time across all sensors
-            let minWait = 60_000
-            for (const s of activeSnap) {
-                const effRate = scenarioEffectiveRate(s.settings, elapsedSec)
-                const interval = clamp(
-                    Math.round((1000 * clamp(s.settings.batchSize, 1, 10_000)) / clamp(effRate, 1, 10_000)),
-                    50,
-                    60_000
-                )
-                const lastSend = lastSendBySensorRef.current.get(s.key) ?? 0
-                const remaining = Math.max(0, interval - (now - lastSend))
-                if (remaining < minWait) minWait = remaining
+            if (!activeSnap.length) {
+                appendLog(`[${nowIso()}] ⚠️ no active sensors — stopping`)
+                stop()
+                return
             }
 
-            tickRef.current = window.setTimeout(async () => {
-                const innerNow = Date.now()
-                const elapsedSecInner = Math.floor((innerNow - startMs) / 1000)
-                const sensorsInner = latestRef.current.sensors
-                const activeInner = sensorsInner.filter(sensorIsReady)
-
-                if (!activeInner.length) {
-                    appendLog(`[${nowIso()}] ⚠️ no active sensors — stopping`)
-                    stop()
-                    return
+            const sends: Promise<void>[] = []
+            for (const sensor of activeSnap) {
+                const ss = sensor.settings
+                if (scenarioIsPausedAt(ss, elapsedSec)) {
+                    appendLog(`[${nowIso()}] ⏸️ dropout window sensor=${sensorDisplayName(sensor)}`)
+                    continue
                 }
+                const effRate = scenarioEffectiveRate(ss, elapsedSec)
+                // Each tick = 1 second → send exactly effRate readings per tick
+                const readingsCount = Math.max(1, Math.round(effRate))
+                sends.push(sendBatchForSensor(sensor, readingsCount, effRate, ss, true))
+            }
 
-                const toSend: Promise<void>[] = []
-                for (const sensor of activeInner) {
-                    const ss = sensor.settings
-                    const effRate = scenarioEffectiveRate(ss, elapsedSecInner)
-                    const effBatch = clamp(ss.batchSize, 1, 10_000)
-                    const interval = clamp(
-                        Math.round((1000 * effBatch) / clamp(effRate, 1, 10_000)),
-                        50,
-                        60_000
-                    )
-                    const lastSend = lastSendBySensorRef.current.get(sensor.key) ?? 0
+            if (sends.length > 0) await Promise.all(sends)
 
-                    if (innerNow - lastSend >= interval * 0.9) {
-                        if (scenarioIsPausedAt(ss, elapsedSecInner)) {
-                            appendLog(`[${nowIso()}] ⏸️ dropout window sensor=${sensorDisplayName(sensor)}`)
-                        } else {
-                            toSend.push(sendBatchForSensor(sensor, effBatch, effRate, ss, true))
-                        }
-                        lastSendBySensorRef.current.set(sensor.key, innerNow)
-                    }
-                }
-
-                if (toSend.length > 0) await Promise.all(toSend)
-                if (tickRef.current !== null) scheduleNext()
-            }, Math.max(minWait, 50))
+            // Schedule next tick in 1 second (uniform cadence)
+            if (tickRef.current !== null) {
+                tickRef.current = window.setTimeout(tick, 1000)
+            }
         }
 
         // kick off immediately
-        tickRef.current = window.setTimeout(() => {
-            scheduleNext()
-        }, 0)
+        tickRef.current = window.setTimeout(tick, 0)
     }
 
     function stop() {
@@ -662,7 +625,6 @@ export function App() {
         for (const k of seqBySensorRef.current.keys()) if (!keys.has(k)) seqBySensorRef.current.delete(k)
         for (const k of lastTimestampBySensorRef.current.keys()) if (!keys.has(k)) lastTimestampBySensorRef.current.delete(k)
         for (const k of rngBySensorRef.current.keys()) if (!keys.has(k)) rngBySensorRef.current.delete(k)
-        for (const k of lastSendBySensorRef.current.keys()) if (!keys.has(k)) lastSendBySensorRef.current.delete(k)
     }, [sensors])
 
     useEffect(() => {
@@ -722,7 +684,6 @@ export function App() {
         seqBySensorRef.current.delete(sensorKey)
         lastTimestampBySensorRef.current.delete(sensorKey)
         rngBySensorRef.current.delete(sensorKey)
-        lastSendBySensorRef.current.delete(sensorKey)
         if (streamSensorKey === sensorKey) disconnectStream()
         appendLog(`[${nowIso()}] ➖ remove sensor`)
     }
@@ -1003,7 +964,7 @@ export function App() {
 
                             <div className="row" style={{ marginTop: 10 }}>
                                 <div>
-                                    <label>base rate (Hz)</label>
+                                    <label>rate (Hz)</label>
                                     <input
                                         type="number"
                                         value={ss.rateHz}
@@ -1011,9 +972,10 @@ export function App() {
                                         max={10000}
                                         onChange={(e) => updateSensorSettings(selectedSensor.key, { rateHz: Number(e.target.value) })}
                                     />
+                                    <div className="hint">Readings в секунду при continuous-режиме. Отправка каждую секунду.</div>
                                 </div>
                                 <div>
-                                    <label>batch size</label>
+                                    <label>batch size (manual)</label>
                                     <input
                                         type="number"
                                         value={ss.batchSize}
@@ -1021,7 +983,7 @@ export function App() {
                                         max={10000}
                                         onChange={(e) => updateSensorSettings(selectedSensor.key, { batchSize: Number(e.target.value) })}
                                     />
-                                    <div className="hint">В ingest лимит: максимум 10k readings на запрос.</div>
+                                    <div className="hint">Только для кнопки "Send one batch". В ingest лимит: 10k на запрос.</div>
                                 </div>
                             </div>
 
@@ -1136,7 +1098,6 @@ export function App() {
                                 seqBySensorRef.current.clear()
                                 lastTimestampBySensorRef.current.clear()
                                 rngBySensorRef.current.clear()
-                                lastSendBySensorRef.current.clear()
                                 appendLog(`[${nowIso()}] 🧹 reset counters/log`)
                             }}
                         >
