@@ -9,22 +9,36 @@ from aiohttp_cors import CorsConfig, ResourceOptions, setup as cors_setup
 
 from backend_common.middleware.trace import create_trace_middleware
 
-# Allowed CORS headers (explicitly listed for security instead of wildcard "*")
+# Allowed CORS headers (explicitly listed for security instead of wildcard "*").
+# aiohttp_cors expects a sequence of strings (or "*"), NOT a comma-separated string.
 _ALLOWED_HEADERS = (
-    "Accept,"
-    "Accept-Language,"
-    "Content-Language,"
-    "Content-Type,"
-    "Authorization,"
-    "X-Trace-Id,"
-    "X-Request-Id,"
-    "X-Project-Id,"
-    "X-Project-Role,"
-    "X-User-Id,"
-    "X-Idempotency-Key"
+    "Accept",
+    "Accept-Language",
+    "Content-Language",
+    "Content-Type",
+    "Authorization",
+    "X-Trace-Id",
+    "X-Request-Id",
+    "X-Project-Id",
+    "X-Project-Role",
+    "X-User-Id",
+    "X-Idempotency-Key",
 )
 
-_ALLOWED_METHODS = "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS"
+_ALLOWED_METHODS = (
+    "GET",
+    "HEAD",
+    "POST",
+    "PUT",
+    "PATCH",
+    "DELETE",
+    "OPTIONS",
+)
+
+_EXPOSED_HEADERS = (
+    "X-Trace-Id",
+    "X-Request-Id",
+)
 
 
 class SettingsProtocol(Protocol):
@@ -47,7 +61,7 @@ def create_base_app(settings: SettingsProtocol) -> tuple[web.Application, CorsCo
         defaults={
             origin: ResourceOptions(
                 allow_credentials=True,
-                expose_headers="X-Trace-Id,X-Request-Id",
+                expose_headers=_EXPOSED_HEADERS,
                 allow_headers=_ALLOWED_HEADERS,
                 allow_methods=_ALLOWED_METHODS,
             )
