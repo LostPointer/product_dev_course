@@ -237,6 +237,21 @@ export const experimentsApi = {
   }): Promise<ExperimentsListResponse> => {
     return await apiGet('/api/v1/experiments/search', { params })
   },
+
+  exportData: async (params: {
+    project_id?: string
+    format?: 'csv' | 'json'
+    status?: string
+    tags?: string
+    created_after?: string
+    created_before?: string
+  }): Promise<string> => {
+    const response = await apiClient.get('/api/v1/experiments/export', {
+      params: { ...params, project_id: params.project_id || getActiveProjectId() },
+      responseType: 'text',
+    })
+    return response.data
+  },
 }
 
 // Runs API
@@ -272,6 +287,23 @@ export const runsApi = {
 
   fail: async (id: string, reason?: string): Promise<Run> => {
     return await apiPatch(`/api/v1/runs/${id}`, { status: 'failed', reason })
+  },
+
+  exportData: async (
+    experimentId: string,
+    params?: {
+      format?: 'csv' | 'json'
+      status?: string
+      tags?: string
+      created_after?: string
+      created_before?: string
+    }
+  ): Promise<string> => {
+    const response = await apiClient.get(`/api/v1/experiments/${experimentId}/runs/export`, {
+      params: { ...params },
+      responseType: 'text',
+    })
+    return response.data
   },
 
   bulkTags: async (args: {
@@ -357,6 +389,17 @@ export const captureSessionsApi = {
 
   delete: async (runId: string, sessionId: string): Promise<void> => {
     await apiDelete(`/api/v1/runs/${runId}/capture-sessions/${sessionId}`)
+  },
+
+  startBackfill: async (runId: string, sessionId: string): Promise<CaptureSession> => {
+    return await apiPost(`/api/v1/runs/${runId}/capture-sessions/${sessionId}/backfill/start`)
+  },
+
+  completeBackfill: async (
+    runId: string,
+    sessionId: string
+  ): Promise<CaptureSession & { attached_records: number }> => {
+    return await apiPost(`/api/v1/runs/${runId}/capture-sessions/${sessionId}/backfill/complete`)
   },
 }
 

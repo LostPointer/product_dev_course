@@ -361,6 +361,51 @@ function TelemetryViewer() {
         },
     })
 
+    const startBackfillMutation = useMutation({
+        mutationFn: (sessionId: string) => captureSessionsApi.startBackfill(runId, sessionId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['capture-sessions', runId] })
+            notifySuccess('Догрузка запущена — сессия в режиме backfilling')
+        },
+        onError: (err: unknown) => {
+            const msg =
+                (err as any)?.response?.data?.message ||
+                (err as any)?.response?.data?.error ||
+                (err as Error)?.message ||
+                'Не удалось запустить догрузку'
+            notifyError(msg)
+        },
+    })
+
+    const completeBackfillMutation = useMutation({
+        mutationFn: (sessionId: string) => captureSessionsApi.completeBackfill(runId, sessionId),
+        onSuccess: (data) => {
+            queryClient.invalidateQueries({ queryKey: ['capture-sessions', runId] })
+            const attached = (data as any)?.attached_records ?? 0
+            notifySuccess(`Догрузка завершена — привязано записей: ${attached}`)
+        },
+        onError: (err: unknown) => {
+            const msg =
+                (err as any)?.response?.data?.message ||
+                (err as any)?.response?.data?.error ||
+                (err as Error)?.message ||
+                'Не удалось завершить догрузку'
+            notifyError(msg)
+        },
+    })
+
+    const selectedHistorySession = captureSessions.find(
+        (s: CaptureSession) => s.id === historyCaptureSessionId
+    )
+    const canStartBackfill =
+        viewMode === 'history' &&
+        !!selectedHistorySession &&
+        selectedHistorySession.status === 'succeeded'
+    const canCompleteBackfill =
+        viewMode === 'history' &&
+        !!selectedHistorySession &&
+        selectedHistorySession.status === 'backfilling'
+
     const hasProjects = !!projectsData?.projects?.length
     const isLiveMode = viewMode === 'live'
     const canAddPanel =
@@ -886,6 +931,52 @@ function TelemetryViewer() {
                                         </option>
                                     ))}
                                 </MaterialSelect>
+                            )}
+
+                            {(canStartBackfill || canCompleteBackfill) && (
+                                <div className="telemetry-view__backfill-actions form-group">
+                                    <label>Догрузка данных (backfill)</label>
+                                    <div className="telemetry-view__backfill-btns">
+                                        {canStartBackfill && (
+                                            <button
+                                                type="button"
+                                                className="btn btn-secondary btn-sm"
+                                                disabled={startBackfillMutation.isPending}
+                                                onClick={() => {
+                                                    if (window.confirm(
+                                                        'Перевести сессию в режим догрузки (backfilling)?\n\n' +
+                                                        'Новые данные от датчиков будут привязаны к этой сессии.'
+                                                    )) {
+                                                        startBackfillMutation.mutate(historyCaptureSessionId)
+                                                    }
+                                                }}
+                                            >
+                                                {startBackfillMutation.isPending
+                                                    ? 'Запуск...'
+                                                    : 'Начать догрузку'}
+                                            </button>
+                                        )}
+                                        {canCompleteBackfill && (
+                                            <button
+                                                type="button"
+                                                className="btn btn-primary btn-sm"
+                                                disabled={completeBackfillMutation.isPending}
+                                                onClick={() => {
+                                                    if (window.confirm(
+                                                        'Завершить догрузку?\n\n' +
+                                                        'Все late-записи будут привязаны к сессии, статус вернётся в succeeded.'
+                                                    )) {
+                                                        completeBackfillMutation.mutate(historyCaptureSessionId)
+                                                    }
+                                                }}
+                                            >
+                                                {completeBackfillMutation.isPending
+                                                    ? 'Завершение...'
+                                                    : 'Завершить догрузку'}
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
                             )}
                         </div>
 

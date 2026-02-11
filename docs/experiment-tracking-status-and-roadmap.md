@@ -138,14 +138,14 @@
 
 ### Текущее состояние (актуализируется)
 - **✅ Завершено (Foundation):** блок Foundation полностью (миграции, CRUD для `Experiment/Run/CaptureSession`, idempotency, пагинация, OpenAPI, RBAC). Добавлены домены `Sensor` и `ConversionProfile`, статусные машины и покрытие тестами (`tests/test_api_*`). Множественные проекты для датчиков реализованы полностью (backend: таблица `sensor_projects` в миграции `001_initial_schema.sql`, API endpoints, тесты; frontend: UI для управления проектами в `SensorDetail.tsx`). UI для управления доступом к проектам реализован (`ProjectMembersModal` с тестами). Профиль пользователя реализован (`UserProfileModal` с тестами).
-- **⚠️ Частично реализовано (Runs & Capture Management):** batch-update статусов, `CaptureSession` (ordinal_number + статусы), bulk tagging, audit-log (Run/CaptureSession), webhooks (outbox + dispatcher) — ✅. Остаётся: расширение доменных инвариантов ⚠️ и полноценный backfill/late-data процесс ❌ (см. раздел ниже).
-- **❌ Не реализовано / в backlog:** Telemetry ingest (WebSocket), полноценные сценарии backfill/реплея и доменные политики late-data, фоновые задачи (worker), расширенные фильтры API, экспорт данных, бизнес‑политики доступа, SLO/SLI мониторинг, полная интеграция OpenTelemetry, chaos‑тесты, operational документация.
+- **✅ Завершено (Runs & Capture Management):** batch-update статусов, `CaptureSession` (ordinal_number + статусы), bulk tagging, audit-log (Run/CaptureSession), webhooks (outbox + dispatcher), **backfill/late-data процесс** (API start/complete, привязка late-записей, UI). Остаётся: расширение доменных инвариантов ⚠️.
+- **❌ Не реализовано / в backlog:** Telemetry ingest (WebSocket), бизнес‑политики доступа, SLO/SLI мониторинг, chaos‑тесты, operational документация.
   - Примечание: **REST ingest** реализован отдельным сервисом `telemetry-ingest-service` (`POST /api/v1/telemetry`).
   - Примечание: **SSE stream (MVP)** реализован в `telemetry-ingest-service` (`GET /api/v1/telemetry/stream`) и используется во фронтенде (например, `TelemetryStreamModal`, `/telemetry` через `TelemetryViewer`/`TelemetryPanel`).
   - Примечание: **SSE auth (MVP)**: `telemetry-ingest-service` принимает токен как sensor token, так и user JWT (через auth-proxy); для клиентов без возможности выставить заголовок поддержан query `access_token`.
   - Примечание: **MVP late-data политика**: данные после stop capture session не “приклеиваются” обратно к сессии (помечаются в `meta.__system` как late); ingest запрещён для `archived`.
   - В `experiment-service` публичной ручки `/api/v1/telemetry` больше нет; real-time режимы со стороны `experiment-service` и полноценная интеграция со сценариями backfill/реплея — в backlog.
-- **Зависимости:** сервис собран на `aiohttp 3.10`, `asyncpg 0.31`, `pydantic-settings 2.4`, `structlog`, тестируется через `pytest`, `pytest-aiohttp`, `yandex-taxi-testsuite[postgresql]`, кодоген осуществляется `openapi-generator-cli 7.17`.
+- **Зависимости:** сервис собран на `aiohttp 3.10`, `asyncpg 0.31`, `pydantic-settings 2.4`, `structlog`, `opentelemetry-sdk`/`opentelemetry-instrumentation-aiohttp-server`; тестируется через `pytest`, `pytest-aiohttp`, `yandex-taxi-testsuite[postgresql]`; кодоген — `openapi-generator-cli 7.17`.
 
 ---
 
@@ -184,11 +184,18 @@
 - **Frontend:** ✅ UI для управления webhooks (список/создание/удаление подписок, просмотр delivery log с фильтрацией по статусу, ручной retry). Реализовано: страница `/webhooks` (`Webhooks.tsx`), навигация в sidebar.
 - **Аудит-лог действий пользователей:** ✅ Реализовано для `Run`/`CaptureSession` (events + API для чтения).
 - **Frontend:** ✅ UI для просмотра audit-log: компонент `AuditLog` (timeline с типами событий, actor, payload; пагинация; collapsible). Интегрирован в `RunDetail` (события запуска + события каждой capture session).
-- **Догрузка данных после завершения (late/backfill ingest):** ❌ Не реализовано как отдельный процесс.
-  - ⚠️ **MVP-политика зафиксирована:** ingest разрешён для `succeeded/failed` (late data), но запрещён для `archived`.
+- **Догрузка данных после завершения (late/backfill ingest):** ✅ Реализовано.
+  - ✅ **Backfill API:** `POST /api/v1/runs/{run_id}/capture-sessions/{session_id}/backfill/start` — переводит `succeeded` → `backfilling`; `POST .../backfill/complete` — привязывает late-записи (UPDATE `telemetry_records.capture_session_id` по `meta.__system.capture_session_id`) и возвращает `backfilling` → `succeeded`; ответ содержит `attached_records`.
+  - ✅ **Audit + Webhooks:** события `capture_session.backfill_started` / `capture_session.backfill_completed` записываются в audit-log и диспатчатся через webhooks.
+  - ✅ **Frontend:** кнопки «Начать догрузку» / «Завершить догрузку» в `TelemetryViewer` (history mode) рядом с выбором capture session.
+  - ✅ **MVP-политика сохранена:** ingest разрешён для `succeeded/failed` (late data), запрещён для `archived`; во время backfilling данные привязываются как обычные (не late).
 
 ### 3. Data Integrity & Scaling (итерации 5‑6)
-- **Фоновые задачи (worker):** ❌
+- **Фоновые задачи (worker):** ✅ Реализовано: in-process async worker (`background_tasks.py`), запускается вместе с aiohttp-сервером, выполняет периодический sweep (интервал `worker_interval_seconds`, по умолчанию 60 с):
+  - ✅ Очистка idempotency-ключей старше `idempotency_ttl_hours` (48 ч)
+  - ✅ Автостоп зависших capture sessions (`running`/`backfilling` дольше `stale_session_max_hours` — 24 ч) → `failed`
+  - ✅ Восстановление застрявших webhook deliveries (`in_progress` дольше `webhook_stuck_minutes` — 10 мин) → `pending`
+  - ✅ Очистка старых succeeded webhook deliveries (старше `webhook_succeeded_retention_days` — 30 дней)
 - **Индексы и денормализации:** ✅ Частично (базовые индексы/GIN есть, но без целевых денормализаций и оптимизации под нагрузку)
 - **TimescaleDB для телеметрии:** ❌ (см. `docs/adr/002-timescaledb-telemetry.md`)
 - **Синхронизация по времени между датчиками:** ❌
@@ -199,12 +206,12 @@
 ### 4. Integrations & Collaboration (итерация 7)
 - **Enforcement бизнес-политик:** ❌
 - **Расширенные фильтры API:** ✅ Реализовано: `GET /api/v1/experiments` поддерживает `?status=`, `?tags=` (comma-separated, @> containment), `?created_after=`, `?created_before=` (ISO-8601); `GET /api/v1/experiments/{id}/runs` — те же фильтры; `GET /api/v1/sensors` — `?status=`, `?created_after=`, `?created_before=`; поиск по тексту — `GET /api/v1/experiments/search?q=`.
-- **Экспорт данных:** ❌
+- **Экспорт данных:** ✅ Реализовано: `GET /api/v1/experiments/export?format=csv|json` и `GET /api/v1/experiments/{id}/runs/export?format=csv|json` с поддержкой тех же фильтров (status, tags, created_after, created_before); до 5000 записей; на фронтенде кнопки «CSV» / «JSON» на списке экспериментов и списке запусков.
 - **Подписки на события:** ❌
 
 ### 5. Hardening & Launch (итерация 8+)
 - **SLO/SLI мониторинг:** ❌
-- **Трассировка (OpenTelemetry):** ⚠️ Частично (есть только конфиг/заготовки, без полноценной инструментализации)
+- **Трассировка (OpenTelemetry):** ✅ Реализовано: `TracerProvider` + OTLP HTTP exporter + авто-инструментализация aiohttp-server (`opentelemetry-instrumentation-aiohttp-server`); активируется при наличии `OTEL_EXPORTER_ENDPOINT`; `get_tracer()` доступен для ручных спанов в сервисном/репозиторном коде; graceful shutdown с flush спанов.
 - **Chaos-тесты и отказоустойчивость:** ❌
 - **Telemetry ingest disk spool:** ❌
 - **Документация:** ✅ (индекс `docs/README.md`, quickstart `docs/local-dev-docker-setup.md`, demo `docs/demo-flow.md`, E2E чеклист `docs/manual-testing.md`, дебаг `docs/ui-debugging.md`)

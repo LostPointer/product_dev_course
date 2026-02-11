@@ -121,18 +121,15 @@ async def list_sensors(request: web.Request):
     created_after = parse_datetime(request.rel_url.query.get("created_after"), "created_after")
     created_before = parse_datetime(request.rel_url.query.get("created_before"), "created_before")
 
-    filter_kwargs = dict(
-        status=sensor_status,
-        created_after=created_after,
-        created_before=created_before,
-    )
-
     # project_id is optional - if not provided, return sensors from all accessible projects
     project_id_query = request.rel_url.query.get("project_id")
     if project_id_query:
         project_id = resolve_project_id(user, project_id_query)
         sensors, total = await service.list_sensors(
-            project_id, limit=limit, offset=offset, **filter_kwargs
+            project_id, limit=limit, offset=offset,
+            status=sensor_status,
+            created_after=created_after,
+            created_before=created_before,
         )
     else:
         # When auth-proxy sets X-Project-Ids (list of user's project IDs), use them
@@ -145,7 +142,10 @@ async def list_sensors(request: web.Request):
         elif user.active_project_id:
             ensure_project_access(user, user.active_project_id)
             sensors, total = await service.list_sensors(
-                user.active_project_id, limit=limit, offset=offset, **filter_kwargs
+                user.active_project_id, limit=limit, offset=offset,
+                status=sensor_status,
+                created_after=created_after,
+                created_before=created_before,
             )
         else:
             sensors, total = [], 0
