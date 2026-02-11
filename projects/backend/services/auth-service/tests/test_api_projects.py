@@ -2,7 +2,7 @@
 import pytest
 
 
-async def get_auth_token(service_client, username="testuser", email="test@example.com", password="testpass123"):
+async def get_auth_token(service_client, username="testuser", email="test@example.com", password="Testpass123"):
     """Helper to register and get auth token."""
     # Register user
     register_response = await service_client.post(
