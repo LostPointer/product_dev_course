@@ -385,7 +385,7 @@ export const captureSessionsApi = {
   },
 
   stop: async (runId: string, sessionId: string): Promise<CaptureSession> => {
-    return await apiPost(`/api/v1/runs/${runId}/capture-sessions/${sessionId}/stop`)
+    return await apiPost(`/api/v1/runs/${runId}/capture-sessions/${sessionId}/stop`, {})
   },
 
   delete: async (runId: string, sessionId: string): Promise<void> => {
