@@ -301,7 +301,7 @@ export const runsApi = {
     }
   ): Promise<string> => {
     const response = await apiClient.get(`/api/v1/experiments/${experimentId}/runs/export`, {
-      params: { ...params },
+      params: { ...params, project_id: getActiveProjectId() || undefined },
       responseType: 'text',
     })
     return response.data
