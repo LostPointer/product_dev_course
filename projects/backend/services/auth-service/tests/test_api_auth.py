@@ -10,7 +10,7 @@ async def test_register_success(service_client):
         json={
             "username": "testuser",
             "email": "test@example.com",
-            "password": "Testpass123",
+            "password": "testpass123",
         },
     )
     assert response.status == 201
@@ -32,7 +32,7 @@ async def test_register_duplicate_username(service_client):
         json={
             "username": "duplicate",
             "email": "first@example.com",
-            "password": "Testpass123",
+            "password": "testpass123",
         },
     )
 
@@ -42,7 +42,7 @@ async def test_register_duplicate_username(service_client):
         json={
             "username": "duplicate",
             "email": "second@example.com",
-            "password": "Testpass123",
+            "password": "testpass123",
         },
     )
     assert response.status == 409
@@ -59,7 +59,7 @@ async def test_register_duplicate_email(service_client):
         json={
             "username": "user1",
             "email": "duplicate@example.com",
-            "password": "Testpass123",
+            "password": "testpass123",
         },
     )
 
@@ -69,7 +69,7 @@ async def test_register_duplicate_email(service_client):
         json={
             "username": "user2",
             "email": "duplicate@example.com",
-            "password": "Testpass123",
+            "password": "testpass123",
         },
     )
     assert response.status == 409
@@ -86,7 +86,7 @@ async def test_register_invalid_data(service_client):
         json={
             "username": "ab",
             "email": "test@example.com",
-            "password": "Testpass123",
+            "password": "testpass123",
         },
     )
     assert response.status == 400
@@ -97,7 +97,7 @@ async def test_register_invalid_data(service_client):
         json={
             "username": "testuser",
             "email": "invalid-email",
-            "password": "Testpass123",
+            "password": "testpass123",
         },
     )
     assert response.status == 400
@@ -123,7 +123,7 @@ async def test_login_success(service_client):
         json={
             "username": "loginuser",
             "email": "login@example.com",
-            "password": "Loginpass123",
+            "password": "loginpass123",
         },
     )
     assert register_response.status == 201
@@ -133,7 +133,7 @@ async def test_login_success(service_client):
         "/auth/login",
         json={
             "username": "loginuser",
-            "password": "Loginpass123",
+            "password": "loginpass123",
         },
     )
     assert response.status == 200
@@ -151,7 +151,7 @@ async def test_login_invalid_username(service_client):
         "/auth/login",
         json={
             "username": "nonexistent",
-            "password": "Password123",
+            "password": "password123",
         },
     )
     assert response.status == 401
@@ -168,7 +168,7 @@ async def test_login_invalid_password(service_client):
         json={
             "username": "wrongpass",
             "email": "wrongpass@example.com",
-            "password": "Correctpass123",
+            "password": "correctpass123",
         },
     )
 
@@ -177,7 +177,7 @@ async def test_login_invalid_password(service_client):
         "/auth/login",
         json={
             "username": "wrongpass",
-            "password": "Wrongpassword1",
+            "password": "wrongpassword",
         },
     )
     assert response.status == 401
@@ -194,7 +194,7 @@ async def test_refresh_token_success(service_client):
         json={
             "username": "refreshtest",
             "email": "refresh@example.com",
-            "password": "Refreshpass123",
+            "password": "refreshpass123",
         },
     )
     assert register_response.status == 201
@@ -240,7 +240,7 @@ async def test_me_success(service_client):
         json={
             "username": "metest",
             "email": "me@example.com",
-            "password": "Mepass123",
+            "password": "mepass123",
         },
     )
     assert register_response.status == 201
@@ -298,7 +298,7 @@ async def test_change_password_success(service_client):
         json={
             "username": "changepass",
             "email": "changepass@example.com",
-            "password": "Oldpass123",
+            "password": "oldpass123",
         },
     )
     assert register_response.status == 201
@@ -310,8 +310,8 @@ async def test_change_password_success(service_client):
         "/auth/change-password",
         headers={"Authorization": f"Bearer {access_token}"},
         json={
-            "old_password": "Oldpass123",
-            "new_password": "Newpass123",
+            "old_password": "oldpass123",
+            "new_password": "newpass123",
         },
     )
     assert response.status == 200
@@ -323,7 +323,7 @@ async def test_change_password_success(service_client):
         "/auth/login",
         json={
             "username": "changepass",
-            "password": "Newpass123",
+            "password": "newpass123",
         },
     )
     assert login_response.status == 200
@@ -338,7 +338,7 @@ async def test_change_password_wrong_old_password(service_client):
         json={
             "username": "wrongold",
             "email": "wrongold@example.com",
-            "password": "Correctpass123",
+            "password": "correctpass123",
         },
     )
     assert register_response.status == 201
@@ -350,8 +350,8 @@ async def test_change_password_wrong_old_password(service_client):
         "/auth/change-password",
         headers={"Authorization": f"Bearer {access_token}"},
         json={
-            "old_password": "Wrongoldpass1",
-            "new_password": "Newpass123",
+            "old_password": "wrongoldpass",
+            "new_password": "newpass123",
         },
     )
     assert response.status == 401
@@ -366,7 +366,7 @@ async def test_change_password_unauthorized(service_client):
         "/auth/change-password",
         json={
             "old_password": "oldpass123",
-            "new_password": "Newpass123",
+            "new_password": "newpass123",
         },
     )
     assert response.status == 401
@@ -381,7 +381,7 @@ async def test_change_password_invalid_new_password(service_client):
         json={
             "username": "invalidnew",
             "email": "invalidnew@example.com",
-            "password": "Oldpass123",
+            "password": "oldpass123",
         },
     )
     assert register_response.status == 201

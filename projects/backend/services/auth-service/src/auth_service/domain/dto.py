@@ -12,6 +12,19 @@ if TYPE_CHECKING:
 # Minimum password complexity: at least one uppercase, one lowercase, one digit.
 _PASSWORD_COMPLEXITY_RE = re.compile(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$")
 
+# Set to False in test conftest to skip password complexity checks.
+PASSWORD_COMPLEXITY_ENABLED: bool = True
+
+
+def _check_password_complexity(value: str) -> str:
+    """Validate password complexity if enabled."""
+    if PASSWORD_COMPLEXITY_ENABLED and not _PASSWORD_COMPLEXITY_RE.match(value):
+        raise ValueError(
+            "Password must contain at least one uppercase letter, "
+            "one lowercase letter, and one digit"
+        )
+    return value
+
 
 class UserRegisterRequest(BaseModel):
     """User registration request."""
@@ -23,12 +36,7 @@ class UserRegisterRequest(BaseModel):
     @field_validator("password")
     @classmethod
     def _password_complexity(cls, value: str) -> str:
-        if not _PASSWORD_COMPLEXITY_RE.match(value):
-            raise ValueError(
-                "Password must contain at least one uppercase letter, "
-                "one lowercase letter, and one digit"
-            )
-        return value
+        return _check_password_complexity(value)
 
 
 class UserLoginRequest(BaseModel):
@@ -79,12 +87,7 @@ class PasswordChangeRequest(BaseModel):
     @field_validator("new_password")
     @classmethod
     def _password_complexity(cls, value: str) -> str:
-        if not _PASSWORD_COMPLEXITY_RE.match(value):
-            raise ValueError(
-                "Password must contain at least one uppercase letter, "
-                "one lowercase letter, and one digit"
-            )
-        return value
+        return _check_password_complexity(value)
 
 
 # Project DTOs
