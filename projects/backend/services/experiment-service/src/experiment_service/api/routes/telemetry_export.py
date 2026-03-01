@@ -10,6 +10,7 @@ from aiohttp import web
 
 from backend_common.db.pool import get_pool_service as get_pool
 from experiment_service.api.utils import parse_uuid
+from experiment_service.core.exceptions import NotFoundError
 from experiment_service.services.dependencies import (
     ensure_project_access,
     get_capture_session_service,
@@ -276,9 +277,15 @@ async def export_session_telemetry(request: web.Request):
     session_id = parse_uuid(request.match_info["session_id"], "session_id")
 
     run_service = await get_run_service(request)
-    await run_service.get_run(project_id, run_id)
+    try:
+        await run_service.get_run(project_id, run_id)
+    except NotFoundError as exc:
+        raise web.HTTPNotFound(text=str(exc)) from exc
     cs_service = await get_capture_session_service(request)
-    await cs_service.get_session(project_id, session_id)
+    try:
+        await cs_service.get_session(project_id, session_id)
+    except NotFoundError as exc:
+        raise web.HTTPNotFound(text=str(exc)) from exc
 
     fmt = request.rel_url.query.get("format", "csv").lower()
     if fmt not in ("csv", "json"):
@@ -342,7 +349,10 @@ async def export_run_telemetry(request: web.Request):
 
     run_id = parse_uuid(request.match_info["run_id"], "run_id")
     run_service = await get_run_service(request)
-    await run_service.get_run(project_id, run_id)
+    try:
+        await run_service.get_run(project_id, run_id)
+    except NotFoundError as exc:
+        raise web.HTTPNotFound(text=str(exc)) from exc
 
     fmt = request.rel_url.query.get("format", "csv").lower()
     if fmt not in ("csv", "json"):
