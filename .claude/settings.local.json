@@ -44,7 +44,10 @@
       "Bash(python3 -c \"import testsuite.databases.pgsql.pytest_plugin as p; import inspect; src = inspect.getsource\\(p\\); print\\(src[:6000]\\)\" 2>/dev/null | head -100)",
       "Bash(python3 -c \"import testsuite.databases.pgsql.pytest_plugin as p; import inspect; print\\(inspect.getsource\\(p\\)\\)\" 2>/dev/null | grep -E \"def |fixture|postgresql_options|postgresql_conf|pgsql_local\" | head -40)",
       "Bash(poetry run pytest tests/test_api_telemetry_export.py -v 2>&1)",
-      "Bash(poetry run pytest tests/ -q 2>&1)"
+      "Bash(poetry run pytest tests/ -q 2>&1)",
+      "Bash(cd /home/lostpointer/product_dev_course/projects/frontend/apps/experiment-portal && npm run type-check 2>&1)",
+      "Bash(cd /home/lostpointer/product_dev_course/projects/frontend/apps/experiment-portal && npx tsc --noEmit 2>&1)",
+      "Bash(npm run test -- --run 2>&1)"
     ]
   }
 }
