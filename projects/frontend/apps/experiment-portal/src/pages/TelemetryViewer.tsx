@@ -5,6 +5,7 @@ import Plotly from 'plotly.js-dist-min'
 import { captureSessionsApi, experimentsApi, projectsApi, runsApi, sensorsApi, telemetryApi } from '../api/client'
 import { EmptyState, Error as ErrorComponent, FloatingActionButton, Loading, MaterialSelect } from '../components/common'
 import TelemetryPanel from '../components/TelemetryPanel'
+import TelemetryExportModal from '../components/TelemetryExportModal'
 import { setActiveProjectId } from '../utils/activeProject'
 import { generateUUID } from '../utils/uuid'
 import { notifyError, notifySuccess } from '../utils/notify'
@@ -74,6 +75,7 @@ function TelemetryViewer() {
     const [historyWasTruncated, setHistoryWasTruncated] = useState(false)
     const [historySessionFilter, setHistorySessionFilter] = useState('')
     const [historySensorFilter, setHistorySensorFilter] = useState('')
+    const [showExportModal, setShowExportModal] = useState(false)
 
     useEffect(() => {
         if (typeof window === 'undefined') return
@@ -1375,6 +1377,15 @@ function TelemetryViewer() {
                             >
                                 Продолжить в live
                             </button>
+                            <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => setShowExportModal(true)}
+                                disabled={!historyCaptureSessionId || !runId}
+                                title="Открыть диалог настроек экспорта телеметрии"
+                            >
+                                Экспорт данных…
+                            </button>
                         </div>
                     </div>
 
@@ -1419,6 +1430,26 @@ function TelemetryViewer() {
                     />,
                     document.body
                 )}
+
+            {showExportModal && runId && (
+                <TelemetryExportModal
+                    isOpen
+                    onClose={() => setShowExportModal(false)}
+                    runId={runId}
+                    mode="session"
+                    sessionId={historyCaptureSessionId || undefined}
+                    sessionOrdinal={
+                        captureSessions.find((s: CaptureSession) => s.id === historyCaptureSessionId)?.ordinal_number
+                    }
+                    sessions={captureSessions}
+                    sensors={sensors}
+                    initialCaptureSessionId={historyCaptureSessionId}
+                    initialSensorId={historyEffectiveSensorIds.length === 1 ? historyEffectiveSensorIds[0] : ''}
+                    initialRawOrPhysical={historyValueMode === 'raw' ? 'raw' : 'physical'}
+                    initialIncludeLate={historyIncludeLate}
+                    initialUseAggregation={historyUseAggregated}
+                />
+            )}
         </div>
     )
 }

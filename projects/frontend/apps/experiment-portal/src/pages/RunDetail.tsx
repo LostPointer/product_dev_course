@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { runsApi, experimentsApi, captureSessionsApi, sensorsApi, telemetryExportApi } from '../api/client'
+import { runsApi, experimentsApi, captureSessionsApi, sensorsApi } from '../api/client'
 import { format } from 'date-fns'
 import type { CaptureSession } from '../types'
 import {
@@ -15,6 +15,7 @@ import {
   MaterialSelect,
 } from '../components/common'
 import TelemetryStreamModal from '../components/TelemetryStreamModal'
+import TelemetryExportModal from '../components/TelemetryExportModal'
 import AuditLog from '../components/AuditLog'
 import './RunDetail.scss'
 import { setActiveProjectId } from '../utils/activeProject'
@@ -227,48 +228,9 @@ function RunDetail() {
     return formatDuration(seconds)
   }
 
-  const [exportingSession, setExportingSession] = useState<string | null>(null)
-  const [exportingRun, setExportingRun] = useState(false)
-
-  const downloadBlob = (data: string, filename: string, mime: string) => {
-    const blob = new Blob([data], { type: mime })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-  }
-
-  const handleExportSession = async (sessionId: string, ordinal: number) => {
-    setExportingSession(sessionId)
-    try {
-      const csv = await telemetryExportApi.exportSession(id!, sessionId, { format: 'csv' })
-      downloadBlob(csv, `telemetry_session_${ordinal}.csv`, 'text/csv')
-      notifySuccess('Телеметрия сессии экспортирована')
-    } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.message || 'Ошибка экспорта телеметрии'
-      notifyError(msg)
-    } finally {
-      setExportingSession(null)
-    }
-  }
-
-  const handleExportRunTelemetry = async () => {
-    setExportingRun(true)
-    try {
-      const csv = await telemetryExportApi.exportRun(id!, { format: 'csv' })
-      downloadBlob(csv, `telemetry_run_${run?.name || id}.csv`, 'text/csv')
-      notifySuccess('Телеметрия запуска экспортирована')
-    } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.message || 'Ошибка экспорта телеметрии'
-      notifyError(msg)
-    } finally {
-      setExportingRun(false)
-    }
-  }
+  // Состояние диалога экспорта телеметрии
+  type ExportTarget = { mode: 'session'; sessionId: string; sessionOrdinal: number } | { mode: 'run' }
+  const [exportTarget, setExportTarget] = useState<ExportTarget | null>(null)
 
   if (isLoading) {
     return <Loading />
@@ -488,10 +450,9 @@ function RunDetail() {
           {sessions.length > 0 && (
             <button
               className="btn btn-secondary btn-sm"
-              onClick={handleExportRunTelemetry}
-              disabled={exportingRun}
+              onClick={() => setExportTarget({ mode: 'run' })}
             >
-              {exportingRun ? 'Экспорт...' : 'Экспорт всей телеметрии'}
+              Экспорт телеметрии…
             </button>
           )}
         </div>
@@ -576,10 +537,13 @@ function RunDetail() {
                     <div className="session-actions">
                       <button
                         className="btn btn-secondary btn-sm"
-                        onClick={() => handleExportSession(session.id, session.ordinal_number)}
-                        disabled={exportingSession === session.id}
+                        onClick={() => setExportTarget({
+                          mode: 'session',
+                          sessionId: session.id,
+                          sessionOrdinal: session.ordinal_number,
+                        })}
                       >
-                        {exportingSession === session.id ? 'Экспорт...' : 'Экспорт телеметрии'}
+                        Экспорт телеметрии…
                       </button>
                       {session.status !== 'archived' && (
                         <button
@@ -635,6 +599,20 @@ function RunDetail() {
         </div>
         <AuditLog runId={id!} title="История событий запуска" />
       </div>
+
+      {/* Диалог настроек экспорта телеметрии */}
+      {exportTarget && (
+        <TelemetryExportModal
+          isOpen
+          onClose={() => setExportTarget(null)}
+          runId={id!}
+          mode={exportTarget.mode}
+          sessionId={exportTarget.mode === 'session' ? exportTarget.sessionId : undefined}
+          sessionOrdinal={exportTarget.mode === 'session' ? exportTarget.sessionOrdinal : undefined}
+          sessions={sessions}
+          sensors={sensors}
+        />
+      )}
     </div>
   )
 }
