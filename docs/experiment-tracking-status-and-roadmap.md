@@ -409,7 +409,7 @@
 - [x] API: экспорт readings по run (все capture sessions) в CSV/JSON.
 - [x] Frontend: кнопка экспорта в RunDetail, скачивание файла.
 - [ ] Стриминг: экспорт 50k+ записей без OOM (текущий лимит 100k in-memory, достаточно для MVP).
-- [ ] Тесты: integration (создать session -> ingest data -> export -> verify CSV).
+- [x] Тесты: integration (создать session -> ingest data -> export -> verify CSV).
 
 ### 5. Hardening & Launch (итерация 8+)
 - **SLO/SLI мониторинг:** ❌
