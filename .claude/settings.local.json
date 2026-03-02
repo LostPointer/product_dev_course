@@ -24,7 +24,27 @@
       "Bash(cd /home/lostpointer/product_dev_course/projects/backend/services/experiment-service && poetry run pytest tests/test_api_telemetry_export.py -v 2>&1)",
       "Bash(docker-compose -f /home/lostpointer/product_dev_course/docker-compose.yml ps postgres 2>/dev/null | head -5)",
       "Bash(poetry run pytest tests/test_api_telemetry_export.py -v --postgresql \"postgresql://postgres:postgres@localhost:5433/postgres\" 2>&1)",
-      "Bash(docker-compose exec -T postgres psql -U postgres -d postgres -c \"ALTER USER postgres WITH PASSWORD 'postgres';\" 2>&1)"
+      "Bash(docker-compose exec -T postgres psql -U postgres -d postgres -c \"ALTER USER postgres WITH PASSWORD 'postgres';\" 2>&1)",
+      "Bash(cd /home/lostpointer/product_dev_course/projects/telemetry_cli && python -m pytest tests/test_esp32_ws.py -v 2>&1)",
+      "Bash(cd /home/lostpointer/product_dev_course/projects/telemetry_cli && source .venv/bin/activate && python -m pytest tests/test_esp32_ws.py -v 2>&1)",
+      "Bash(source .venv/bin/activate && python -m pytest tests/ -v 2>&1)",
+      "Bash(cd /home/lostpointer/product_dev_course/projects/rc_vehicle/firmware/tests && cmake --build build 2>&1 | tail -30)",
+      "Bash(./build/unit_tests 2>&1 | tail -20)",
+      "Bash(./build/integration_tests 2>&1 | tail -20)",
+      "Bash(./build/unit_tests 2>&1 | grep -E \"tests? from|PASSED|FAILED\" | head -5\n./build/integration_tests 2>&1 | grep -E \"tests? from|PASSED|FAILED\" | head -5)",
+      "Bash(./build/unit_tests 2>&1 | grep -E \"\\\\[=+\\\\]\" && ./build/integration_tests 2>&1 | grep -E \"\\\\[=+\\\\]\")",
+      "Bash(cmake --build build 2>&1 | tail -5 && ./build/unit_tests 2>&1 | grep \"\\\\[=+\\\\].*ran\" && ./build/integration_tests 2>&1 | grep \"\\\\[=+\\\\].*ran\")",
+      "Bash(./build/unit_tests 2>&1 | grep \"\\\\[=\\\\].*ran\" && ./build/integration_tests 2>&1 | grep \"\\\\[=\\\\].*ran\")",
+      "Bash(./build/unit_tests 2>&1 | tail -3 && ./build/integration_tests 2>&1 | tail -3)",
+      "Bash(python3 -m venv .venv && source .venv/bin/activate && pip install -e \".[dev]\" -q && python -m pytest tests/test_esp32_ws.py -v 2>&1)",
+      "Bash(source .venv/bin/activate && python -m pytest tests/test_esp32_ws.py -v 2>&1)",
+      "Bash(cd /home/lostpointer/product_dev_course/projects/backend/services/experiment-service && poetry run pytest tests/test_api_experiments.py -v --co -q 2>&1 | head -20)",
+      "Bash(poetry run pytest tests/test_api_experiments.py -v 2>&1 | tail -20)",
+      "Bash(dpkg -l)",
+      "Bash(python3 -c \"import testsuite.databases.pgsql.pytest_plugin as p; import inspect; src = inspect.getsource\\(p\\); print\\(src[:6000]\\)\" 2>/dev/null | head -100)",
+      "Bash(python3 -c \"import testsuite.databases.pgsql.pytest_plugin as p; import inspect; print\\(inspect.getsource\\(p\\)\\)\" 2>/dev/null | grep -E \"def |fixture|postgresql_options|postgresql_conf|pgsql_local\" | head -40)",
+      "Bash(poetry run pytest tests/test_api_telemetry_export.py -v 2>&1)",
+      "Bash(poetry run pytest tests/ -q 2>&1)"
     ]
   }
 }
