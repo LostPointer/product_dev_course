@@ -4,6 +4,27 @@ import pytest
 
 from auth_service.settings import settings
 
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+async def _register(client, username, email, password="testpass123", invite_token=None):
+    payload = {"username": username, "email": email, "password": password}
+    if invite_token is not None:
+        payload["invite_token"] = str(invite_token)
+    return await client.post("/auth/register", json=payload)
+
+
+async def _create_invite(client, admin_token, email_hint=None, expires_in_hours=72):
+    body = {"expires_in_hours": expires_in_hours}
+    if email_hint is not None:
+        body["email_hint"] = email_hint
+    return await client.post(
+        "/auth/admin/invites",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json=body,
+    )
+
 # Bcrypt hash of "admin123"
 _ADMIN_HASH = "$2b$12$0QfCvOcgNkygw/I79ieV5eOIwAjWXUjdFUr/QvRgDMewN1OfENrmG"
 
@@ -656,6 +677,216 @@ async def test_admin_reset_user_not_found(service_client, admin_token):
         json={},
     )
     assert response.status == 404
+    payload = await response.json()
+    assert "error" in payload
+
+
+# ---------------------------------------------------------------------------
+# Invite system tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_register_invite_mode_no_token(service_client, monkeypatch):
+    """В invite-режиме без токена → 403."""
+    monkeypatch.setattr(settings, "registration_mode", "invite")
+
+    response = await _register(service_client, "notoken", "notoken@example.com")
+    assert response.status == 403
+    payload = await response.json()
+    assert "error" in payload
+
+
+@pytest.mark.asyncio
+async def test_register_invite_mode_valid_token(service_client, admin_token, monkeypatch):
+    """В invite-режиме с действующим токеном → 201."""
+    monkeypatch.setattr(settings, "registration_mode", "invite")
+
+    invite_resp = await _create_invite(service_client, admin_token)
+    assert invite_resp.status == 201
+    invite_token = (await invite_resp.json())["token"]
+
+    response = await _register(service_client, "inviteduser", "invited@example.com", invite_token=invite_token)
+    assert response.status == 201
+    payload = await response.json()
+    assert payload["user"]["username"] == "inviteduser"
+
+
+@pytest.mark.asyncio
+async def test_register_invite_mode_expired_token(service_client, admin_token, monkeypatch):
+    """В invite-режиме с просроченным токеном → 403."""
+    monkeypatch.setattr(settings, "registration_mode", "invite")
+
+    # Создаём инвайт и сразу помечаем его просроченным через прямой SQL
+    invite_resp = await _create_invite(service_client, admin_token, expires_in_hours=1)
+    assert invite_resp.status == 201
+    invite_token = (await invite_resp.json())["token"]
+
+    conn = await asyncpg.connect(str(settings.database_url))
+    try:
+        await conn.execute(
+            "UPDATE invite_tokens SET expires_at = now() - interval '1 hour' WHERE token = $1",
+            invite_token,
+        )
+    finally:
+        await conn.close()
+
+    response = await _register(service_client, "expireduser", "expired@example.com", invite_token=invite_token)
+    assert response.status == 401
+    payload = await response.json()
+    assert "error" in payload
+
+
+@pytest.mark.asyncio
+async def test_register_invite_mode_used_token(service_client, admin_token, monkeypatch):
+    """В invite-режиме с уже использованным токеном → 403."""
+    monkeypatch.setattr(settings, "registration_mode", "invite")
+
+    invite_resp = await _create_invite(service_client, admin_token)
+    assert invite_resp.status == 201
+    invite_token = (await invite_resp.json())["token"]
+
+    # Первая регистрация — успех
+    r1 = await _register(service_client, "firstuser_used", "firstused@example.com", invite_token=invite_token)
+    assert r1.status == 201
+
+    # Вторая регистрация с тем же токеном — 401
+    r2 = await _register(service_client, "seconduser_used", "secondused@example.com", invite_token=invite_token)
+    assert r2.status == 401
+    payload = await r2.json()
+    assert "error" in payload
+
+
+@pytest.mark.asyncio
+async def test_create_invite_success(service_client, admin_token):
+    """Admin создаёт инвайт → 201, поля token и expires_at присутствуют."""
+    response = await _create_invite(service_client, admin_token)
+    assert response.status == 201
+    payload = await response.json()
+    assert "token" in payload
+    assert "expires_at" in payload
+    assert "id" in payload
+    assert payload["is_active"] is True
+
+
+@pytest.mark.asyncio
+async def test_create_invite_with_email_hint(service_client, admin_token):
+    """Admin создаёт инвайт с email_hint → email_hint сохранён."""
+    response = await _create_invite(service_client, admin_token, email_hint="friend@example.com")
+    assert response.status == 201
+    payload = await response.json()
+    assert payload["email_hint"] == "friend@example.com"
+
+
+@pytest.mark.asyncio
+async def test_create_invite_forbidden_non_admin(service_client):
+    """Обычный пользователь не может создать инвайт → 403."""
+    reg = await _register(service_client, "nonadmin2", "nonadmin2@example.com")
+    assert reg.status == 201
+    token = (await reg.json())["access_token"]
+
+    response = await service_client.post(
+        "/auth/admin/invites",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"expires_in_hours": 24},
+    )
+    assert response.status == 403
+    payload = await response.json()
+    assert "error" in payload
+
+
+@pytest.mark.asyncio
+async def test_list_invites(service_client, admin_token):
+    """Admin получает список инвайтов → 200, список."""
+    # Создаём пару инвайтов
+    await _create_invite(service_client, admin_token)
+    await _create_invite(service_client, admin_token, email_hint="list@example.com")
+
+    response = await service_client.get(
+        "/auth/admin/invites",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert response.status == 200
+    payload = await response.json()
+    assert isinstance(payload, list)
+    assert len(payload) >= 2
+
+
+@pytest.mark.asyncio
+async def test_list_invites_active_only(service_client, admin_token):
+    """active_only=true возвращает только активные инвайты."""
+    # Создаём инвайт и сразу его используем через SQL (помечаем использованным)
+    invite_resp = await _create_invite(service_client, admin_token)
+    used_token = (await invite_resp.json())["token"]
+
+    conn = await asyncpg.connect(str(settings.database_url))
+    try:
+        await conn.execute(
+            "UPDATE invite_tokens SET used_at = now() WHERE token = $1",
+            used_token,
+        )
+    finally:
+        await conn.close()
+
+    # Создаём один активный инвайт
+    await _create_invite(service_client, admin_token, email_hint="active@example.com")
+
+    response = await service_client.get(
+        "/auth/admin/invites?active_only=true",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert response.status == 200
+    payload = await response.json()
+    assert all(inv["is_active"] for inv in payload)
+
+
+@pytest.mark.asyncio
+async def test_delete_invite_success(service_client, admin_token):
+    """Admin удаляет инвайт → 204."""
+    invite_resp = await _create_invite(service_client, admin_token)
+    assert invite_resp.status == 201
+    invite_token = (await invite_resp.json())["token"]
+
+    response = await service_client.delete(
+        f"/auth/admin/invites/{invite_token}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert response.status == 204
+
+
+@pytest.mark.asyncio
+async def test_delete_invite_not_found(service_client, admin_token):
+    """Удаление несуществующего инвайта → 404."""
+    fake_token = "00000000-0000-0000-0000-000000000000"
+    response = await service_client.delete(
+        f"/auth/admin/invites/{fake_token}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert response.status == 404
+    payload = await response.json()
+    assert "error" in payload
+
+
+@pytest.mark.asyncio
+async def test_delete_used_invite_forbidden(service_client, admin_token, monkeypatch):
+    """Удаление использованного инвайта → 409."""
+    monkeypatch.setattr(settings, "registration_mode", "invite")
+
+    invite_resp = await _create_invite(service_client, admin_token)
+    assert invite_resp.status == 201
+    invite_token = (await invite_resp.json())["token"]
+
+    # Используем инвайт для регистрации
+    reg = await _register(service_client, "usedtokenuser", "usedtoken@example.com", invite_token=invite_token)
+    assert reg.status == 201
+
+    monkeypatch.setattr(settings, "registration_mode", "open")
+
+    response = await service_client.delete(
+        f"/auth/admin/invites/{invite_token}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert response.status == 409
     payload = await response.json()
     assert "error" in payload
 

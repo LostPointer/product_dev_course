@@ -6,13 +6,17 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from auth_service.core.exceptions import (
+    ConflictError,
     ForbiddenError,
     InvalidCredentialsError,
+    InvalidTokenError,
+    NotFoundError,
     UserAlreadyExistsError,
     UserNotFoundError,
 )
 from auth_service.domain.dto import AuthTokensResponse, UserResponse
-from auth_service.domain.models import User
+from auth_service.domain.models import InviteToken, User
+from auth_service.repositories.invites import InviteRepository
 from auth_service.repositories.password_reset import PasswordResetRepository
 from auth_service.repositories.revoked_tokens import RevokedTokenRepository
 from auth_service.repositories.users import UserRepository
@@ -33,18 +37,33 @@ class AuthService:
         user_repository: UserRepository,
         revoked_repo: RevokedTokenRepository,
         reset_repo: PasswordResetRepository,
+        invite_repo: InviteRepository | None = None,
+        registration_mode: str = "open",
     ):
         self._user_repo = user_repository
         self._revoked_repo = revoked_repo
         self._reset_repo = reset_repo
+        self._invite_repo = invite_repo
+        self._registration_mode = registration_mode
 
     async def register(
         self,
         username: str,
         email: str,
         password: str,
+        invite_token: UUID | None = None,
     ) -> tuple[User, AuthTokensResponse]:
         """Register a new user."""
+        # Проверка инвайт-режима
+        if self._registration_mode == "invite":
+            if self._invite_repo is None:
+                raise ForbiddenError("Invite system is not configured")
+            if invite_token is None:
+                raise ForbiddenError("Invite token required")
+            invite = await self._invite_repo.get_by_token(invite_token)
+            if not invite or not invite.is_active:
+                raise InvalidTokenError("Invalid or expired invite token")
+
         # Check if user already exists
         if await self._user_repo.user_exists(username, email):
             raise UserAlreadyExistsError("User with this username or email already exists")
@@ -55,10 +74,60 @@ class AuthService:
         # Create user (password_change_required defaults to False for new registrations)
         user = await self._user_repo.create(username, email, hashed_password, password_change_required=False)
 
+        # Mark invite as used (only in invite mode)
+        if self._registration_mode == "invite" and self._invite_repo is not None and invite_token is not None:
+            await self._invite_repo.mark_used(invite_token, user.id)
+
         # Generate tokens
         tokens = self._create_tokens(str(user.id))
 
         return user, tokens
+
+    async def create_invite(
+        self,
+        requester_token: str,
+        email_hint: str | None,
+        expires_in_hours: int,
+    ) -> InviteToken:
+        """Create a new invite token. Requires admin privileges."""
+        requester = await self.get_user_by_token(requester_token)
+        if not requester.is_admin:
+            raise ForbiddenError()
+        if self._invite_repo is None:
+            raise ForbiddenError("Invite system is not configured")
+
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=expires_in_hours)
+        return await self._invite_repo.create(requester.id, email_hint, expires_at)
+
+    async def list_invites(
+        self,
+        requester_token: str,
+        active_only: bool = False,
+    ) -> list[InviteToken]:
+        """List invite tokens. Requires admin privileges."""
+        requester = await self.get_user_by_token(requester_token)
+        if not requester.is_admin:
+            raise ForbiddenError()
+        if self._invite_repo is None:
+            raise ForbiddenError("Invite system is not configured")
+
+        return await self._invite_repo.list_all(active_only=active_only)
+
+    async def revoke_invite(self, requester_token: str, token: UUID) -> bool:
+        """Revoke (delete) an invite token. Requires admin. Cannot revoke used tokens."""
+        requester = await self.get_user_by_token(requester_token)
+        if not requester.is_admin:
+            raise ForbiddenError()
+        if self._invite_repo is None:
+            raise ForbiddenError("Invite system is not configured")
+
+        invite = await self._invite_repo.get_by_token(token)
+        if not invite:
+            raise NotFoundError("Invite token not found")
+        if invite.used_at is not None:
+            raise ConflictError("Cannot revoke a used invite token")
+
+        return await self._invite_repo.delete(token)
 
     async def login(self, username: str, password: str) -> tuple[User, AuthTokensResponse]:
         """Authenticate user and return tokens."""

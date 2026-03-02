@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import warnings
 from functools import lru_cache
-from typing import cast
+from typing import Literal, cast
 
 from pydantic import Field, PostgresDsn, model_validator
 
@@ -33,6 +33,8 @@ class Settings(BaseServiceSettings):
     refresh_token_ttl_sec: int = 1209600  # 14 days
 
     bcrypt_rounds: int = 12
+
+    registration_mode: Literal["open", "invite"] = "open"
 
     @model_validator(mode="after")
     def _warn_insecure_jwt_secret(self) -> "Settings":

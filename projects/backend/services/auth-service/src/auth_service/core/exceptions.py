@@ -57,6 +57,13 @@ class ForbiddenError(AuthError):
     message = "Access forbidden"
 
 
+class ConflictError(AuthError):
+    """Resource conflict."""
+
+    status_code = 409
+    message = "Conflict"
+
+
 def handle_auth_error(request: web.Request, error: AuthError) -> web.Response:
     """Handle authentication errors."""
     return web.json_response(

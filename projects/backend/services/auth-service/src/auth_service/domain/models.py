@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
@@ -48,6 +48,39 @@ class User:
         if not exclude_password:
             data["hashed_password"] = self.hashed_password
         return data
+
+
+@dataclass
+class InviteToken:
+    """Invite token domain model."""
+
+    id: UUID
+    token: UUID
+    created_by: UUID
+    email_hint: str | None
+    expires_at: datetime
+    used_at: datetime | None
+    used_by: UUID | None
+    created_at: datetime
+
+    @classmethod
+    def from_row(cls, row: dict[str, Any]) -> "InviteToken":
+        """Create InviteToken from database row."""
+        return cls(
+            id=row["id"],
+            token=row["token"],
+            created_by=row["created_by"],
+            email_hint=row.get("email_hint"),
+            expires_at=row["expires_at"],
+            used_at=row.get("used_at"),
+            used_by=row.get("used_by"),
+            created_at=row["created_at"],
+        )
+
+    @property
+    def is_active(self) -> bool:
+        """True if token has not been used and has not expired."""
+        return self.used_at is None and self.expires_at > datetime.now(timezone.utc)
 
 
 @dataclass

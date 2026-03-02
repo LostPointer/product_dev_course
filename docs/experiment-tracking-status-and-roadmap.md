@@ -123,14 +123,15 @@
 
 ### Текущее состояние
 
-- ✅ **Регистрация и логин:** `POST /auth/register` (открытая), `POST /auth/login`, JWT (access + refresh токены), bcrypt.
+- ✅ **Регистрация и логин:** `POST /auth/register`, `POST /auth/login`, JWT (access + refresh токены), bcrypt.
 - ✅ **Смена пароля** (с подтверждением старого): `POST /auth/change-password`.
 - ✅ **Проекты и роли:** CRUD проектов, `project_members` с ролями `owner` / `editor` / `viewer`.
+- ✅ **Logout / отзыв токенов:** `POST /auth/logout` отзывает refresh-токен (JWT blacklist через таблицу `revoked_tokens`).
+- ✅ **Восстановление пароля (self-service):** `POST /auth/password-reset/request` → reset-токен в ответе (dev/учебный режим, без email); `POST /auth/password-reset/confirm` → новый JWT.
+- ✅ **Принудительный сброс пароля (admin):** `POST /auth/admin/users/{user_id}/reset` — admin задаёт новый временный пароль, устанавливает `password_change_required = true`; требует поля `is_admin` (миграция `004_password_reset.sql`).
+- ✅ **Инвайт-система:** `POST /auth/admin/invites` / `GET /auth/admin/invites` / `DELETE /auth/admin/invites/{token}` (только admin); конфигурационный флаг `REGISTRATION_MODE=open|invite`; при `invite` — `POST /auth/register` принимает обязательный `invite_token`, проверяет активность (не истёк, не использован), помечает `used_at`; миграция `005_invite_system.sql`.
 - ⚠️ **Начальный admin:** hardcode в миграции `001_initial_schema.sql` (логин `admin`, пароль `admin123`, `password_change_required = true`) — не подходит для продакшена.
-- ❌ **Logout / отзыв токенов:** заглушка, refresh-токены не инвалидируются.
-- ❌ **Восстановление пароля** и сброс пользователя.
-- ❌ **Инвайт-система:** регистрация открытая для всех.
-- ❌ **Управление пользователями** admin'ом (список, деактивация, принудительный сброс пароля).
+- ❌ **Управление пользователями** admin'ом (список, деактивация, удаление).
 
 ---
 
@@ -163,22 +164,15 @@
   - Устанавливает `password_change_required = true`.
 - Опционально: `POST /auth/forgot-password` → email со ссылкой (требует SMTP-интеграции).
 
-#### Инвайт-система: закрытая регистрация
+#### ~~Инвайт-система: закрытая регистрация~~ ✅ Реализовано
 
-**Цель:** закрыть открытую регистрацию — новый пользователь может зарегистрироваться только
-по ссылке, выданной admin'ом.
-
-**Решение:**
-- Таблица `invite_tokens`: `id`, `token` (uuid), `created_by` (FK users), `email_hint`
-  (опционально), `expires_at`, `used_at`, `used_by` (FK users).
-- `POST /auth/admin/invites` (только superadmin/admin) — создать инвайт, вернуть ссылку
-  `{base_url}/register?invite={token}`.
-- `GET /auth/admin/invites` — список инвайтов (с фильтрами: активные / использованные).
-- `DELETE /auth/admin/invites/{token}` — отозвать инвайт.
-- `POST /auth/register` — принимает обязательный `invite_token`; валидирует, помечает
-  `used_at`, создаёт пользователя.
-- Конфигурационный флаг `REGISTRATION_MODE=open|invite` для обратной совместимости
-  в dev-окружении (по умолчанию `invite` в продакшене).
+**Реализовано:**
+- Таблица `invite_tokens` (миграция `005_invite_system.sql`): `id`, `token` (uuid), `created_by`, `email_hint`, `expires_at`, `used_at`, `used_by`.
+- `POST /auth/admin/invites` (только admin) — создать инвайт с `email_hint` и `expires_in_hours` (1–8760); возвращает `InviteResponse` со всеми полями и флагом `is_active`.
+- `GET /auth/admin/invites?active_only=true|false` — список инвайтов.
+- `DELETE /auth/admin/invites/{token}` — отозвать неиспользованный инвайт; использованный → 409.
+- `POST /auth/register` — опциональное поле `invite_token`; при `REGISTRATION_MODE=invite` токен обязателен, проверяется активность, помечается `used_at`.
+- Флаг `REGISTRATION_MODE=open|invite` в settings (default `open` для dev/тестов).
 
 #### Управление пользователями (admin UI)
 
