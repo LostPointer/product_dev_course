@@ -556,3 +556,100 @@ TEST(StabilizationConfigTest, ApplyModeDefaults_Sport_SlipPidLight) {
   EXPECT_GT(cfg.slip_kp, 0.0f);
   EXPECT_LT(cfg.slip_kp, 0.01f) << "Sport slip kp should be small";
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Adaptive PID Tests (Phase 4.1)
+// ─────────────────────────────────────────────────────────────────────────────
+
+TEST(StabilizationConfigTest, AdaptivePid_DefaultsCorrect) {
+  StabilizationConfig cfg{};
+  EXPECT_FALSE(cfg.adaptive_pid_enabled);
+  EXPECT_FLOAT_EQ(cfg.adaptive_speed_ref_ms, 1.5f);
+  EXPECT_FLOAT_EQ(cfg.adaptive_scale_min, 0.5f);
+  EXPECT_FLOAT_EQ(cfg.adaptive_scale_max, 2.0f);
+}
+
+TEST(StabilizationConfigTest, AdaptivePid_ClampValues) {
+  StabilizationConfig cfg{};
+  cfg.adaptive_speed_ref_ms = 0.01f;  // ниже минимума 0.1
+  cfg.adaptive_scale_min = 0.05f;    // ниже минимума 0.1
+  cfg.adaptive_scale_max = 10.0f;    // выше максимума 5.0
+  cfg.Clamp();
+  EXPECT_FLOAT_EQ(cfg.adaptive_speed_ref_ms, 0.1f);
+  EXPECT_FLOAT_EQ(cfg.adaptive_scale_min, 0.1f);
+  EXPECT_FLOAT_EQ(cfg.adaptive_scale_max, 5.0f);
+}
+
+TEST(StabilizationConfigTest, AdaptivePid_ClampScaleMinNotAboveOne) {
+  StabilizationConfig cfg{};
+  cfg.adaptive_scale_min = 1.5f;  // выше максимума 1.0
+  cfg.Clamp();
+  EXPECT_FLOAT_EQ(cfg.adaptive_scale_min, 1.0f);
+}
+
+TEST(StabilizationConfigTest, AdaptivePid_ClampScaleMaxNotBelowOne) {
+  StabilizationConfig cfg{};
+  cfg.adaptive_scale_max = 0.8f;  // ниже минимума 1.0
+  cfg.Clamp();
+  EXPECT_FLOAT_EQ(cfg.adaptive_scale_max, 1.0f);
+}
+
+TEST(StabilizationConfigTest, AdaptivePid_ResetRestoresDefaults) {
+  StabilizationConfig cfg{};
+  cfg.adaptive_pid_enabled = true;
+  cfg.adaptive_speed_ref_ms = 5.0f;
+  cfg.adaptive_scale_min = 0.2f;
+  cfg.adaptive_scale_max = 4.0f;
+  cfg.Reset();
+  EXPECT_FALSE(cfg.adaptive_pid_enabled);
+  EXPECT_FLOAT_EQ(cfg.adaptive_speed_ref_ms, 1.5f);
+  EXPECT_FLOAT_EQ(cfg.adaptive_scale_min, 0.5f);
+  EXPECT_FLOAT_EQ(cfg.adaptive_scale_max, 2.0f);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Oversteer Warning Tests (Phase 4.2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+TEST(StabilizationConfigTest, OversteerWarn_DefaultsCorrect) {
+  StabilizationConfig cfg{};
+  EXPECT_FALSE(cfg.oversteer_warn_enabled);
+  EXPECT_FLOAT_EQ(cfg.oversteer_slip_thresh_deg, 20.0f);
+  EXPECT_FLOAT_EQ(cfg.oversteer_rate_thresh_deg_s, 50.0f);
+  EXPECT_FLOAT_EQ(cfg.oversteer_throttle_reduction, 0.0f);
+}
+
+TEST(StabilizationConfigTest, OversteerWarn_ClampValues) {
+  StabilizationConfig cfg{};
+  cfg.oversteer_slip_thresh_deg = 1.0f;    // ниже минимума 5
+  cfg.oversteer_rate_thresh_deg_s = 5.0f;  // ниже минимума 10
+  cfg.oversteer_throttle_reduction = 2.0f; // выше максимума 1
+  cfg.Clamp();
+  EXPECT_FLOAT_EQ(cfg.oversteer_slip_thresh_deg, 5.0f);
+  EXPECT_FLOAT_EQ(cfg.oversteer_rate_thresh_deg_s, 10.0f);
+  EXPECT_FLOAT_EQ(cfg.oversteer_throttle_reduction, 1.0f);
+}
+
+TEST(StabilizationConfigTest, OversteerWarn_ClampUpperBounds) {
+  StabilizationConfig cfg{};
+  cfg.oversteer_slip_thresh_deg = 100.0f;   // выше максимума 45
+  cfg.oversteer_rate_thresh_deg_s = 1000.0f; // выше максимума 500
+  cfg.oversteer_throttle_reduction = -0.5f;  // ниже минимума 0
+  cfg.Clamp();
+  EXPECT_FLOAT_EQ(cfg.oversteer_slip_thresh_deg, 45.0f);
+  EXPECT_FLOAT_EQ(cfg.oversteer_rate_thresh_deg_s, 500.0f);
+  EXPECT_FLOAT_EQ(cfg.oversteer_throttle_reduction, 0.0f);
+}
+
+TEST(StabilizationConfigTest, OversteerWarn_ResetRestoresDefaults) {
+  StabilizationConfig cfg{};
+  cfg.oversteer_warn_enabled = true;
+  cfg.oversteer_slip_thresh_deg = 30.0f;
+  cfg.oversteer_rate_thresh_deg_s = 100.0f;
+  cfg.oversteer_throttle_reduction = 0.5f;
+  cfg.Reset();
+  EXPECT_FALSE(cfg.oversteer_warn_enabled);
+  EXPECT_FLOAT_EQ(cfg.oversteer_slip_thresh_deg, 20.0f);
+  EXPECT_FLOAT_EQ(cfg.oversteer_rate_thresh_deg_s, 50.0f);
+  EXPECT_FLOAT_EQ(cfg.oversteer_throttle_reduction, 0.0f);
+}

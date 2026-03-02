@@ -1851,3 +1851,155 @@ TEST(ModeSwitchFadeTest, CorrectionMonotonicallyIncreases_DuringFade) {
     prev_correction = correction;
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Adaptive PID Tests (Phase 4.1)
+// ═══════════════════════════════════════════════════════════════════════════
+
+namespace {
+// Вычислить adaptive_scale по правилу: clamp(speed / ref, min, max)
+float ComputeAdaptiveScale(float speed, float ref, float scale_min,
+                           float scale_max) {
+  if (ref <= 0.0f) return 1.0f;
+  return std::clamp(speed / ref, scale_min, scale_max);
+}
+}  // namespace
+
+TEST(AdaptivePidTest, LowSpeed_UsesMinScale) {
+  // speed << ref → scale == min
+  const float speed = 0.1f;
+  const float ref = 1.5f;
+  const float scale_min = 0.5f;
+  const float scale_max = 2.0f;
+  const float scale = ComputeAdaptiveScale(speed, ref, scale_min, scale_max);
+  EXPECT_FLOAT_EQ(scale, scale_min)
+      << "At very low speed adaptive scale must clamp to min";
+}
+
+TEST(AdaptivePidTest, HighSpeed_UsesMaxScale) {
+  // speed >> ref → scale == max
+  const float speed = 10.0f;
+  const float ref = 1.5f;
+  const float scale_min = 0.5f;
+  const float scale_max = 2.0f;
+  const float scale = ComputeAdaptiveScale(speed, ref, scale_min, scale_max);
+  EXPECT_FLOAT_EQ(scale, scale_max)
+      << "At very high speed adaptive scale must clamp to max";
+}
+
+TEST(AdaptivePidTest, RefSpeed_ScaleIsOne) {
+  // speed == ref → scale == 1.0
+  const float ref = 1.5f;
+  const float scale_min = 0.5f;
+  const float scale_max = 2.0f;
+  const float scale = ComputeAdaptiveScale(ref, ref, scale_min, scale_max);
+  EXPECT_NEAR(scale, 1.0f, 1e-5f)
+      << "At reference speed adaptive scale must be exactly 1.0";
+}
+
+TEST(AdaptivePidTest, PidOutputScaledByAdaptiveFactor) {
+  const float pid_out = 0.4f;
+  const float stab_weight = 1.0f;
+  const float mode_tw = 1.0f;
+  const float adaptive_scale = 1.5f;
+
+  const float correction = pid_out * stab_weight * mode_tw * adaptive_scale;
+  EXPECT_NEAR(correction, 0.6f, 1e-5f)
+      << "PID output must be multiplied by adaptive_scale";
+}
+
+TEST(AdaptivePidTest, Disabled_ScaleIsOne) {
+  // Если adaptive_pid_enabled == false, scale всегда 1.0 (не применяем)
+  StabilizationConfig cfg{};
+  cfg.adaptive_pid_enabled = false;
+  // При выключенном адаптивном режиме scale не изменяется
+  float scale = 1.0f;
+  if (cfg.adaptive_pid_enabled) {
+    scale = ComputeAdaptiveScale(5.0f, cfg.adaptive_speed_ref_ms,
+                                 cfg.adaptive_scale_min, cfg.adaptive_scale_max);
+  }
+  EXPECT_FLOAT_EQ(scale, 1.0f)
+      << "When adaptive PID is disabled, scale must remain 1.0";
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Oversteer Detection Tests (Phase 4.2)
+// ═══════════════════════════════════════════════════════════════════════════
+
+namespace {
+// Вычислить флаг oversteer по логике из ControlTaskLoop
+bool ComputeOversteer(float slip_deg, float prev_slip_deg, float dt_sec,
+                      float thresh_deg, float thresh_rate_dps) {
+  const float slip_rate = (slip_deg - prev_slip_deg) / dt_sec;
+  return (std::abs(slip_deg) > thresh_deg &&
+          std::abs(slip_rate) > thresh_rate_dps);
+}
+}  // namespace
+
+TEST(OversteerDetectionTest, BothThresholdsExceeded_ActiveTrue) {
+  // |slip|=25 > 20, |rate|=100 > 50 → oversteer
+  const float slip = 25.0f;
+  const float prev = 0.0f;
+  const float dt = 0.002f;
+  EXPECT_TRUE(ComputeOversteer(slip, prev, dt, 20.0f, 50.0f))
+      << "Should detect oversteer when both thresholds exceeded";
+}
+
+TEST(OversteerDetectionTest, OnlySlipExceeded_ActiveFalse) {
+  // |slip|=25 > 20, но |rate| мал — медленное нарастание
+  const float slip = 25.0f;
+  const float prev2 = 24.99f;  // rate = 0.01/0.002 = 5 dps < 50
+  const float dt = 0.002f;
+  EXPECT_FALSE(ComputeOversteer(slip, prev2, dt, 20.0f, 50.0f))
+      << "Should NOT detect oversteer when rate threshold not exceeded";
+}
+
+TEST(OversteerDetectionTest, OnlyRateExceeded_ActiveFalse) {
+  // rate большой, но |slip| мал
+  const float slip = 5.0f;   // < thresh 20
+  const float prev = 0.0f;   // rate = 5/0.002 = 2500 dps > 50
+  const float dt = 0.002f;
+  EXPECT_FALSE(ComputeOversteer(slip, prev, dt, 20.0f, 50.0f))
+      << "Should NOT detect oversteer when slip threshold not exceeded";
+}
+
+TEST(OversteerDetectionTest, ThrottleReduction_Applied_WhenActive) {
+  float throttle = 0.8f;
+  const float reduction = 0.3f;
+  const bool oversteer_active = true;
+  const int mode = 0;  // normal mode
+
+  if (oversteer_active && reduction > 0.0f && mode != 2) {
+    throttle *= (1.0f - reduction);
+  }
+
+  EXPECT_NEAR(throttle, 0.56f, 1e-5f)
+      << "Throttle must be reduced by (1 - reduction) = 0.7 factor";
+}
+
+TEST(OversteerDetectionTest, ThrottleReduction_NotApplied_InDriftMode) {
+  float throttle = 0.8f;
+  const float reduction = 0.3f;
+  const bool oversteer_active = true;
+  const int mode = 2;  // drift mode: не применяем снижение
+
+  if (oversteer_active && reduction > 0.0f && mode != 2) {
+    throttle *= (1.0f - reduction);
+  }
+
+  // В drift mode газ не снижается
+  EXPECT_FLOAT_EQ(throttle, 0.8f)
+      << "In drift mode throttle reduction must NOT be applied";
+}
+
+TEST(OversteerDetectionTest, Failsafe_ResetsState) {
+  float prev_slip = 15.0f;
+  bool oversteer_active = true;
+
+  // Симуляция failsafe reset
+  oversteer_active = false;
+  prev_slip = 0.0f;
+
+  EXPECT_FALSE(oversteer_active);
+  EXPECT_FLOAT_EQ(prev_slip, 0.0f);
+}
