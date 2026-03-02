@@ -132,6 +132,62 @@ struct StabilizationConfig {
    */
   float slip_max_correction{0.0f};
 
+  // ── Адаптивное масштабирование ПИД по скорости (EKF) ────────────────────
+
+  /**
+   * Включить адаптивное масштабирование yaw PID по скорости из EKF.
+   * При включении выход ПИД умножается на (speed / speed_ref), зажатый в
+   * [scale_min..scale_max].
+   */
+  bool adaptive_pid_enabled{false};
+
+  /**
+   * Эталонная скорость для адаптивного ПИД [м/с].
+   * При speed == speed_ref масштаб равен 1.0.
+   * Диапазон: 0.1–10 m/s.
+   */
+  float adaptive_speed_ref_ms{1.5f};
+
+  /**
+   * Минимальный коэффициент масштабирования ПИД (при низкой скорости).
+   * Диапазон: 0.1–1.0.
+   */
+  float adaptive_scale_min{0.5f};
+
+  /**
+   * Максимальный коэффициент масштабирования ПИД (при высокой скорости).
+   * Диапазон: 1.0–5.0.
+   */
+  float adaptive_scale_max{2.0f};
+
+  // ── Предсказание заноса (oversteer warning) ──────────────────────────────
+
+  /**
+   * Включить предупреждение о заносе (oversteer prediction).
+   * При превышении порогов slip angle и скорости его изменения
+   * устанавливается флаг oversteer и опционально снижается газ.
+   */
+  bool oversteer_warn_enabled{false};
+
+  /**
+   * Порог модуля угла заноса для срабатывания oversteer [градусы].
+   * Диапазон: 5–45 deg.
+   */
+  float oversteer_slip_thresh_deg{20.0f};
+
+  /**
+   * Порог скорости изменения угла заноса для срабатывания [deg/s].
+   * Диапазон: 10–500 dps.
+   */
+  float oversteer_rate_thresh_deg_s{50.0f};
+
+  /**
+   * Снижение газа при срабатывании oversteer: throttle *= (1 - reduction).
+   * 0 = не снижать, 1 = полный стоп.
+   * Диапазон: 0–1. Активно только в режимах normal/sport (не drift).
+   */
+  float oversteer_throttle_reduction{0.0f};
+
   /** Валидность конфигурации (magic number для проверки NVS) */
   uint32_t magic{0x53544142};  // 'STAB'
 
@@ -172,6 +228,14 @@ struct StabilizationConfig {
     slip_kd = 0.0f;
     slip_max_integral = 5.0f;
     slip_max_correction = 0.0f;
+    adaptive_pid_enabled = false;
+    adaptive_speed_ref_ms = 1.5f;
+    adaptive_scale_min = 0.5f;
+    adaptive_scale_max = 2.0f;
+    oversteer_warn_enabled = false;
+    oversteer_slip_thresh_deg = 20.0f;
+    oversteer_rate_thresh_deg_s = 50.0f;
+    oversteer_throttle_reduction = 0.0f;
     magic = 0x53544142;
   }
 
@@ -271,6 +335,20 @@ struct StabilizationConfig {
     if (slip_max_integral < 0.0f) slip_max_integral = 0.0f;
     if (slip_max_correction < 0.0f) slip_max_correction = 0.0f;
     if (slip_max_correction > 1.0f) slip_max_correction = 1.0f;
+    // Adaptive PID
+    if (adaptive_speed_ref_ms < 0.1f) adaptive_speed_ref_ms = 0.1f;
+    if (adaptive_speed_ref_ms > 10.0f) adaptive_speed_ref_ms = 10.0f;
+    if (adaptive_scale_min < 0.1f) adaptive_scale_min = 0.1f;
+    if (adaptive_scale_min > 1.0f) adaptive_scale_min = 1.0f;
+    if (adaptive_scale_max < 1.0f) adaptive_scale_max = 1.0f;
+    if (adaptive_scale_max > 5.0f) adaptive_scale_max = 5.0f;
+    // Oversteer warning
+    if (oversteer_slip_thresh_deg < 5.0f) oversteer_slip_thresh_deg = 5.0f;
+    if (oversteer_slip_thresh_deg > 45.0f) oversteer_slip_thresh_deg = 45.0f;
+    if (oversteer_rate_thresh_deg_s < 10.0f) oversteer_rate_thresh_deg_s = 10.0f;
+    if (oversteer_rate_thresh_deg_s > 500.0f) oversteer_rate_thresh_deg_s = 500.0f;
+    if (oversteer_throttle_reduction < 0.0f) oversteer_throttle_reduction = 0.0f;
+    if (oversteer_throttle_reduction > 1.0f) oversteer_throttle_reduction = 1.0f;
   }
 };
 

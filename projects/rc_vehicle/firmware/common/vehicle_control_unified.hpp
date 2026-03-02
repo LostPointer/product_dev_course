@@ -8,6 +8,7 @@
 #include "madgwick_filter.hpp"
 #include "pid_controller.hpp"
 #include "stabilization_config.hpp"
+#include "telemetry_log.hpp"
 #include "vehicle_control_platform.hpp"
 #include "vehicle_ekf.hpp"
 
@@ -98,6 +99,31 @@ class VehicleControlUnified {
    */
   bool SetStabilizationConfig(const StabilizationConfig& config,
                               bool save_to_nvs = true);
+
+  /**
+   * @brief Получить информацию о буфере телеметрии
+   * @param count_out Текущее количество кадров
+   * @param cap_out   Ёмкость буфера
+   */
+  void GetLogInfo(size_t& count_out, size_t& cap_out) const {
+    count_out = telem_log_.Count();
+    cap_out = telem_log_.Capacity();
+  }
+
+  /**
+   * @brief Получить кадр телеметрии по индексу (0 = oldest)
+   * @param idx Индекс кадра
+   * @param out Выходной кадр
+   * @return true если idx < Count()
+   */
+  bool GetLogFrame(size_t idx, TelemetryLogFrame& out) const {
+    return telem_log_.GetFrame(idx, out);
+  }
+
+  /**
+   * @brief Очистить буфер телеметрии
+   */
+  void ClearLog() { telem_log_.Clear(); }
 
   VehicleControlUnified(const VehicleControlUnified&) = delete;
   VehicleControlUnified& operator=(const VehicleControlUnified&) = delete;
@@ -205,6 +231,13 @@ class VehicleControlUnified {
   // Сбрасывается в 0 при смене режима, нарастает к 1 за fade_ms.
   // Применяется как множитель к обоим PID (yaw и slip).
   float mode_transition_weight_{1.0f};
+
+  // Oversteer prediction (Phase 4.2)
+  float prev_slip_deg_{0.0f};  // Предыдущий угол заноса для оценки скорости изменения
+  bool oversteer_active_{false};  // Текущий флаг срабатывания oversteer
+
+  // PSRAM кольцевой буфер телеметрии (Phase 4.3)
+  TelemetryLog telem_log_;
 
   // Запрос калибровки (атомарный для потокобезопасности)
   std::atomic<int> calib_request_{0};

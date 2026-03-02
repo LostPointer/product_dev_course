@@ -209,6 +209,11 @@ std::string TelemetryHandler::BuildTelemJson() const {
       oss << "\"speed_ms\":" << ekf_->GetSpeedMs();
       oss << "},";
     }
+    // Oversteer warning (Phase 4.2)
+    if (oversteer_warn_ptr_) {
+      oss << "\"warn\":{\"oversteer\":"
+          << (*oversteer_warn_ptr_ ? "true" : "false") << "},";
+    }
   }
 
   // Actuators

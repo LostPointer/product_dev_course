@@ -1,6 +1,7 @@
 #include "vehicle_control_unified.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 
 #include "rc_vehicle_common.hpp"
@@ -157,9 +158,18 @@ void VehicleControlUnified::ControlTaskLoop() {
           stab_config_.steer_to_yaw_rate_dps * commanded_steering;
       const float omega_actual = imu_handler_->GetFilteredGyroZ();
       const float pid_out = yaw_pid_.Step(omega_desired - omega_actual, dt_sec);
+      // Adaptive PID: масштабирование выхода ПИД по скорости из EKF (Phase 4.1)
+      float adaptive_scale = 1.0f;
+      if (stab_config_.adaptive_pid_enabled &&
+          stab_config_.adaptive_speed_ref_ms > 0.0f) {
+        adaptive_scale = std::clamp(
+            ekf_.GetSpeedMs() / stab_config_.adaptive_speed_ref_ms,
+            stab_config_.adaptive_scale_min,
+            stab_config_.adaptive_scale_max);
+      }
       commanded_steering = std::clamp(
           commanded_steering +
-              pid_out * stab_weight_ * mode_transition_weight_,
+              pid_out * stab_weight_ * mode_transition_weight_ * adaptive_scale,
           -1.0f, 1.0f);
     }
 
@@ -197,6 +207,26 @@ void VehicleControlUnified::ControlTaskLoop() {
     }
 
     // ─────────────────────────────────────────────────────────────────────
+    // Oversteer prediction (Phase 4.2)
+    // ─────────────────────────────────────────────────────────────────────
+
+    if (stab_config_.oversteer_warn_enabled && imu_handler_ &&
+        imu_handler_->IsEnabled() && dt_ms > 0) {
+      const float dt_sec = static_cast<float>(dt_ms) * 0.001f;
+      const float slip = ekf_.GetSlipAngleDeg();
+      const float slip_rate = (slip - prev_slip_deg_) / dt_sec;
+      prev_slip_deg_ = slip;
+      oversteer_active_ =
+          (std::abs(slip) > stab_config_.oversteer_slip_thresh_deg &&
+           std::abs(slip_rate) > stab_config_.oversteer_rate_thresh_deg_s);
+      if (oversteer_active_ &&
+          stab_config_.oversteer_throttle_reduction > 0.0f &&
+          stab_config_.mode != 2) {
+        commanded_throttle *= (1.0f - stab_config_.oversteer_throttle_reduction);
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
     // Failsafe
     // ─────────────────────────────────────────────────────────────────────
 
@@ -214,6 +244,8 @@ void VehicleControlUnified::ControlTaskLoop() {
       ekf_.Reset();
       stab_weight_ = 0.0f;           // Плавный re-fade при восстановлении управления
       mode_transition_weight_ = 1.0f;  // Нет незавершённого перехода после failsafe
+      oversteer_active_ = false;
+      prev_slip_deg_ = 0.0f;
       platform_->SetPwmNeutral();
     }
 
@@ -231,6 +263,33 @@ void VehicleControlUnified::ControlTaskLoop() {
     if (telem_handler_) {
       telem_handler_->SetActuatorValues(applied_throttle, applied_steering);
       telem_handler_->Update(now, dt_ms);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Запись в кольцевой буфер телеметрии (Phase 4.3) — 20 Hz
+    // ─────────────────────────────────────────────────────────────────────
+
+    if (imu_handler_ && imu_handler_->IsEnabled()) {
+      static uint32_t last_log_ms = 0;
+      if (now - last_log_ms >= TELEM_SEND_INTERVAL_MS) {
+        TelemetryLogFrame frame;
+        frame.ts_ms = now;
+        const auto& d = imu_handler_->GetData();
+        frame.ax = d.ax;
+        frame.ay = d.ay;
+        frame.az = d.az;
+        frame.gx = d.gx;
+        frame.gy = d.gy;
+        frame.gz = d.gz;
+        frame.vx = ekf_.GetVx();
+        frame.vy = ekf_.GetVy();
+        frame.slip_deg = ekf_.GetSlipAngleDeg();
+        frame.speed_ms = ekf_.GetSpeedMs();
+        frame.throttle = applied_throttle;
+        frame.steering = applied_steering;
+        telem_log_.Push(frame);
+        last_log_ms = now;
+      }
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -333,6 +392,16 @@ PlatformError VehicleControlUnified::Init() {
   }
 
   // ───────────────────────────────────────────────────────────────────────
+  // Инициализация кольцевого буфера телеметрии (Phase 4.3)
+  // 5000 кадров × ~60 байт ≈ 293 КБ → выделяется из PSRAM
+  // ───────────────────────────────────────────────────────────────────────
+
+  if (!telem_log_.Init(5000)) {
+    platform_->Log(LogLevel::Warning,
+                   "TelemetryLog: failed to allocate (no PSRAM?), log disabled");
+  }
+
+  // ───────────────────────────────────────────────────────────────────────
   // Создание компонентов control loop
   // ───────────────────────────────────────────────────────────────────────
 
@@ -385,6 +454,7 @@ bool VehicleControlUnified::InitializeComponents() {
       static_cast<const ImuHandler&>(*imu_handler_), imu_calib_, madgwick_,
       TELEM_SEND_INTERVAL_MS));
   telem_handler_->SetEkf(&ekf_);
+  telem_handler_->SetOversteerWarn(&oversteer_active_);
 
   return true;
 }

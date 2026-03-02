@@ -9,6 +9,7 @@
  */
 
 #include "esp_err.h"
+#include "telemetry_log.hpp"
 #include "vehicle_control_platform_esp32.hpp"
 #include "vehicle_control_unified.hpp"
 
@@ -105,6 +106,19 @@ class VehicleControl {
     return unified_.SetStabilizationConfig(config, save_to_nvs);
   }
 
+  /** @brief Информация о буфере телеметрии */
+  void GetLogInfo(size_t& count_out, size_t& cap_out) const {
+    unified_.GetLogInfo(count_out, cap_out);
+  }
+
+  /** @brief Получить кадр из буфера телеметрии (0=oldest) */
+  bool GetLogFrame(size_t idx, TelemetryLogFrame& out) const {
+    return unified_.GetLogFrame(idx, out);
+  }
+
+  /** @brief Очистить буфер телеметрии */
+  void ClearLog() { unified_.ClearLog(); }
+
   VehicleControl(const VehicleControl&) = delete;
   VehicleControl& operator=(const VehicleControl&) = delete;
 
@@ -156,4 +170,20 @@ inline const StabilizationConfig& VehicleControlGetStabilizationConfig(void) {
 inline bool VehicleControlSetStabilizationConfig(
     const StabilizationConfig& config, bool save_to_nvs = true) {
   return VehicleControl::Instance().SetStabilizationConfig(config, save_to_nvs);
+}
+
+inline void VehicleControlGetLogInfo(size_t* count_out, size_t* cap_out) {
+  size_t cnt = 0, cap = 0;
+  VehicleControl::Instance().GetLogInfo(cnt, cap);
+  if (count_out) *count_out = cnt;
+  if (cap_out) *cap_out = cap;
+}
+
+inline bool VehicleControlGetLogFrame(size_t idx, TelemetryLogFrame* out) {
+  if (!out) return false;
+  return VehicleControl::Instance().GetLogFrame(idx, *out);
+}
+
+inline void VehicleControlClearLog() {
+  VehicleControl::Instance().ClearLog();
 }

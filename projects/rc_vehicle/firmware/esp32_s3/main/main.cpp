@@ -9,6 +9,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "http_server.hpp"
+#include "telemetry_log.hpp"
 #include "vehicle_control.hpp"
 #include "websocket_server.hpp"
 #include "wifi_ap.hpp"
@@ -152,6 +153,24 @@ static void ws_json_handler(const char* type, cJSON* json, httpd_req_t* req) {
       cJSON_AddNumberToObject(reply, "slip_max_integral", cfg.slip_max_integral);
       cJSON_AddNumberToObject(reply, "slip_max_correction",
                               cfg.slip_max_correction);
+      // Adaptive PID (Phase 4.1)
+      cJSON_AddBoolToObject(reply, "adaptive_pid_enabled",
+                            cfg.adaptive_pid_enabled);
+      cJSON_AddNumberToObject(reply, "adaptive_speed_ref_ms",
+                              cfg.adaptive_speed_ref_ms);
+      cJSON_AddNumberToObject(reply, "adaptive_scale_min",
+                              cfg.adaptive_scale_min);
+      cJSON_AddNumberToObject(reply, "adaptive_scale_max",
+                              cfg.adaptive_scale_max);
+      // Oversteer warning (Phase 4.2)
+      cJSON_AddBoolToObject(reply, "oversteer_warn_enabled",
+                            cfg.oversteer_warn_enabled);
+      cJSON_AddNumberToObject(reply, "oversteer_slip_thresh_deg",
+                              cfg.oversteer_slip_thresh_deg);
+      cJSON_AddNumberToObject(reply, "oversteer_rate_thresh_deg_s",
+                              cfg.oversteer_rate_thresh_deg_s);
+      cJSON_AddNumberToObject(reply, "oversteer_throttle_reduction",
+                              cfg.oversteer_throttle_reduction);
       ws_send_reply(req, reply);
       cJSON_Delete(reply);
     }
@@ -231,6 +250,40 @@ static void ws_json_handler(const char* type, cJSON* json, httpd_req_t* req) {
     if (slip_max_corr && cJSON_IsNumber(slip_max_corr))
       cfg.slip_max_correction = (float)slip_max_corr->valuedouble;
 
+    // Adaptive PID (Phase 4.1)
+    cJSON* adapt_en = cJSON_GetObjectItem(json, "adaptive_pid_enabled");
+    if (adapt_en && cJSON_IsBool(adapt_en))
+      cfg.adaptive_pid_enabled = cJSON_IsTrue(adapt_en);
+
+    cJSON* adapt_ref = cJSON_GetObjectItem(json, "adaptive_speed_ref_ms");
+    if (adapt_ref && cJSON_IsNumber(adapt_ref))
+      cfg.adaptive_speed_ref_ms = (float)adapt_ref->valuedouble;
+
+    cJSON* adapt_min = cJSON_GetObjectItem(json, "adaptive_scale_min");
+    if (adapt_min && cJSON_IsNumber(adapt_min))
+      cfg.adaptive_scale_min = (float)adapt_min->valuedouble;
+
+    cJSON* adapt_max = cJSON_GetObjectItem(json, "adaptive_scale_max");
+    if (adapt_max && cJSON_IsNumber(adapt_max))
+      cfg.adaptive_scale_max = (float)adapt_max->valuedouble;
+
+    // Oversteer warning (Phase 4.2)
+    cJSON* ow_en = cJSON_GetObjectItem(json, "oversteer_warn_enabled");
+    if (ow_en && cJSON_IsBool(ow_en))
+      cfg.oversteer_warn_enabled = cJSON_IsTrue(ow_en);
+
+    cJSON* ow_slip = cJSON_GetObjectItem(json, "oversteer_slip_thresh_deg");
+    if (ow_slip && cJSON_IsNumber(ow_slip))
+      cfg.oversteer_slip_thresh_deg = (float)ow_slip->valuedouble;
+
+    cJSON* ow_rate = cJSON_GetObjectItem(json, "oversteer_rate_thresh_deg_s");
+    if (ow_rate && cJSON_IsNumber(ow_rate))
+      cfg.oversteer_rate_thresh_deg_s = (float)ow_rate->valuedouble;
+
+    cJSON* ow_red = cJSON_GetObjectItem(json, "oversteer_throttle_reduction");
+    if (ow_red && cJSON_IsNumber(ow_red))
+      cfg.oversteer_throttle_reduction = (float)ow_red->valuedouble;
+
     bool ok = VehicleControlSetStabilizationConfig(cfg, true);
 
     // Получить применённую конфигурацию (могут применяться mode defaults)
@@ -265,6 +318,24 @@ static void ws_json_handler(const char* type, cJSON* json, httpd_req_t* req) {
         cJSON_AddNumberToObject(reply, "slip_kd", applied.slip_kd);
         cJSON_AddNumberToObject(reply, "slip_max_correction",
                                 applied.slip_max_correction);
+        // Adaptive PID (Phase 4.1)
+        cJSON_AddBoolToObject(reply, "adaptive_pid_enabled",
+                              applied.adaptive_pid_enabled);
+        cJSON_AddNumberToObject(reply, "adaptive_speed_ref_ms",
+                                applied.adaptive_speed_ref_ms);
+        cJSON_AddNumberToObject(reply, "adaptive_scale_min",
+                                applied.adaptive_scale_min);
+        cJSON_AddNumberToObject(reply, "adaptive_scale_max",
+                                applied.adaptive_scale_max);
+        // Oversteer warning (Phase 4.2)
+        cJSON_AddBoolToObject(reply, "oversteer_warn_enabled",
+                              applied.oversteer_warn_enabled);
+        cJSON_AddNumberToObject(reply, "oversteer_slip_thresh_deg",
+                                applied.oversteer_slip_thresh_deg);
+        cJSON_AddNumberToObject(reply, "oversteer_rate_thresh_deg_s",
+                                applied.oversteer_rate_thresh_deg_s);
+        cJSON_AddNumberToObject(reply, "oversteer_throttle_reduction",
+                                applied.oversteer_throttle_reduction);
       }
       ws_send_reply(req, reply);
       cJSON_Delete(reply);
@@ -277,6 +348,72 @@ static void ws_json_handler(const char* type, cJSON* json, httpd_req_t* req) {
              ok ? "OK" : "FAILED", applied.enabled, applied.madgwick_beta,
              applied.lpf_cutoff_hz, applied.mode, applied.pid_kp,
              applied.pid_ki, applied.pid_kd);
+  } else if (strcmp(type, "get_log_info") == 0) {
+    // Phase 4.3: информация о буфере телеметрии
+    size_t count = 0, cap = 0;
+    VehicleControlGetLogInfo(&count, &cap);
+    cJSON* reply = cJSON_CreateObject();
+    if (reply) {
+      cJSON_AddStringToObject(reply, "type", "log_info");
+      cJSON_AddNumberToObject(reply, "count", (double)count);
+      cJSON_AddNumberToObject(reply, "capacity", (double)cap);
+      ws_send_reply(req, reply);
+      cJSON_Delete(reply);
+    }
+  } else if (strcmp(type, "get_log_data") == 0) {
+    // Phase 4.3: выгрузка кадров телеметрии
+    size_t total_count = 0, cap = 0;
+    VehicleControlGetLogInfo(&total_count, &cap);
+
+    cJSON* offset_j = cJSON_GetObjectItem(json, "offset");
+    cJSON* count_j = cJSON_GetObjectItem(json, "count");
+    size_t offset = (offset_j && cJSON_IsNumber(offset_j))
+                        ? (size_t)offset_j->valueint
+                        : 0;
+    size_t req_count = (count_j && cJSON_IsNumber(count_j))
+                           ? (size_t)count_j->valueint
+                           : 100;
+    // Ограничить до 200 кадров за запрос
+    if (req_count > 200) req_count = 200;
+    if (offset >= total_count) req_count = 0;
+    if (offset + req_count > total_count) req_count = total_count - offset;
+
+    cJSON* reply = cJSON_CreateObject();
+    if (reply) {
+      cJSON_AddStringToObject(reply, "type", "log_data");
+      cJSON* frames_arr = cJSON_CreateArray();
+      if (frames_arr) {
+        for (size_t i = 0; i < req_count; ++i) {
+          TelemetryLogFrame frame;
+          if (VehicleControlGetLogFrame(offset + i, &frame)) {
+            cJSON* f = cJSON_CreateObject();
+            if (f) {
+              cJSON_AddNumberToObject(f, "ts_ms", frame.ts_ms);
+              cJSON_AddNumberToObject(f, "vx", frame.vx);
+              cJSON_AddNumberToObject(f, "vy", frame.vy);
+              cJSON_AddNumberToObject(f, "slip_deg", frame.slip_deg);
+              cJSON_AddNumberToObject(f, "speed_ms", frame.speed_ms);
+              cJSON_AddNumberToObject(f, "throttle", frame.throttle);
+              cJSON_AddNumberToObject(f, "steering", frame.steering);
+              cJSON_AddItemToArray(frames_arr, f);
+            }
+          }
+        }
+        cJSON_AddItemToObject(reply, "frames", frames_arr);
+      }
+      ws_send_reply(req, reply);
+      cJSON_Delete(reply);
+    }
+  } else if (strcmp(type, "clear_log") == 0) {
+    // Phase 4.3: очистка буфера телеметрии
+    VehicleControlClearLog();
+    cJSON* reply = cJSON_CreateObject();
+    if (reply) {
+      cJSON_AddStringToObject(reply, "type", "clear_log_ack");
+      cJSON_AddBoolToObject(reply, "ok", true);
+      ws_send_reply(req, reply);
+      cJSON_Delete(reply);
+    }
   }
 }
 

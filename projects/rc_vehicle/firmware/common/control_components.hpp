@@ -250,6 +250,12 @@ class TelemetryHandler : public ControlComponent {
    */
   void SetEkf(const VehicleEkf* ekf) noexcept { ekf_ = ekf; }
 
+  /**
+   * @brief Подключить флаг oversteer для включения в телеметрию (опционально)
+   * @param ptr Указатель на bool флаг или nullptr для отключения
+   */
+  void SetOversteerWarn(const bool* ptr) noexcept { oversteer_warn_ptr_ = ptr; }
+
  private:
   VehicleControlPlatform& platform_;
   const RcInputHandler& rc_;
@@ -262,6 +268,7 @@ class TelemetryHandler : public ControlComponent {
   float applied_throttle_{0.0f};
   float applied_steering_{0.0f};
   const VehicleEkf* ekf_{nullptr};
+  const bool* oversteer_warn_ptr_{nullptr};
 
   /**
    * @brief Построить JSON-строку с телеметрией
