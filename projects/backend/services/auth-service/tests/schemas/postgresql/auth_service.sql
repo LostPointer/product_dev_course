@@ -4,6 +4,7 @@
 BEGIN;
 DROP TABLE IF EXISTS project_members CASCADE;
 DROP TABLE IF EXISTS projects CASCADE;
+DROP TABLE IF EXISTS password_reset_tokens CASCADE;
 DROP TABLE IF EXISTS revoked_tokens CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 DROP TABLE IF EXISTS schema_migrations CASCADE;
@@ -29,6 +30,7 @@ CREATE TABLE users (
     email text NOT NULL UNIQUE,
     hashed_password text NOT NULL,
     password_change_required BOOLEAN NOT NULL DEFAULT false,
+    is_admin BOOLEAN NOT NULL DEFAULT false,
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -60,6 +62,17 @@ CREATE TABLE revoked_tokens (
 );
 
 CREATE INDEX revoked_tokens_expires_at_idx ON revoked_tokens (expires_at);
+
+-- Migration: 004_password_reset.sql
+-- Таблица для хранения токенов сброса пароля.
+
+CREATE TABLE password_reset_tokens (
+    token      text        PRIMARY KEY,
+    user_id    uuid        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    expires_at timestamptz NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX password_reset_tokens_user_id_idx ON password_reset_tokens (user_id);
 
 -- Migration: 002_add_projects.sql
 -- Add projects and project members tables.
@@ -111,6 +124,14 @@ CREATE TRIGGER projects_add_owner_member
     AFTER INSERT ON projects
     FOR EACH ROW
     EXECUTE FUNCTION add_project_owner_as_member();
+
+INSERT INTO users (username, email, hashed_password, password_change_required, is_admin)
+VALUES (
+    'admin', 'admin@example.com',
+    '$2b$12$0QfCvOcgNkygw/I79ieV5eOIwAjWXUjdFUr/QvRgDMewN1OfENrmG',
+    false, true
+)
+ON CONFLICT (username) DO NOTHING;
 
 COMMIT;
 

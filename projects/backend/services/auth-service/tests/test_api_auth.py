@@ -1,5 +1,33 @@
 """Authentication API tests."""
+import asyncpg  # type: ignore[import-untyped]
 import pytest
+
+from auth_service.settings import settings
+
+# Bcrypt hash of "admin123"
+_ADMIN_HASH = "$2b$12$0QfCvOcgNkygw/I79ieV5eOIwAjWXUjdFUr/QvRgDMewN1OfENrmG"
+
+
+@pytest.fixture
+async def admin_token(service_client):
+    """Insert admin user into test DB and return its access token."""
+    conn = await asyncpg.connect(str(settings.database_url))
+    try:
+        await conn.execute(
+            "INSERT INTO users (username, email, hashed_password, password_change_required, is_admin) "
+            "VALUES ('admin', 'admin@example.com', $1, false, true) "
+            "ON CONFLICT (username) DO UPDATE SET is_admin = true",
+            _ADMIN_HASH,
+        )
+    finally:
+        await conn.close()
+
+    login_response = await service_client.post(
+        "/auth/login",
+        json={"username": "admin", "password": "admin123"},
+    )
+    assert login_response.status == 200
+    return (await login_response.json())["access_token"]
 
 
 @pytest.mark.asyncio
@@ -468,4 +496,166 @@ async def test_change_password_invalid_new_password(service_client):
         },
     )
     assert response.status == 400
+
+
+# ---------------------------------------------------------------------------
+# Password reset tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_password_reset_request_success(service_client):
+    """Запрос сброса пароля по существующему email → 200, поля reset_token и expires_at."""
+    await service_client.post(
+        "/auth/register",
+        json={
+            "username": "resetuser",
+            "email": "reset@example.com",
+            "password": "resetpass123",
+        },
+    )
+
+    response = await service_client.post(
+        "/auth/password-reset/request",
+        json={"email": "reset@example.com"},
+    )
+    assert response.status == 200
+    payload = await response.json()
+    assert "reset_token" in payload
+    assert "expires_at" in payload
+    assert len(payload["reset_token"]) > 10
+
+
+@pytest.mark.asyncio
+async def test_password_reset_request_not_found(service_client):
+    """Запрос сброса пароля по несуществующему email → 404."""
+    response = await service_client.post(
+        "/auth/password-reset/request",
+        json={"email": "nobody@example.com"},
+    )
+    assert response.status == 404
+    payload = await response.json()
+    assert "error" in payload
+
+
+@pytest.mark.asyncio
+async def test_password_reset_confirm_success(service_client):
+    """Валидный reset_token → 200, получаем access_token и refresh_token."""
+    await service_client.post(
+        "/auth/register",
+        json={
+            "username": "confirmuser",
+            "email": "confirm@example.com",
+            "password": "oldpassword123",
+        },
+    )
+
+    request_response = await service_client.post(
+        "/auth/password-reset/request",
+        json={"email": "confirm@example.com"},
+    )
+    assert request_response.status == 200
+    reset_token = (await request_response.json())["reset_token"]
+
+    response = await service_client.post(
+        "/auth/password-reset/confirm",
+        json={"reset_token": reset_token, "new_password": "newpassword123"},
+    )
+    assert response.status == 200
+    payload = await response.json()
+    assert "access_token" in payload
+    assert "refresh_token" in payload
+
+
+@pytest.mark.asyncio
+async def test_password_reset_confirm_invalid_token(service_client):
+    """Невалидный reset_token → 401."""
+    response = await service_client.post(
+        "/auth/password-reset/confirm",
+        json={"reset_token": "invalid-token-xyz", "new_password": "newpassword123"},
+    )
+    assert response.status == 401
+    payload = await response.json()
+    assert "error" in payload
+
+
+# ---------------------------------------------------------------------------
+# Admin reset tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_admin_reset_success(service_client, admin_token):
+    """Admin сбрасывает пароль другому юзеру → 200, поле new_password; можно залогиниться."""
+    # Регистрируем целевого пользователя
+    reg = await service_client.post(
+        "/auth/register",
+        json={
+            "username": "targetuser",
+            "email": "target@example.com",
+            "password": "targetpass123",
+        },
+    )
+    assert reg.status == 201
+    target_id = (await reg.json())["user"]["id"]
+
+    # Admin сбрасывает пароль
+    response = await service_client.post(
+        f"/auth/admin/users/{target_id}/reset",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={},
+    )
+    assert response.status == 200
+    payload = await response.json()
+    assert "new_password" in payload
+    assert "user" in payload
+
+    # Проверяем, что новый пароль работает
+    new_password = payload["new_password"]
+    login_with_new = await service_client.post(
+        "/auth/login",
+        json={"username": "targetuser", "password": new_password},
+    )
+    assert login_with_new.status == 200
+
+
+@pytest.mark.asyncio
+async def test_admin_reset_forbidden(service_client):
+    """Обычный пользователь не может сбросить пароль другому → 403."""
+    reg1 = await service_client.post(
+        "/auth/register",
+        json={"username": "nonadmin", "email": "nonadmin@example.com", "password": "pass12345"},
+    )
+    assert reg1.status == 201
+    token = (await reg1.json())["access_token"]
+
+    reg2 = await service_client.post(
+        "/auth/register",
+        json={"username": "victim2", "email": "victim2@example.com", "password": "pass12345"},
+    )
+    assert reg2.status == 201
+    victim_id = (await reg2.json())["user"]["id"]
+
+    response = await service_client.post(
+        f"/auth/admin/users/{victim_id}/reset",
+        headers={"Authorization": f"Bearer {token}"},
+        json={},
+    )
+    assert response.status == 403
+    payload = await response.json()
+    assert "error" in payload
+
+
+@pytest.mark.asyncio
+async def test_admin_reset_user_not_found(service_client, admin_token):
+    """Admin + несуществующий UUID → 404."""
+    fake_id = "00000000-0000-0000-0000-000000000000"
+    response = await service_client.post(
+        f"/auth/admin/users/{fake_id}/reset",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={},
+    )
+    assert response.status == 404
+    payload = await response.json()
+    assert "error" in payload
 

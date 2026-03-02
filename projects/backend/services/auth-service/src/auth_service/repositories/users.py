@@ -23,7 +23,7 @@ class UserRepository(BaseRepository):
         query = """
             INSERT INTO users (username, email, hashed_password, password_change_required)
             VALUES ($1, $2, $3, $4)
-            RETURNING id, username, email, hashed_password, password_change_required, created_at, updated_at
+            RETURNING id, username, email, hashed_password, password_change_required, is_admin, created_at, updated_at
         """
         row = await self._fetchrow(query, username, email, hashed_password, password_change_required)
         if not row:
@@ -33,7 +33,7 @@ class UserRepository(BaseRepository):
     async def get_by_id(self, user_id: UUID) -> User | None:
         """Get user by ID."""
         query = """
-            SELECT id, username, email, hashed_password, password_change_required, created_at, updated_at
+            SELECT id, username, email, hashed_password, password_change_required, is_admin, created_at, updated_at
             FROM users
             WHERE id = $1
         """
@@ -45,7 +45,7 @@ class UserRepository(BaseRepository):
     async def get_by_username(self, username: str) -> User | None:
         """Get user by username."""
         query = """
-            SELECT id, username, email, hashed_password, password_change_required, created_at, updated_at
+            SELECT id, username, email, hashed_password, password_change_required, is_admin, created_at, updated_at
             FROM users
             WHERE username = $1
         """
@@ -57,7 +57,7 @@ class UserRepository(BaseRepository):
     async def get_by_email(self, email: str) -> User | None:
         """Get user by email."""
         query = """
-            SELECT id, username, email, hashed_password, password_change_required, created_at, updated_at
+            SELECT id, username, email, hashed_password, password_change_required, is_admin, created_at, updated_at
             FROM users
             WHERE email = $1
         """
@@ -79,7 +79,7 @@ class UserRepository(BaseRepository):
                 password_change_required = $3,
                 updated_at = now()
             WHERE id = $1
-            RETURNING id, username, email, hashed_password, password_change_required, created_at, updated_at
+            RETURNING id, username, email, hashed_password, password_change_required, is_admin, created_at, updated_at
         """
         row = await self._fetchrow(query, user_id, new_hashed_password, password_change_required)
         if not row:

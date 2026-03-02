@@ -72,6 +72,7 @@ class UserResponse(BaseModel):
     username: str
     email: str
     password_change_required: bool = False
+    is_admin: bool = False
 
     @classmethod
     def from_user(cls, user: "User") -> "UserResponse":
@@ -81,7 +82,32 @@ class UserResponse(BaseModel):
             username=user.username,
             email=user.email,
             password_change_required=user.password_change_required,
+            is_admin=user.is_admin,
         )
+
+
+class PasswordResetRequestDto(BaseModel):
+    """Password reset request (by email)."""
+
+    email: EmailStr
+
+
+class PasswordResetConfirmRequest(BaseModel):
+    """Password reset confirmation."""
+
+    reset_token: str
+    new_password: str = Field(..., min_length=8, max_length=100)
+
+    @field_validator("new_password")
+    @classmethod
+    def _password_complexity(cls, value: str) -> str:
+        return _check_password_complexity(value)
+
+
+class AdminUserResetRequest(BaseModel):
+    """Admin reset of another user's password."""
+
+    new_password: str | None = None
 
 
 class PasswordChangeRequest(BaseModel):

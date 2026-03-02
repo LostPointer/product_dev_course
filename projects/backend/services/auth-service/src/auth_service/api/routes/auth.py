@@ -7,14 +7,18 @@ from aiohttp import web
 from auth_service.core.exceptions import AuthError, handle_auth_error
 from backend_common.db.pool import get_pool_service as get_pool
 from auth_service.domain.dto import (
+    AdminUserResetRequest,
     AuthTokensResponse,
     LogoutRequest,
     PasswordChangeRequest,
+    PasswordResetConfirmRequest,
+    PasswordResetRequestDto,
     TokenRefreshRequest,
     UserLoginRequest,
     UserRegisterRequest,
     UserResponse,
 )
+from auth_service.repositories.password_reset import PasswordResetRepository
 from auth_service.repositories.revoked_tokens import RevokedTokenRepository
 from auth_service.repositories.users import UserRepository
 from auth_service.services.auth import AuthService
@@ -27,7 +31,8 @@ async def get_auth_service(request: web.Request) -> AuthService:
     pool = await get_pool()
     user_repo = UserRepository(pool)
     revoked_repo = RevokedTokenRepository(pool)
-    return AuthService(user_repo, revoked_repo)
+    reset_repo = PasswordResetRepository(pool)
+    return AuthService(user_repo, revoked_repo, reset_repo)
 
 
 def _extract_bearer_token(request: web.Request) -> str | None:
@@ -188,6 +193,82 @@ async def change_password(request: web.Request) -> web.Response:
         return web.json_response({"error": "Internal server error"}, status=500)
 
 
+async def password_reset_request(request: web.Request) -> web.Response:
+    """Request a password reset token."""
+    try:
+        data = await request.json()
+        req = PasswordResetRequestDto(**data)
+    except Exception as e:
+        return web.json_response({"error": f"Invalid request: {e}"}, status=400)
+
+    try:
+        auth_service = await get_auth_service(request)
+        token, expires_at = await auth_service.request_password_reset(req.email)
+        return web.json_response(
+            {"reset_token": token, "expires_at": expires_at.isoformat()},
+            status=200,
+        )
+    except AuthError as e:
+        return handle_auth_error(request, e)
+    except Exception:
+        logger.exception("Password reset request error")
+        return web.json_response({"error": "Internal server error"}, status=500)
+
+
+async def password_reset_confirm(request: web.Request) -> web.Response:
+    """Confirm a password reset using a token."""
+    try:
+        data = await request.json()
+        req = PasswordResetConfirmRequest(**data)
+    except Exception as e:
+        return web.json_response({"error": f"Invalid request: {e}"}, status=400)
+
+    try:
+        auth_service = await get_auth_service(request)
+        tokens = await auth_service.confirm_password_reset(req.reset_token, req.new_password)
+        return web.json_response(tokens.model_dump(), status=200)
+    except AuthError as e:
+        return handle_auth_error(request, e)
+    except Exception:
+        logger.exception("Password reset confirm error")
+        return web.json_response({"error": "Internal server error"}, status=500)
+
+
+async def admin_reset_user(request: web.Request) -> web.Response:
+    """Admin resets another user's password."""
+    token = _extract_bearer_token(request)
+    if not token:
+        return web.json_response({"error": "Unauthorized"}, status=401)
+
+    user_id_str = request.match_info.get("user_id", "")
+
+    try:
+        data = await request.json()
+        req = AdminUserResetRequest(**data)
+    except Exception as e:
+        return web.json_response({"error": f"Invalid request: {e}"}, status=400)
+
+    try:
+        from uuid import UUID
+
+        target_user_id = UUID(user_id_str)
+    except ValueError:
+        return web.json_response({"error": "Invalid user_id"}, status=400)
+
+    try:
+        auth_service = await get_auth_service(request)
+        updated_user, new_password = await auth_service.admin_reset_user(token, target_user_id, req.new_password)
+        return web.json_response(
+            {"user": UserResponse.from_user(updated_user).model_dump(), "new_password": new_password},
+            status=200,
+        )
+    except AuthError as e:
+        return handle_auth_error(request, e)
+    except Exception:
+        logger.exception("Admin reset user error")
+        return web.json_response({"error": "Internal server error"}, status=500)
+
+
 def setup_routes(app: web.Application) -> None:
     """Setup authentication routes."""
     app.router.add_post("/auth/login", login)
@@ -196,4 +277,7 @@ def setup_routes(app: web.Application) -> None:
     app.router.add_post("/auth/logout", logout)
     app.router.add_get("/auth/me", me)
     app.router.add_post("/auth/change-password", change_password)
+    app.router.add_post("/auth/password-reset/request", password_reset_request)
+    app.router.add_post("/auth/password-reset/confirm", password_reset_confirm)
+    app.router.add_post("/auth/admin/users/{user_id}/reset", admin_reset_user)
 

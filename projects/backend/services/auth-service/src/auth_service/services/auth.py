@@ -1,16 +1,19 @@
 """Authentication service."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import secrets
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from auth_service.core.exceptions import (
+    ForbiddenError,
     InvalidCredentialsError,
     UserAlreadyExistsError,
     UserNotFoundError,
 )
 from auth_service.domain.dto import AuthTokensResponse, UserResponse
 from auth_service.domain.models import User
+from auth_service.repositories.password_reset import PasswordResetRepository
 from auth_service.repositories.revoked_tokens import RevokedTokenRepository
 from auth_service.repositories.users import UserRepository
 from auth_service.services.jwt import (
@@ -25,9 +28,15 @@ from auth_service.services.password import hash_password, verify_password
 class AuthService:
     """Service for authentication operations."""
 
-    def __init__(self, user_repository: UserRepository, revoked_repo: RevokedTokenRepository):
+    def __init__(
+        self,
+        user_repository: UserRepository,
+        revoked_repo: RevokedTokenRepository,
+        reset_repo: PasswordResetRepository,
+    ):
         self._user_repo = user_repository
         self._revoked_repo = revoked_repo
+        self._reset_repo = reset_repo
 
     async def register(
         self,
@@ -153,6 +162,54 @@ class AuthService:
             raise UserNotFoundError()
 
         return user
+
+    async def request_password_reset(self, email: str) -> tuple[str, datetime]:
+        """Generate a password reset token for the given email."""
+        user = await self._user_repo.get_by_email(email)
+        if not user:
+            raise UserNotFoundError()
+
+        token = secrets.token_urlsafe(32)
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+        await self._reset_repo.create_token(token, user.id, expires_at)
+        return token, expires_at
+
+    async def confirm_password_reset(self, token: str, new_password: str) -> AuthTokensResponse:
+        """Reset password using a valid reset token."""
+        record = await self._reset_repo.get_by_token(token)
+        if not record:
+            raise InvalidCredentialsError("Invalid or expired reset token")
+
+        if record["expires_at"] < datetime.now(timezone.utc):
+            raise InvalidCredentialsError("Reset token expired")
+
+        user_id: UUID = record["user_id"]
+        await self._user_repo.update_password(user_id, hash_password(new_password), password_change_required=False)
+        await self._reset_repo.delete_token(token)
+        return self._create_tokens(str(user_id))
+
+    async def admin_reset_user(
+        self,
+        requester_token: str,
+        target_user_id: UUID,
+        new_password: str | None,
+    ) -> tuple[User, str]:
+        """Admin resets another user's password."""
+        requester = await self.get_user_by_token(requester_token)
+        if not requester.is_admin:
+            raise ForbiddenError()
+
+        target = await self._user_repo.get_by_id(target_user_id)
+        if not target:
+            raise UserNotFoundError()
+
+        pwd = new_password if new_password else ("Tmp1" + secrets.token_hex(8))
+        updated_user = await self._user_repo.update_password(
+            target_user_id,
+            hash_password(pwd),
+            password_change_required=True,
+        )
+        return updated_user, pwd
 
     def _create_tokens(self, user_id: str) -> AuthTokensResponse:
         """Create access and refresh tokens."""

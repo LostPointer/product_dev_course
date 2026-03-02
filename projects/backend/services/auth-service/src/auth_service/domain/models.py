@@ -16,6 +16,7 @@ class User:
     email: str
     hashed_password: str
     password_change_required: bool
+    is_admin: bool
     created_at: datetime
     updated_at: datetime
 
@@ -28,6 +29,7 @@ class User:
             email=row["email"],
             hashed_password=row["hashed_password"],
             password_change_required=row.get("password_change_required", False),
+            is_admin=row.get("is_admin", False),
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )
@@ -39,6 +41,7 @@ class User:
             "username": self.username,
             "email": self.email,
             "password_change_required": self.password_change_required,
+            "is_admin": self.is_admin,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
         }
