@@ -47,7 +47,8 @@
       "Bash(poetry run pytest tests/ -q 2>&1)",
       "Bash(cd /home/lostpointer/product_dev_course/projects/frontend/apps/experiment-portal && npm run type-check 2>&1)",
       "Bash(cd /home/lostpointer/product_dev_course/projects/frontend/apps/experiment-portal && npx tsc --noEmit 2>&1)",
-      "Bash(npm run test -- --run 2>&1)"
+      "Bash(npm run test -- --run 2>&1)",
+      "Bash(cd /home/lostpointer/product_dev_course/projects/backend/services/auth-service && poetry run pytest tests/test_api_auth.py -v 2>&1)"
     ]
   }
 }
