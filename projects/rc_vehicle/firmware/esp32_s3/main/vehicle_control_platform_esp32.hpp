@@ -84,6 +84,8 @@ class VehicleControlPlatformEsp32 : public VehicleControlPlatform {
  private:
   QueueHandle_t cmd_queue_{nullptr};
   Failsafe failsafe_;
+  TickType_t last_wake_time_{0};
+  bool wake_time_initialized_{false};
 };
 
 }  // namespace rc_vehicle

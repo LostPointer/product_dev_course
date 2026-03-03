@@ -245,9 +245,12 @@ bool VehicleControlPlatformEsp32::CreateTask(void (*entry)(void*), void* arg) {
 }
 
 void VehicleControlPlatformEsp32::DelayUntilNextTick(uint32_t period_ms) {
-  static TickType_t last_wake_time = xTaskGetTickCount();
+  if (!wake_time_initialized_) {
+    last_wake_time_ = xTaskGetTickCount();
+    wake_time_initialized_ = true;
+  }
   const TickType_t period_ticks = pdMS_TO_TICKS(period_ms);
-  vTaskDelayUntil(&last_wake_time, period_ticks ? period_ticks : 1);
+  vTaskDelayUntil(&last_wake_time_, period_ticks ? period_ticks : 1);
 }
 
 }  // namespace rc_vehicle

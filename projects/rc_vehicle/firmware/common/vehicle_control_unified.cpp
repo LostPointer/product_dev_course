@@ -134,8 +134,8 @@ void VehicleControlUnified::ControlTaskLoop() {
     // Стабилизационный pipeline (стратегии, Phase 1 refactoring)
     // ─────────────────────────────────────────────────────────────────────
 
-    yaw_ctrl_.Process(commanded_steering, stab_weight_,
-                      mode_transition_weight_, dt_ms);
+    yaw_ctrl_.Process(commanded_steering, stab_weight_, mode_transition_weight_,
+                      dt_ms);
     pitch_ctrl_.Process(commanded_throttle, stab_weight_);
     slip_ctrl_.Process(commanded_throttle, stab_weight_,
                        mode_transition_weight_, dt_ms);
@@ -158,9 +158,10 @@ void VehicleControlUnified::ControlTaskLoop() {
       slip_ctrl_.Reset();
       oversteer_guard_.Reset();
       ekf_.Reset();
-      stab_weight_ = 0.0f;           // Плавный re-fade при восстановлении управления
-      mode_transition_weight_ = 1.0f;  // Нет незавершённого перехода после failsafe
-      last_log_ms_ = 0;              // Сброс таймера лога (Fix #7)
+      stab_weight_ = 0.0f;  // Плавный re-fade при восстановлении управления
+      mode_transition_weight_ =
+          1.0f;          // Нет незавершённого перехода после failsafe
+      last_log_ms_ = 0;  // Сброс таймера лога (Fix #7)
       platform_->SetPwmNeutral();
     }
 
@@ -326,9 +327,10 @@ PlatformError VehicleControlUnified::Init() {
   // 5000 кадров × ~60 байт ≈ 293 КБ → выделяется из PSRAM
   // ───────────────────────────────────────────────────────────────────────
 
-  if (!telem_log_.Init(5000)) {
-    platform_->Log(LogLevel::Warning,
-                   "TelemetryLog: failed to allocate (no PSRAM?), log disabled");
+  if (!telem_log_.Init(config::TelemetryLogConfig::kCapacityFrames)) {
+    platform_->Log(
+        LogLevel::Warning,
+        "TelemetryLog: failed to allocate (no PSRAM?), log disabled");
   }
 
   // ───────────────────────────────────────────────────────────────────────
@@ -356,10 +358,12 @@ PlatformError VehicleControlUnified::Init() {
 
 bool VehicleControlUnified::InitializeComponents() {
   if (rc_enabled_) {
-    rc_handler_.reset(new RcInputHandler(*platform_, config::RcInputConfig::kPollIntervalMs));
+    rc_handler_.reset(
+        new RcInputHandler(*platform_, config::RcInputConfig::kPollIntervalMs));
   }
 
-  wifi_handler_.reset(new WifiCommandHandler(*platform_, config::WifiConfig::kCommandTimeoutMs));
+  wifi_handler_.reset(new WifiCommandHandler(
+      *platform_, config::WifiConfig::kCommandTimeoutMs));
 
   if (imu_enabled_) {
     imu_handler_.reset(new ImuHandler(*platform_, imu_calib_, madgwick_,
@@ -384,7 +388,8 @@ bool VehicleControlUnified::InitializeComponents() {
   oversteer_guard_.Init(stab_config_, ekf_, imu_handler_.get());
 
   // Телеметрия
-  telem_handler_.reset(new TelemetryHandler(*platform_, config::TelemetryConfig::kSendIntervalMs));
+  telem_handler_.reset(new TelemetryHandler(
+      *platform_, config::TelemetryConfig::kSendIntervalMs));
 
   return true;
 }
@@ -454,10 +459,12 @@ void VehicleControlUnified::UpdatePwmWithSlewRate(uint32_t now_ms,
     const uint32_t pwm_dt_ms = now_ms - last_pwm_update;
     last_pwm_update = now_ms;
 
-    applied_throttle = ApplySlewRate(commanded_throttle, applied_throttle,
-                                     config::SlewRateConfig::kThrottleMaxPerSec, pwm_dt_ms);
-    applied_steering = ApplySlewRate(commanded_steering, applied_steering,
-                                     config::SlewRateConfig::kSteeringMaxPerSec, pwm_dt_ms);
+    applied_throttle =
+        ApplySlewRate(commanded_throttle, applied_throttle,
+                      config::SlewRateConfig::kThrottleMaxPerSec, pwm_dt_ms);
+    applied_steering =
+        ApplySlewRate(commanded_steering, applied_steering,
+                      config::SlewRateConfig::kSteeringMaxPerSec, pwm_dt_ms);
 
     platform_->SetPwm(applied_throttle, applied_steering);
   }
@@ -545,7 +552,8 @@ bool VehicleControlUnified::SetStabilizationConfig(
     return false;
   }
 
-  // При смене режима автоматически применить предустановки PID для нового режима
+  // При смене режима автоматически применить предустановки PID для нового
+  // режима
   if (validated_config.mode != stab_config_.mode) {
     validated_config.ApplyModeDefaults();
     // Сброс ПИД при смене режима — очищает интегратор предыдущего режима,
