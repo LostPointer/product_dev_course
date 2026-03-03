@@ -2,6 +2,8 @@
 
 #include "stabilization_config.hpp"
 
+using namespace rc_vehicle;
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Default values
 // ═══════════════════════════════════════════════════════════════════════════
@@ -18,7 +20,7 @@ TEST(StabilizationConfigTest, DefaultEnabledIsFalse) {
 
 TEST(StabilizationConfigTest, DefaultModeIsNormal) {
   StabilizationConfig cfg{};
-  EXPECT_EQ(cfg.mode, 0u);
+  EXPECT_EQ(cfg.mode, DriveMode::Normal);
 }
 
 TEST(StabilizationConfigTest, DefaultMadgwickBeta) {
@@ -40,7 +42,7 @@ TEST(StabilizationConfigTest, DefaultPidGains) {
 
 TEST(StabilizationConfigTest, MagicNumberIsCorrect) {
   StabilizationConfig cfg{};
-  EXPECT_EQ(cfg.magic, 0x53544142u);
+  EXPECT_EQ(cfg.magic, kStabilizationConfigMagic);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -131,7 +133,7 @@ TEST(StabilizationConfigTest, ResetRestoresDefaults) {
   EXPECT_FLOAT_EQ(cfg.madgwick_beta, 0.1f);
   EXPECT_FLOAT_EQ(cfg.lpf_cutoff_hz, 30.0f);
   EXPECT_FLOAT_EQ(cfg.pid_kp, 0.1f);
-  EXPECT_EQ(cfg.magic, 0x53544142u);
+  EXPECT_EQ(cfg.magic, kStabilizationConfigMagic);
   EXPECT_TRUE(cfg.IsValid());
 }
 
@@ -204,9 +206,9 @@ TEST(StabilizationConfigTest, Clamp_FadeMsTooHigh_ClampedTo5000) {
 
 TEST(StabilizationConfigTest, Clamp_ModeTooHigh_ClampedToNormal) {
   StabilizationConfig cfg{};
-  cfg.mode = 5;
+  cfg.mode = static_cast<DriveMode>(5);
   cfg.Clamp();
-  EXPECT_EQ(cfg.mode, 0u);
+  EXPECT_EQ(cfg.mode, DriveMode::Normal);
 }
 
 TEST(StabilizationConfigTest, Clamp_ValidValues_Unchanged) {
@@ -215,13 +217,13 @@ TEST(StabilizationConfigTest, Clamp_ValidValues_Unchanged) {
   cfg.lpf_cutoff_hz = 50.0f;
   cfg.pid_max_correction = 0.3f;
   cfg.steer_to_yaw_rate_dps = 90.0f;
-  cfg.mode = 1;
+  cfg.mode = DriveMode::Sport;
   cfg.Clamp();
   EXPECT_FLOAT_EQ(cfg.madgwick_beta, 0.5f);
   EXPECT_FLOAT_EQ(cfg.lpf_cutoff_hz, 50.0f);
   EXPECT_FLOAT_EQ(cfg.pid_max_correction, 0.3f);
   EXPECT_FLOAT_EQ(cfg.steer_to_yaw_rate_dps, 90.0f);
-  EXPECT_EQ(cfg.mode, 1u);
+  EXPECT_EQ(cfg.mode, DriveMode::Sport);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -230,7 +232,7 @@ TEST(StabilizationConfigTest, Clamp_ValidValues_Unchanged) {
 
 TEST(StabilizationConfigTest, ApplyModeDefaults_Normal_SetsNormalGains) {
   StabilizationConfig cfg{};
-  cfg.mode = 0;
+  cfg.mode = DriveMode::Normal;
   cfg.ApplyModeDefaults();
   EXPECT_FLOAT_EQ(cfg.pid_kp, 0.10f);
   EXPECT_FLOAT_EQ(cfg.pid_ki, 0.00f);
@@ -241,7 +243,7 @@ TEST(StabilizationConfigTest, ApplyModeDefaults_Normal_SetsNormalGains) {
 
 TEST(StabilizationConfigTest, ApplyModeDefaults_Sport_SetsSportGains) {
   StabilizationConfig cfg{};
-  cfg.mode = 1;
+  cfg.mode = DriveMode::Sport;
   cfg.ApplyModeDefaults();
   EXPECT_FLOAT_EQ(cfg.pid_kp, 0.20f);
   EXPECT_FLOAT_EQ(cfg.pid_ki, 0.01f);
@@ -252,7 +254,7 @@ TEST(StabilizationConfigTest, ApplyModeDefaults_Sport_SetsSportGains) {
 
 TEST(StabilizationConfigTest, ApplyModeDefaults_Drift_SetsDriftGains) {
   StabilizationConfig cfg{};
-  cfg.mode = 2;
+  cfg.mode = DriveMode::Drift;
   cfg.ApplyModeDefaults();
   EXPECT_FLOAT_EQ(cfg.pid_kp, 0.05f);
   EXPECT_FLOAT_EQ(cfg.pid_ki, 0.00f);
@@ -263,7 +265,7 @@ TEST(StabilizationConfigTest, ApplyModeDefaults_Drift_SetsDriftGains) {
 
 TEST(StabilizationConfigTest, ApplyModeDefaults_UnknownMode_FallsToNormal) {
   StabilizationConfig cfg{};
-  cfg.mode = 99;
+  cfg.mode = static_cast<DriveMode>(99);
   cfg.ApplyModeDefaults();
   EXPECT_FLOAT_EQ(cfg.pid_kp, 0.10f);
   EXPECT_FLOAT_EQ(cfg.steer_to_yaw_rate_dps, 90.0f);
@@ -280,7 +282,7 @@ TEST(StabilizationConfigTest, ApplyModeDefaults_DoesNotChangeOtherFields) {
   cfg.madgwick_beta = beta;
   cfg.lpf_cutoff_hz = cutoff;
   cfg.fade_ms = fade;
-  cfg.mode = 1;
+  cfg.mode = DriveMode::Sport;
   cfg.ApplyModeDefaults();
 
   EXPECT_EQ(cfg.enabled, enabled);
@@ -290,7 +292,7 @@ TEST(StabilizationConfigTest, ApplyModeDefaults_DoesNotChangeOtherFields) {
 }
 
 TEST(StabilizationConfigTest, ApplyModeDefaults_ResultIsValid) {
-  for (uint8_t mode = 0; mode <= 2; ++mode) {
+  for (auto mode : {DriveMode::Normal, DriveMode::Sport, DriveMode::Drift}) {
     StabilizationConfig cfg{};
     cfg.mode = mode;
     cfg.ApplyModeDefaults();
@@ -304,11 +306,11 @@ TEST(StabilizationConfigTest, ApplyModeDefaults_ResultIsValid) {
 
 TEST(StabilizationConfigTest, SportGainsAreStrongerThanNormal) {
   StabilizationConfig normal{};
-  normal.mode = 0;
+  normal.mode = DriveMode::Normal;
   normal.ApplyModeDefaults();
 
   StabilizationConfig sport{};
-  sport.mode = 1;
+  sport.mode = DriveMode::Sport;
   sport.ApplyModeDefaults();
 
   EXPECT_GT(sport.pid_kp, normal.pid_kp);
@@ -318,11 +320,11 @@ TEST(StabilizationConfigTest, SportGainsAreStrongerThanNormal) {
 
 TEST(StabilizationConfigTest, DriftGainsAreSofterThanNormal) {
   StabilizationConfig normal{};
-  normal.mode = 0;
+  normal.mode = DriveMode::Normal;
   normal.ApplyModeDefaults();
 
   StabilizationConfig drift{};
-  drift.mode = 2;
+  drift.mode = DriveMode::Drift;
   drift.ApplyModeDefaults();
 
   EXPECT_LT(drift.pid_kp, normal.pid_kp);
@@ -392,7 +394,7 @@ TEST(StabilizationConfigTest, Clamp_PitchMaxCorrTooHigh_ClampedToHalf) {
 
 TEST(StabilizationConfigTest, ApplyModeDefaults_Normal_SetsNormalPitchComp) {
   StabilizationConfig cfg{};
-  cfg.mode = 0;
+  cfg.mode = DriveMode::Normal;
   cfg.ApplyModeDefaults();
   EXPECT_FLOAT_EQ(cfg.pitch_comp_gain, 0.01f);
   EXPECT_FLOAT_EQ(cfg.pitch_comp_max_correction, 0.25f);
@@ -400,7 +402,7 @@ TEST(StabilizationConfigTest, ApplyModeDefaults_Normal_SetsNormalPitchComp) {
 
 TEST(StabilizationConfigTest, ApplyModeDefaults_Sport_SetsSportPitchComp) {
   StabilizationConfig cfg{};
-  cfg.mode = 1;
+  cfg.mode = DriveMode::Sport;
   cfg.ApplyModeDefaults();
   EXPECT_FLOAT_EQ(cfg.pitch_comp_gain, 0.02f);
   EXPECT_FLOAT_EQ(cfg.pitch_comp_max_correction, 0.30f);
@@ -408,7 +410,7 @@ TEST(StabilizationConfigTest, ApplyModeDefaults_Sport_SetsSportPitchComp) {
 
 TEST(StabilizationConfigTest, ApplyModeDefaults_Drift_SetsDriftPitchComp) {
   StabilizationConfig cfg{};
-  cfg.mode = 2;
+  cfg.mode = DriveMode::Drift;
   cfg.ApplyModeDefaults();
   EXPECT_FLOAT_EQ(cfg.pitch_comp_gain, 0.005f);
   EXPECT_FLOAT_EQ(cfg.pitch_comp_max_correction, 0.15f);
@@ -417,18 +419,18 @@ TEST(StabilizationConfigTest, ApplyModeDefaults_Drift_SetsDriftPitchComp) {
 TEST(StabilizationConfigTest, ApplyModeDefaults_DoesNotChangePitchCompEnabled) {
   StabilizationConfig cfg{};
   cfg.pitch_comp_enabled = true;
-  cfg.mode = 0;
+  cfg.mode = DriveMode::Normal;
   cfg.ApplyModeDefaults();
   EXPECT_TRUE(cfg.pitch_comp_enabled);
 }
 
 TEST(StabilizationConfigTest, SportPitchGainStrongerThanNormal) {
   StabilizationConfig normal{};
-  normal.mode = 0;
+  normal.mode = DriveMode::Normal;
   normal.ApplyModeDefaults();
 
   StabilizationConfig sport{};
-  sport.mode = 1;
+  sport.mode = DriveMode::Sport;
   sport.ApplyModeDefaults();
 
   EXPECT_GT(sport.pitch_comp_gain, normal.pitch_comp_gain);
@@ -437,11 +439,11 @@ TEST(StabilizationConfigTest, SportPitchGainStrongerThanNormal) {
 
 TEST(StabilizationConfigTest, DriftPitchGainSofterThanNormal) {
   StabilizationConfig normal{};
-  normal.mode = 0;
+  normal.mode = DriveMode::Normal;
   normal.ApplyModeDefaults();
 
   StabilizationConfig drift{};
-  drift.mode = 2;
+  drift.mode = DriveMode::Drift;
   drift.ApplyModeDefaults();
 
   EXPECT_LT(drift.pitch_comp_gain, normal.pitch_comp_gain);
@@ -517,7 +519,7 @@ TEST(StabilizationConfigTest, Clamp_SlipMaxCorrTooHigh_ClampedTo1) {
 
 TEST(StabilizationConfigTest, ApplyModeDefaults_Normal_SlipPidDisabled) {
   StabilizationConfig cfg{};
-  cfg.mode = 0;
+  cfg.mode = DriveMode::Normal;
   cfg.ApplyModeDefaults();
   EXPECT_FLOAT_EQ(cfg.slip_kp, 0.0f);
   EXPECT_FLOAT_EQ(cfg.slip_max_correction, 0.0f);
@@ -526,7 +528,7 @@ TEST(StabilizationConfigTest, ApplyModeDefaults_Normal_SlipPidDisabled) {
 
 TEST(StabilizationConfigTest, ApplyModeDefaults_Drift_SlipPidEnabled) {
   StabilizationConfig cfg{};
-  cfg.mode = 2;
+  cfg.mode = DriveMode::Drift;
   cfg.ApplyModeDefaults();
   EXPECT_GT(cfg.slip_kp, 0.0f) << "Drift mode must have non-zero slip_kp";
   EXPECT_GT(cfg.slip_max_correction, 0.0f) << "Drift mode must allow slip correction";
@@ -535,11 +537,11 @@ TEST(StabilizationConfigTest, ApplyModeDefaults_Drift_SlipPidEnabled) {
 
 TEST(StabilizationConfigTest, ApplyModeDefaults_DriftSlipStrongerThanSport) {
   StabilizationConfig sport{};
-  sport.mode = 1;
+  sport.mode = DriveMode::Sport;
   sport.ApplyModeDefaults();
 
   StabilizationConfig drift{};
-  drift.mode = 2;
+  drift.mode = DriveMode::Drift;
   drift.ApplyModeDefaults();
 
   EXPECT_GT(drift.slip_kp, sport.slip_kp)
@@ -550,7 +552,7 @@ TEST(StabilizationConfigTest, ApplyModeDefaults_DriftSlipStrongerThanSport) {
 
 TEST(StabilizationConfigTest, ApplyModeDefaults_Sport_SlipPidLight) {
   StabilizationConfig cfg{};
-  cfg.mode = 1;
+  cfg.mode = DriveMode::Sport;
   cfg.ApplyModeDefaults();
   // Sport имеет небольшой slip kp (лёгкий ассист)
   EXPECT_GT(cfg.slip_kp, 0.0f);

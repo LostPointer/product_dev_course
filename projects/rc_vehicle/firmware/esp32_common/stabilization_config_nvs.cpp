@@ -6,6 +6,8 @@
 #include "nvs.h"
 #include "nvs_flash.h"
 
+using rc_vehicle::StabilizationConfig;
+
 static const char* TAG = "stab_cfg_nvs";
 static const char* NVS_NAMESPACE = "stab_cfg";
 static const char* NVS_KEY = "config";
@@ -32,7 +34,7 @@ esp_err_t Load(StabilizationConfig& config) {
                "Loaded stabilization config: enabled=%d beta=%.3f "
                "lpf_cutoff=%.1f Hz mode=%d",
                config.enabled, config.madgwick_beta, config.lpf_cutoff_hz,
-               config.mode);
+               static_cast<int>(config.mode));
       return ESP_OK;
     } else {
       ESP_LOGW(TAG, "Loaded config is invalid (size=%zu expected=%zu valid=%d)",
@@ -68,7 +70,7 @@ esp_err_t Save(const StabilizationConfig& config) {
                "Saved stabilization config: enabled=%d beta=%.3f "
                "lpf_cutoff=%.1f Hz mode=%d",
                config.enabled, config.madgwick_beta, config.lpf_cutoff_hz,
-               config.mode);
+               static_cast<int>(config.mode));
     } else {
       ESP_LOGE(TAG, "Failed to commit NVS: %s", esp_err_to_name(err));
     }

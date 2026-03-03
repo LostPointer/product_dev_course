@@ -20,7 +20,7 @@ void YawRateController::Init(const StabilizationConfig& cfg,
 void YawRateController::Process(float& steering, float stab_w, float mode_w,
                                 uint32_t dt_ms) noexcept {
   if (!cfg_ || !ekf_ || !imu_) return;
-  if (cfg_->mode == 2) return;        // Yaw PID отключён в drift mode
+  if (cfg_->mode == DriveMode::Drift) return;  // Yaw PID отключён в Drift mode
   if (stab_w <= 0.0f) return;
   if (!imu_->IsEnabled()) return;
   if (dt_ms == 0) return;
@@ -92,7 +92,7 @@ void SlipAngleController::Init(const StabilizationConfig& cfg,
 void SlipAngleController::Process(float& throttle, float stab_w, float mode_w,
                                   uint32_t dt_ms) noexcept {
   if (!cfg_ || !ekf_ || !imu_) return;
-  if (cfg_->mode != 2) return;        // Только в drift mode
+  if (cfg_->mode != DriveMode::Drift) return;  // Только в Drift mode
   if (stab_w <= 0.0f) return;
   if (!imu_->IsEnabled()) return;
   if (dt_ms == 0) return;
@@ -137,7 +137,7 @@ void OversteerGuard::Process(float& throttle, uint32_t dt_ms) noexcept {
        std::abs(slip_rate) > cfg_->oversteer_rate_thresh_deg_s);
 
   if (oversteer_active_ && cfg_->oversteer_throttle_reduction > 0.0f &&
-      cfg_->mode != 2) {
+      cfg_->mode != DriveMode::Drift) {
     throttle *= (1.0f - cfg_->oversteer_throttle_reduction);
   }
 }

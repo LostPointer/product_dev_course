@@ -16,14 +16,14 @@ namespace stab_config_nvs {
  * @param config Структура для заполнения
  * @return ESP_OK при успехе, ESP_ERR_NVS_NOT_FOUND если не найдено
  */
-esp_err_t Load(StabilizationConfig& config);
+esp_err_t Load(rc_vehicle::StabilizationConfig& config);
 
 /**
  * @brief Сохранить конфигурацию стабилизации в NVS
  * @param config Конфигурация для сохранения
  * @return ESP_OK при успехе
  */
-esp_err_t Save(const StabilizationConfig& config);
+esp_err_t Save(const rc_vehicle::StabilizationConfig& config);
 
 /**
  * @brief Удалить конфигурацию стабилизации из NVS

@@ -1208,11 +1208,11 @@ TEST(ControlLoopIntegrationTest, YawPid_ModePresets_SportHasHigherGain) {
   // Sport mode should produce stronger correction than normal mode
   // for the same error.
   StabilizationConfig normal{};
-  normal.mode = 0;
+  normal.mode = DriveMode::Normal;
   normal.ApplyModeDefaults();
 
   StabilizationConfig sport{};
-  sport.mode = 1;
+  sport.mode = DriveMode::Sport;
   sport.ApplyModeDefaults();
 
   PidController pid_normal({.kp = normal.pid_kp, .ki = normal.pid_ki,
@@ -1344,11 +1344,11 @@ TEST(ControlLoopIntegrationTest, PitchComp_ClampThrottleToNeg1) {
 TEST(ControlLoopIntegrationTest, PitchComp_ModeDefaultsGainDifference) {
   // Sport mode has higher gain than normal → stronger correction for same pitch
   StabilizationConfig normal{};
-  normal.mode = 0;
+  normal.mode = DriveMode::Normal;
   normal.ApplyModeDefaults();
 
   StabilizationConfig sport{};
-  sport.mode = 1;
+  sport.mode = DriveMode::Sport;
   sport.ApplyModeDefaults();
 
   const float pitch = 10.0f;
@@ -1586,11 +1586,11 @@ TEST(SlipPidIntegrationTest, ClampsThrottleToNeg1) {
 TEST(SlipPidIntegrationTest, DriftModeStrongerThanSportMode) {
   // Drift preset имеет более сильный slip kp, чем sport
   StabilizationConfig drift{};
-  drift.mode = 2;
+  drift.mode = DriveMode::Drift;
   drift.ApplyModeDefaults();
 
   StabilizationConfig sport{};
-  sport.mode = 1;
+  sport.mode = DriveMode::Sport;
   sport.ApplyModeDefaults();
 
   PidController pid_drift({.kp = drift.slip_kp, .ki = drift.slip_ki,
@@ -1642,13 +1642,13 @@ float RunYawPidTick(PidController& pid, float commanded_steering,
   return result;
 }
 
-// Применяет yaw PID только если mode != 2 (Phase 3.5: drift mode пропускает)
-float ApplyYawPidConditional(int mode, PidController& pid,
+// Применяет yaw PID только если mode != Drift (Phase 3.5: drift mode пропускает)
+float ApplyYawPidConditional(DriveMode mode, PidController& pid,
                               float commanded_steering,
                               float steer_to_yaw_rate_dps,
                               float omega_actual_dps, float stab_weight,
                               float dt_sec) {
-  if (mode == 2) return commanded_steering;  // drift mode: PID отключён
+  if (mode == DriveMode::Drift) return commanded_steering;  // drift mode: PID отключён
   return RunYawPidTick(pid, commanded_steering, steer_to_yaw_rate_dps,
                        omega_actual_dps, stab_weight, dt_sec);
 }
@@ -1662,7 +1662,7 @@ TEST(DriftModeControlTest, NormalMode_YawPidApplied) {
   const float steer = 0.5f;
   // omega_desired = 90 * 0.5 = 45 dps, omega_actual = 0 → error = +45 dps → кор-я
   const float result =
-      ApplyYawPidConditional(0, pid, steer, 90.0f, 0.0f, 1.0f, 0.002f);
+      ApplyYawPidConditional(DriveMode::Normal, pid, steer, 90.0f, 0.0f, 1.0f, 0.002f);
   EXPECT_GT(result, steer) << "Normal mode: positive yaw error -> steering increased";
 }
 
@@ -1672,7 +1672,7 @@ TEST(DriftModeControlTest, SportMode_YawPidApplied) {
                      .max_integral = 1.0f, .max_output = 0.4f});
   const float steer = 0.5f;
   const float result =
-      ApplyYawPidConditional(1, pid, steer, 120.0f, 0.0f, 1.0f, 0.002f);
+      ApplyYawPidConditional(DriveMode::Sport, pid, steer, 120.0f, 0.0f, 1.0f, 0.002f);
   EXPECT_GT(result, steer) << "Sport mode: yaw PID still active";
 }
 
@@ -1682,7 +1682,7 @@ TEST(DriftModeControlTest, DriftMode_YawPidNotApplied) {
                      .max_integral = 0.5f, .max_output = 0.3f});
   const float steer = 0.5f;
   const float result =
-      ApplyYawPidConditional(2, pid, steer, 90.0f, 0.0f, 1.0f, 0.002f);
+      ApplyYawPidConditional(DriveMode::Drift, pid, steer,90.0f, 0.0f, 1.0f, 0.002f);
   EXPECT_FLOAT_EQ(result, steer)
       << "Drift mode: yaw PID must not modify steering";
 }
@@ -1693,7 +1693,7 @@ TEST(DriftModeControlTest, DriftMode_YawPidNotApplied_HighGain) {
                      .max_integral = 100.0f, .max_output = 1.0f});
   const float steer = 0.3f;
   const float result =
-      ApplyYawPidConditional(2, pid, steer, 60.0f, 0.0f, 1.0f, 0.002f);
+      ApplyYawPidConditional(DriveMode::Drift, pid, steer,60.0f, 0.0f, 1.0f, 0.002f);
   EXPECT_FLOAT_EQ(result, steer)
       << "Drift mode: even with high gain, yaw PID skipped";
 }
@@ -1704,7 +1704,7 @@ TEST(DriftModeControlTest, DriftMode_NegativeSteering_Passthrough) {
                      .max_integral = 1.0f, .max_output = 0.4f});
   const float steer = -0.7f;
   const float result =
-      ApplyYawPidConditional(2, pid, steer, 60.0f, 100.0f, 1.0f, 0.002f);
+      ApplyYawPidConditional(DriveMode::Drift, pid, steer,60.0f, 100.0f, 1.0f, 0.002f);
   EXPECT_FLOAT_EQ(result, steer)
       << "Drift mode: negative steering passes through unchanged";
 }
@@ -1728,11 +1728,11 @@ TEST(DriftModeControlTest, ModeSwitch_NormalToDrift_PidReset) {
 // Preset drift mode имеет более мягкие параметры yaw PID, чем normal
 TEST(DriftModeControlTest, DriftMode_DefaultParams_SofterYaw) {
   StabilizationConfig normal_cfg{};
-  normal_cfg.mode = 0;
+  normal_cfg.mode = DriveMode::Normal;
   normal_cfg.ApplyModeDefaults();
 
   StabilizationConfig drift_cfg{};
-  drift_cfg.mode = 2;
+  drift_cfg.mode = DriveMode::Drift;
   drift_cfg.ApplyModeDefaults();
 
   EXPECT_LT(drift_cfg.pid_kp, normal_cfg.pid_kp)
@@ -1967,9 +1967,9 @@ TEST(OversteerDetectionTest, ThrottleReduction_Applied_WhenActive) {
   float throttle = 0.8f;
   const float reduction = 0.3f;
   const bool oversteer_active = true;
-  const int mode = 0;  // normal mode
+  const DriveMode mode = DriveMode::Normal;
 
-  if (oversteer_active && reduction > 0.0f && mode != 2) {
+  if (oversteer_active && reduction > 0.0f && mode != DriveMode::Drift) {
     throttle *= (1.0f - reduction);
   }
 
@@ -1981,9 +1981,9 @@ TEST(OversteerDetectionTest, ThrottleReduction_NotApplied_InDriftMode) {
   float throttle = 0.8f;
   const float reduction = 0.3f;
   const bool oversteer_active = true;
-  const int mode = 2;  // drift mode: не применяем снижение
+  const DriveMode mode = DriveMode::Drift;
 
-  if (oversteer_active && reduction > 0.0f && mode != 2) {
+  if (oversteer_active && reduction > 0.0f && mode != DriveMode::Drift) {
     throttle *= (1.0f - reduction);
   }
 

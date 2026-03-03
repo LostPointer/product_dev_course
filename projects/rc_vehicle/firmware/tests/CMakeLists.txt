@@ -36,6 +36,8 @@ set(COMMON_SOURCES
     ${COMMON_DIR}/pid_controller.cpp
     ${COMMON_DIR}/vehicle_ekf.cpp
     ${COMMON_DIR}/telemetry_log.cpp
+    ${COMMON_DIR}/stabilization_config.cpp
+    ${COMMON_DIR}/stabilization_pipeline.cpp
 )
 
 # Include directories
@@ -64,6 +66,7 @@ add_executable(unit_tests
     unit/test_lpf.cpp
     unit/test_pid.cpp
     unit/test_stabilization_config.cpp
+    unit/test_stabilization_pipeline.cpp
     unit/test_vehicle_ekf.cpp
     unit/test_telemetry_log.cpp
 )

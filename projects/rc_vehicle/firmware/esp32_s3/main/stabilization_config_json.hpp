@@ -12,7 +12,7 @@
  * @param cfg Конфигурация стабилизации
  * @return Новый cJSON-объект или nullptr при ошибке выделения памяти
  */
-cJSON* StabilizationConfigToJson(const StabilizationConfig& cfg);
+cJSON* StabilizationConfigToJson(const rc_vehicle::StabilizationConfig& cfg);
 
 /**
  * @brief Обновить поля StabilizationConfig из cJSON-объекта.
@@ -23,4 +23,5 @@ cJSON* StabilizationConfigToJson(const StabilizationConfig& cfg);
  * @param cfg  Конфигурация стабилизации (изменяется на месте)
  * @param json Входной JSON-объект (может содержать произвольное подмножество полей)
  */
-void StabilizationConfigFromJson(StabilizationConfig& cfg, const cJSON* json);
+void StabilizationConfigFromJson(rc_vehicle::StabilizationConfig& cfg,
+                                 const cJSON* json);

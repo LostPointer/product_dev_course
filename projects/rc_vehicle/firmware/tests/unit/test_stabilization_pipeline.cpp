@@ -8,9 +8,8 @@
 #include "stabilization_pipeline.hpp"
 #include "vehicle_ekf.hpp"
 
-using rc_vehicle::ImuCalibration;
+using rc_vehicle::DriveMode;
 using rc_vehicle::ImuHandler;
-using rc_vehicle::MadgwickFilter;
 using rc_vehicle::OversteerGuard;
 using rc_vehicle::PitchCompensator;
 using rc_vehicle::SlipAngleController;
@@ -53,7 +52,7 @@ class YawRateControllerTest : public ::testing::Test {
 
   void SetUp() override {
     cfg_.Reset();
-    cfg_.mode = 0;
+    cfg_.mode = DriveMode::Normal;
     cfg_.pid_kp = 0.1f;
     cfg_.pid_ki = 0.0f;
     cfg_.pid_kd = 0.0f;
@@ -73,18 +72,18 @@ TEST_F(YawRateControllerTest, NormalMode_CorrectsSteering) {
   EXPECT_LE(steering, 1.0f);
 }
 
-// Sport режим: yaw PID активен (mode=1)
+// Sport режим: yaw PID активен (mode=Sport)
 TEST_F(YawRateControllerTest, SportMode_CorrectsSteering) {
-  cfg_.mode = 1;
+  cfg_.mode = DriveMode::Sport;
   ctrl_.Init(cfg_, ekf_, &imu_);
   float steering = 0.5f;
   ctrl_.Process(steering, 1.0f, 1.0f, 2);
   EXPECT_GT(steering, 0.5f);
 }
 
-// Drift режим (mode=2): yaw PID не активен
+// Drift режим: yaw PID не активен
 TEST_F(YawRateControllerTest, DriftMode_NoChange) {
-  cfg_.mode = 2;
+  cfg_.mode = DriveMode::Drift;
   ctrl_.Init(cfg_, ekf_, &imu_);
   float steering = 0.5f;
   ctrl_.Process(steering, 1.0f, 1.0f, 2);
@@ -175,7 +174,8 @@ TEST_F(YawRateControllerTest, Reset_ClearsIntegral) {
   cfg_.pid_ki = 1.0f;
   ctrl_.Init(cfg_, ekf_, &imu_);
 
-  float steering = 0.0f;
+  // steering=0.5 → omega_desired=45 dps, omega_actual=0 → error=45 → integral ↑
+  float steering = 0.5f;
   ctrl_.Process(steering, 1.0f, 1.0f, 2);
   EXPECT_GT(ctrl_.GetPid().GetIntegral(), 0.0f);
 
@@ -277,8 +277,8 @@ TEST_F(PitchCompensatorTest, LargeGain_ClampsCorrection) {
 
 // std::clamp симметричен: отрицательный pitch → отрицательная коррекция
 TEST_F(PitchCompensatorTest, NegativePitch_SymmetricClamp) {
-  // Наклон носом вниз
-  float actual_pitch = ConvergeMadgwickPitch(madgwick_, /*target_deg=*/-5.0f);
+  // В конвенции Madgwick ax=sin(+5°) соответствует nose-down (отрицательный pitch)
+  float actual_pitch = ConvergeMadgwickPitch(madgwick_, /*target_deg=*/5.0f);
   ASSERT_NE(actual_pitch, 0.0f);
 
   cfg_.pitch_comp_gain = 1.0f;
@@ -309,7 +309,7 @@ class SlipAngleControllerTest : public ::testing::Test {
 
   void SetUp() override {
     cfg_.Reset();
-    cfg_.mode = 2;  // drift mode
+    cfg_.mode = DriveMode::Drift;
     cfg_.slip_target_deg = 15.0f;
     cfg_.slip_kp = 0.01f;
     cfg_.slip_ki = 0.0f;
@@ -324,18 +324,18 @@ class SlipAngleControllerTest : public ::testing::Test {
   }
 };
 
-// Normal mode (0): slip PID не активен
+// Normal mode: slip PID не активен
 TEST_F(SlipAngleControllerTest, NormalMode_NoChange) {
-  cfg_.mode = 0;
+  cfg_.mode = DriveMode::Normal;
   ctrl_.Init(cfg_, ekf_, &imu_);
   float throttle = 0.5f;
   ctrl_.Process(throttle, 1.0f, 1.0f, 2);
   EXPECT_FLOAT_EQ(throttle, 0.5f);
 }
 
-// Sport mode (1): slip PID не активен
+// Sport mode: slip PID не активен
 TEST_F(SlipAngleControllerTest, SportMode_NoChange) {
-  cfg_.mode = 1;
+  cfg_.mode = DriveMode::Sport;
   ctrl_.Init(cfg_, ekf_, &imu_);
   float throttle = 0.5f;
   ctrl_.Process(throttle, 1.0f, 1.0f, 2);
@@ -415,7 +415,7 @@ class OversteerGuardTest : public ::testing::Test {
     cfg_.oversteer_slip_thresh_deg = 20.0f;
     cfg_.oversteer_rate_thresh_deg_s = 50.0f;
     cfg_.oversteer_throttle_reduction = 0.3f;
-    cfg_.mode = 0;  // normal mode
+    cfg_.mode = DriveMode::Normal;
     imu_.SetEnabled(true);
     guard_.Init(cfg_, ekf_, &imu_);
   }
@@ -453,9 +453,9 @@ TEST_F(OversteerGuardTest, NormalMode_ReducesThrottle) {
   EXPECT_NEAR(throttle, 0.8f * (1.0f - 0.3f), 1e-5f);
 }
 
-// В drift mode (mode=2): oversteer не снижает газ (занос ожидаемый)
+// В Drift mode: oversteer не снижает газ (занос ожидаемый)
 TEST_F(OversteerGuardTest, DriftMode_NoThrottleReduction) {
-  cfg_.mode = 2;
+  cfg_.mode = DriveMode::Drift;
   guard_.Init(cfg_, ekf_, &imu_);
   ekf_.SetState(1.0f, std::tan(25.0f * static_cast<float>(M_PI) / 180.0f),
                 0.0f);

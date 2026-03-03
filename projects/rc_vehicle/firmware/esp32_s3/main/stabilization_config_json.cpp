@@ -1,5 +1,8 @@
 #include "stabilization_config_json.hpp"
 
+using rc_vehicle::DriveMode;
+using rc_vehicle::StabilizationConfig;
+
 cJSON* StabilizationConfigToJson(const StabilizationConfig& cfg) {
   cJSON* obj = cJSON_CreateObject();
   if (!obj) return nullptr;
@@ -9,7 +12,7 @@ cJSON* StabilizationConfigToJson(const StabilizationConfig& cfg) {
   cJSON_AddNumberToObject(obj, "madgwick_beta", cfg.madgwick_beta);
   cJSON_AddNumberToObject(obj, "lpf_cutoff_hz", cfg.lpf_cutoff_hz);
   cJSON_AddNumberToObject(obj, "imu_sample_rate_hz", cfg.imu_sample_rate_hz);
-  cJSON_AddNumberToObject(obj, "mode", cfg.mode);
+  cJSON_AddNumberToObject(obj, "mode", static_cast<uint8_t>(cfg.mode));
 
   // Yaw rate PID
   cJSON_AddNumberToObject(obj, "pid_kp", cfg.pid_kp);
@@ -62,10 +65,10 @@ void StabilizationConfigFromJson(StabilizationConfig& cfg, const cJSON* json) {
     if (item && cJSON_IsNumber(item))
       field = static_cast<float>(item->valuedouble);
   };
-  auto get_uint8 = [json](const char* key, uint8_t& field) {
+  auto get_drive_mode = [json](const char* key, DriveMode& field) {
     cJSON* item = cJSON_GetObjectItem(json, key);
     if (item && cJSON_IsNumber(item))
-      field = static_cast<uint8_t>(item->valueint);
+      field = static_cast<DriveMode>(item->valueint);
   };
   auto get_uint32 = [json](const char* key, uint32_t& field) {
     cJSON* item = cJSON_GetObjectItem(json, key);
@@ -78,7 +81,7 @@ void StabilizationConfigFromJson(StabilizationConfig& cfg, const cJSON* json) {
   get_float("madgwick_beta", cfg.madgwick_beta);
   get_float("lpf_cutoff_hz", cfg.lpf_cutoff_hz);
   get_float("imu_sample_rate_hz", cfg.imu_sample_rate_hz);
-  get_uint8("mode", cfg.mode);
+  get_drive_mode("mode", cfg.mode);
 
   // Yaw rate PID
   get_float("pid_kp", cfg.pid_kp);

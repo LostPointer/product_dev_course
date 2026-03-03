@@ -2,11 +2,24 @@
 
 #include <cstdint>
 
+namespace rc_vehicle {
+
+/** Magic number для проверки валидности NVS-записи ('STAB') */
+static constexpr uint32_t kStabilizationConfigMagic = 0x53544142;
+
+/**
+ * @brief Режим стабилизации
+ * 0 = Normal  — базовый контроль рыскания
+ * 1 = Sport   — агрессивные параметры, высокая отзывчивость
+ * 2 = Drift   — мягкий контроль, управление заносом
+ */
+enum class DriveMode : uint8_t { Normal = 0, Sport = 1, Drift = 2 };
+
 /**
  * @brief Конфигурация системы стабилизации
  *
  * Параметры фильтрации и режимов стабилизации, сохраняемые в NVS.
- * Используется для настройки Madgwick AHRS и LPF Butterworth через WebSocket
+ * Используется для настройки Madgwick AHRS и LPF Баттерворта через WebSocket
  * API.
  */
 struct StabilizationConfig {
@@ -38,12 +51,12 @@ struct StabilizationConfig {
   float imu_sample_rate_hz{500.0f};
 
   /**
-   * Режим стабилизации (для будущего расширения).
-   * 0 = normal (базовый контроль рыскания)
-   * 1 = sport (более агрессивные параметры)
-   * 2 = drift (управление дрифтом)
+   * Текущий режим стабилизации.
+   * Normal (0) = базовый контроль рыскания
+   * Sport (1)  = более агрессивные параметры
+   * Drift (2)  = управление дрифтом
    */
-  uint8_t mode{0};
+  DriveMode mode{DriveMode::Normal};
 
   // ── ПИД-регулятор yaw rate ──────────────────────────────────────────────
 
@@ -105,12 +118,12 @@ struct StabilizationConfig {
    */
   float pitch_comp_max_correction{0.25f};
 
-  // ── Slip angle PID (управление дрифтом, mode=2) ─────────────────────────
+  // ── Slip angle PID (управление дрифтом, mode=Drift) ─────────────────────
 
   /**
    * Целевой угол заноса (градусы).
    * Диапазон: -45..45, по умолчанию 0 (нет заноса).
-   * Активен только в drift mode (mode=2).
+   * Активен только в Drift mode.
    */
   float slip_target_deg{0.0f};
 
@@ -184,183 +197,55 @@ struct StabilizationConfig {
   /**
    * Снижение газа при срабатывании oversteer: throttle *= (1 - reduction).
    * 0 = не снижать, 1 = полный стоп.
-   * Диапазон: 0–1. Активно только в режимах normal/sport (не drift).
+   * Диапазон: 0–1. Активно только в режимах Normal/Sport (не Drift).
    */
   float oversteer_throttle_reduction{0.0f};
 
+  /** Версия структуры для NVS-миграции */
+  uint8_t version{1};
+
   /** Валидность конфигурации (magic number для проверки NVS) */
-  uint32_t magic{0x53544142};  // 'STAB'
+  uint32_t magic{kStabilizationConfigMagic};
 
   /**
    * @brief Проверить валидность конфигурации
    * @return true если конфигурация валидна
    */
-  [[nodiscard]] bool IsValid() const noexcept {
-    return magic == 0x53544142 && madgwick_beta > 0.0f &&
-           madgwick_beta <= 1.0f && lpf_cutoff_hz >= 5.0f &&
-           lpf_cutoff_hz <= 100.0f && imu_sample_rate_hz > 0.0f &&
-           pid_kp >= 0.0f && pid_ki >= 0.0f && pid_kd >= 0.0f &&
-           pid_max_correction > 0.0f && steer_to_yaw_rate_dps > 0.0f;
-  }
+  [[nodiscard]] bool IsValid() const noexcept;
 
   /**
    * @brief Сбросить конфигурацию к значениям по умолчанию
    */
-  void Reset() noexcept {
-    enabled = false;
-    madgwick_beta = 0.1f;
-    lpf_cutoff_hz = 30.0f;
-    imu_sample_rate_hz = 500.0f;
-    mode = 0;
-    pid_kp = 0.1f;
-    pid_ki = 0.0f;
-    pid_kd = 0.005f;
-    pid_max_integral = 0.5f;
-    pid_max_correction = 0.3f;
-    steer_to_yaw_rate_dps = 90.0f;
-    fade_ms = 500;
-    pitch_comp_enabled = false;
-    pitch_comp_gain = 0.01f;
-    pitch_comp_max_correction = 0.25f;
-    slip_target_deg = 0.0f;
-    slip_kp = 0.0f;
-    slip_ki = 0.0f;
-    slip_kd = 0.0f;
-    slip_max_integral = 5.0f;
-    slip_max_correction = 0.0f;
-    adaptive_pid_enabled = false;
-    adaptive_speed_ref_ms = 1.5f;
-    adaptive_scale_min = 0.5f;
-    adaptive_scale_max = 2.0f;
-    oversteer_warn_enabled = false;
-    oversteer_slip_thresh_deg = 20.0f;
-    oversteer_rate_thresh_deg_s = 50.0f;
-    oversteer_throttle_reduction = 0.0f;
-    magic = 0x53544142;
-  }
+  void Reset() noexcept;
 
   /**
    * @brief Применить предустановки PID для текущего режима (mode).
    *
    * Устанавливает pid_kp/ki/kd, pid_max_correction, steer_to_yaw_rate_dps
    * в зависимости от mode:
-   *   0 = normal  — консервативный контроль рыскания
-   *   1 = sport   — агрессивные параметры, высокая отзывчивость
-   *   2 = drift   — мягкий контроль, допускает занос
+   *   Normal — консервативный контроль рыскания
+   *   Sport  — агрессивные параметры, высокая отзывчивость
+   *   Drift  — мягкий контроль, допускает занос
    *
    * Не изменяет: enabled, madgwick_beta, lpf_cutoff_hz, fade_ms, magic.
    */
-  void ApplyModeDefaults() noexcept {
-    switch (mode) {
-      case 1:  // Sport: быстрый отклик, лёгкий slip assist
-        pid_kp = 0.20f;
-        pid_ki = 0.01f;
-        pid_kd = 0.010f;
-        pid_max_integral = 1.0f;
-        pid_max_correction = 0.40f;
-        steer_to_yaw_rate_dps = 120.0f;
-        pitch_comp_gain = 0.02f;
-        pitch_comp_max_correction = 0.30f;
-        slip_target_deg = 5.0f;
-        slip_kp = 0.003f;
-        slip_ki = 0.0f;
-        slip_kd = 0.001f;
-        slip_max_integral = 5.0f;
-        slip_max_correction = 0.15f;
-        break;
-      case 2:  // Drift: мягкая коррекция yaw, slip angle PID включён
-        pid_kp = 0.05f;
-        pid_ki = 0.00f;
-        pid_kd = 0.002f;
-        pid_max_integral = 0.3f;
-        pid_max_correction = 0.20f;
-        steer_to_yaw_rate_dps = 60.0f;
-        pitch_comp_gain = 0.005f;
-        pitch_comp_max_correction = 0.15f;
-        slip_target_deg = 15.0f;
-        slip_kp = 0.008f;
-        slip_ki = 0.0f;
-        slip_kd = 0.002f;
-        slip_max_integral = 5.0f;
-        slip_max_correction = 0.25f;
-        break;
-      default:  // Normal (0): базовые параметры, slip PID выключен
-        pid_kp = 0.10f;
-        pid_ki = 0.00f;
-        pid_kd = 0.005f;
-        pid_max_integral = 0.5f;
-        pid_max_correction = 0.30f;
-        steer_to_yaw_rate_dps = 90.0f;
-        pitch_comp_gain = 0.01f;
-        pitch_comp_max_correction = 0.25f;
-        slip_target_deg = 0.0f;
-        slip_kp = 0.0f;
-        slip_ki = 0.0f;
-        slip_kd = 0.0f;
-        slip_max_integral = 5.0f;
-        slip_max_correction = 0.0f;
-        break;
-    }
-  }
+  void ApplyModeDefaults() noexcept;
 
   /**
    * @brief Применить ограничения к параметрам
    */
-  void Clamp() noexcept {
-    if (madgwick_beta < 0.01f) madgwick_beta = 0.01f;
-    if (madgwick_beta > 1.0f) madgwick_beta = 1.0f;
-    if (lpf_cutoff_hz < 5.0f) lpf_cutoff_hz = 5.0f;
-    if (lpf_cutoff_hz > 100.0f) lpf_cutoff_hz = 100.0f;
-    if (imu_sample_rate_hz < 100.0f) imu_sample_rate_hz = 100.0f;
-    if (mode > 2) mode = 0;
-    if (pid_kp < 0.0f) pid_kp = 0.0f;
-    if (pid_ki < 0.0f) pid_ki = 0.0f;
-    if (pid_kd < 0.0f) pid_kd = 0.0f;
-    if (pid_max_integral < 0.0f) pid_max_integral = 0.0f;
-    if (pid_max_correction < 0.0f) pid_max_correction = 0.0f;
-    if (pid_max_correction > 1.0f) pid_max_correction = 1.0f;
-    if (steer_to_yaw_rate_dps < 10.0f) steer_to_yaw_rate_dps = 10.0f;
-    if (steer_to_yaw_rate_dps > 360.0f) steer_to_yaw_rate_dps = 360.0f;
-    if (fade_ms > 5000) fade_ms = 5000;
-    if (pitch_comp_gain < 0.0f) pitch_comp_gain = 0.0f;
-    if (pitch_comp_gain > 0.05f) pitch_comp_gain = 0.05f;
-    if (pitch_comp_max_correction < 0.0f) pitch_comp_max_correction = 0.0f;
-    if (pitch_comp_max_correction > 0.5f) pitch_comp_max_correction = 0.5f;
-    if (slip_target_deg < -45.0f) slip_target_deg = -45.0f;
-    if (slip_target_deg > 45.0f) slip_target_deg = 45.0f;
-    if (slip_kp < 0.0f) slip_kp = 0.0f;
-    if (slip_kp > 1.0f) slip_kp = 1.0f;
-    if (slip_ki < 0.0f) slip_ki = 0.0f;
-    if (slip_kd < 0.0f) slip_kd = 0.0f;
-    if (slip_max_integral < 0.0f) slip_max_integral = 0.0f;
-    if (slip_max_correction < 0.0f) slip_max_correction = 0.0f;
-    if (slip_max_correction > 1.0f) slip_max_correction = 1.0f;
-    // Adaptive PID
-    if (adaptive_speed_ref_ms < 0.1f) adaptive_speed_ref_ms = 0.1f;
-    if (adaptive_speed_ref_ms > 10.0f) adaptive_speed_ref_ms = 10.0f;
-    if (adaptive_scale_min < 0.1f) adaptive_scale_min = 0.1f;
-    if (adaptive_scale_min > 1.0f) adaptive_scale_min = 1.0f;
-    if (adaptive_scale_max < 1.0f) adaptive_scale_max = 1.0f;
-    if (adaptive_scale_max > 5.0f) adaptive_scale_max = 5.0f;
-    // Oversteer warning
-    if (oversteer_slip_thresh_deg < 5.0f) oversteer_slip_thresh_deg = 5.0f;
-    if (oversteer_slip_thresh_deg > 45.0f) oversteer_slip_thresh_deg = 45.0f;
-    if (oversteer_rate_thresh_deg_s < 10.0f) oversteer_rate_thresh_deg_s = 10.0f;
-    if (oversteer_rate_thresh_deg_s > 500.0f) oversteer_rate_thresh_deg_s = 500.0f;
-    if (oversteer_throttle_reduction < 0.0f) oversteer_throttle_reduction = 0.0f;
-    if (oversteer_throttle_reduction > 1.0f) oversteer_throttle_reduction = 1.0f;
-  }
+  void Clamp() noexcept;
 };
 
-/**
- * @brief Конфигурация стабилизации по умолчанию
- */
-namespace rc_vehicle::config {
+namespace config {
+/** @brief Значения конфигурации стабилизации по умолчанию */
 struct StabilizationDefaults {
   static constexpr bool kEnabled = false;
   static constexpr float kMadgwickBeta = 0.1f;
   static constexpr float kLpfCutoffHz = 30.0f;
   static constexpr float kImuSampleRateHz = 500.0f;
-  static constexpr uint8_t kMode = 0;
+  static constexpr DriveMode kMode = DriveMode::Normal;
 };
-}  // namespace rc_vehicle::config
+}  // namespace config
+
+}  // namespace rc_vehicle
