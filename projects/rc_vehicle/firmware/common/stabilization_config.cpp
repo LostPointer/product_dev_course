@@ -1,5 +1,6 @@
 #include "stabilization_config.hpp"
 
+#include <algorithm>
 #include <cstdint>
 
 namespace rc_vehicle {
@@ -100,49 +101,36 @@ void StabilizationConfig::ApplyModeDefaults() noexcept {
 }
 
 void StabilizationConfig::Clamp() noexcept {
-  if (madgwick_beta < 0.01f) madgwick_beta = 0.01f;
-  if (madgwick_beta > 1.0f) madgwick_beta = 1.0f;
-  if (lpf_cutoff_hz < 5.0f) lpf_cutoff_hz = 5.0f;
-  if (lpf_cutoff_hz > 100.0f) lpf_cutoff_hz = 100.0f;
+  madgwick_beta = std::clamp(madgwick_beta, 0.01f, 1.0f);
+  lpf_cutoff_hz = std::clamp(lpf_cutoff_hz, 5.0f, 100.0f);
   if (imu_sample_rate_hz < 100.0f) imu_sample_rate_hz = 100.0f;
   if (static_cast<uint8_t>(mode) > 2) mode = DriveMode::Normal;
   if (pid_kp < 0.0f) pid_kp = 0.0f;
   if (pid_ki < 0.0f) pid_ki = 0.0f;
   if (pid_kd < 0.0f) pid_kd = 0.0f;
   if (pid_max_integral < 0.0f) pid_max_integral = 0.0f;
-  if (pid_max_correction < 0.0f) pid_max_correction = 0.0f;
-  if (pid_max_correction > 1.0f) pid_max_correction = 1.0f;
-  if (steer_to_yaw_rate_dps < 10.0f) steer_to_yaw_rate_dps = 10.0f;
-  if (steer_to_yaw_rate_dps > 360.0f) steer_to_yaw_rate_dps = 360.0f;
+  pid_max_correction = std::clamp(pid_max_correction, 0.0f, 1.0f);
+  steer_to_yaw_rate_dps = std::clamp(steer_to_yaw_rate_dps, 10.0f, 360.0f);
   if (fade_ms > 5000) fade_ms = 5000;
-  if (pitch_comp_gain < 0.0f) pitch_comp_gain = 0.0f;
-  if (pitch_comp_gain > 0.05f) pitch_comp_gain = 0.05f;
-  if (pitch_comp_max_correction < 0.0f) pitch_comp_max_correction = 0.0f;
-  if (pitch_comp_max_correction > 0.5f) pitch_comp_max_correction = 0.5f;
-  if (slip_target_deg < -45.0f) slip_target_deg = -45.0f;
-  if (slip_target_deg > 45.0f) slip_target_deg = 45.0f;
+  pitch_comp_gain = std::clamp(pitch_comp_gain, 0.0f, 0.05f);
+  pitch_comp_max_correction = std::clamp(pitch_comp_max_correction, 0.0f, 0.5f);
+  slip_target_deg = std::clamp(slip_target_deg, -45.0f, 45.0f);
   if (slip_kp < 0.0f) slip_kp = 0.0f;
   if (slip_kp > 1.0f) slip_kp = 1.0f;
   if (slip_ki < 0.0f) slip_ki = 0.0f;
   if (slip_kd < 0.0f) slip_kd = 0.0f;
   if (slip_max_integral < 0.0f) slip_max_integral = 0.0f;
-  if (slip_max_correction < 0.0f) slip_max_correction = 0.0f;
-  if (slip_max_correction > 1.0f) slip_max_correction = 1.0f;
+  slip_max_correction = std::clamp(slip_max_correction, 0.0f, 1.0f);
   // Adaptive PID
-  if (adaptive_speed_ref_ms < 0.1f) adaptive_speed_ref_ms = 0.1f;
-  if (adaptive_speed_ref_ms > 10.0f) adaptive_speed_ref_ms = 10.0f;
-  if (adaptive_scale_min < 0.1f) adaptive_scale_min = 0.1f;
-  if (adaptive_scale_min > 1.0f) adaptive_scale_min = 1.0f;
-  if (adaptive_scale_max < 1.0f) adaptive_scale_max = 1.0f;
-  if (adaptive_scale_max > 5.0f) adaptive_scale_max = 5.0f;
+  adaptive_speed_ref_ms = std::clamp(adaptive_speed_ref_ms, 0.1f, 10.0f);
+  adaptive_scale_min = std::clamp(adaptive_scale_min, 0.1f, 1.0f);
+  adaptive_scale_max = std::clamp(adaptive_scale_max, 1.0f, 5.0f);
   // Oversteer warning
-  if (oversteer_slip_thresh_deg < 5.0f) oversteer_slip_thresh_deg = 5.0f;
-  if (oversteer_slip_thresh_deg > 45.0f) oversteer_slip_thresh_deg = 45.0f;
-  if (oversteer_rate_thresh_deg_s < 10.0f) oversteer_rate_thresh_deg_s = 10.0f;
-  if (oversteer_rate_thresh_deg_s > 500.0f)
-    oversteer_rate_thresh_deg_s = 500.0f;
-  if (oversteer_throttle_reduction < 0.0f) oversteer_throttle_reduction = 0.0f;
-  if (oversteer_throttle_reduction > 1.0f) oversteer_throttle_reduction = 1.0f;
+  oversteer_slip_thresh_deg = std::clamp(oversteer_slip_thresh_deg, 5.0f, 45.0f);
+  oversteer_rate_thresh_deg_s =
+      std::clamp(oversteer_rate_thresh_deg_s, 10.0f, 500.0f);
+  oversteer_throttle_reduction =
+      std::clamp(oversteer_throttle_reduction, 0.0f, 1.0f);
 }
 
 }  // namespace rc_vehicle

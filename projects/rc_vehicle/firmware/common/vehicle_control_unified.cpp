@@ -160,6 +160,7 @@ void VehicleControlUnified::ControlTaskLoop() {
       ekf_.Reset();
       stab_weight_ = 0.0f;           // Плавный re-fade при восстановлении управления
       mode_transition_weight_ = 1.0f;  // Нет незавершённого перехода после failsafe
+      last_log_ms_ = 0;              // Сброс таймера лога (Fix #7)
       platform_->SetPwmNeutral();
     }
 
