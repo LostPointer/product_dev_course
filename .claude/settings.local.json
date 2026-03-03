@@ -48,7 +48,10 @@
       "Bash(cd /home/lostpointer/product_dev_course/projects/frontend/apps/experiment-portal && npm run type-check 2>&1)",
       "Bash(cd /home/lostpointer/product_dev_course/projects/frontend/apps/experiment-portal && npx tsc --noEmit 2>&1)",
       "Bash(npm run test -- --run 2>&1)",
-      "Bash(cd /home/lostpointer/product_dev_course/projects/backend/services/auth-service && poetry run pytest tests/test_api_auth.py -v 2>&1)"
+      "Bash(cd /home/lostpointer/product_dev_course/projects/backend/services/auth-service && poetry run pytest tests/test_api_auth.py -v 2>&1)",
+      "Bash(cd /home/lostpointer/product_dev_course/projects/backend/services/auth-service && poetry run python -c \"from auth_service.services.password import verify_password; print\\(verify_password\\('admin123', '\\\\$2b\\\\$12\\\\$0QfCvOcgNkygw/I79ieV5eOIwAjWXUjdFUr/QvRgDMewN1OfENrmG'\\)\\)\")",
+      "Bash(poetry run pytest tests/test_api_auth.py -v 2>&1)",
+      "Bash(git add \\\\\n  projects/backend/services/auth-service/migrations/004_password_reset.sql \\\\\n  projects/backend/services/auth-service/src/auth_service/repositories/password_reset.py \\\\\n  projects/backend/services/auth-service/src/auth_service/api/routes/auth.py \\\\\n  projects/backend/services/auth-service/src/auth_service/domain/dto.py \\\\\n  projects/backend/services/auth-service/src/auth_service/domain/models.py \\\\\n  projects/backend/services/auth-service/src/auth_service/repositories/users.py \\\\\n  projects/backend/services/auth-service/src/auth_service/services/auth.py \\\\\n  projects/backend/services/auth-service/tests/schemas/postgresql/auth_service.sql \\\\\n  projects/backend/services/auth-service/tests/test_api_auth.py)"
     ]
   }
 }

@@ -1,6 +1,7 @@
 idf_component_register(
     SRCS
         "main.cpp"
+        "stabilization_config_json.cpp"
         "../../esp32_common/wifi_ap.cpp"
         "../../esp32_common/http_server.cpp"
         "../../esp32_common/websocket_server.cpp"

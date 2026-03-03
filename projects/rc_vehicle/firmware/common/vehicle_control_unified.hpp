@@ -6,8 +6,8 @@
 #include "control_components.hpp"
 #include "imu_calibration.hpp"
 #include "madgwick_filter.hpp"
-#include "pid_controller.hpp"
 #include "stabilization_config.hpp"
+#include "stabilization_pipeline.hpp"
 #include "telemetry_log.hpp"
 #include "vehicle_control_platform.hpp"
 #include "vehicle_ekf.hpp"
@@ -204,11 +204,11 @@ class VehicleControlUnified {
   MadgwickFilter madgwick_;
   StabilizationConfig stab_config_;
 
-  // ПИД-регулятор yaw rate
-  PidController yaw_pid_;
-
-  // ПИД-регулятор slip angle (drift mode, mode=2)
-  PidController slip_pid_;
+  // Стратегии стабилизации (pipeline)
+  YawRateController yaw_ctrl_;
+  PitchCompensator pitch_ctrl_;
+  SlipAngleController slip_ctrl_;
+  OversteerGuard oversteer_guard_;
 
   // EKF оценки динамического состояния (vx, vy, r → slip angle)
   VehicleEkf ekf_;
@@ -232,9 +232,8 @@ class VehicleControlUnified {
   // Применяется как множитель к обоим PID (yaw и slip).
   float mode_transition_weight_{1.0f};
 
-  // Oversteer prediction (Phase 4.2)
-  float prev_slip_deg_{0.0f};  // Предыдущий угол заноса для оценки скорости изменения
-  bool oversteer_active_{false};  // Текущий флаг срабатывания oversteer
+  // Fix #7 (REFACTORING.md): static local → member (сбрасывается в failsafe)
+  uint32_t last_log_ms_{0};
 
   // PSRAM кольцевой буфер телеметрии (Phase 4.3)
   TelemetryLog telem_log_;
