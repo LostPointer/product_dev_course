@@ -54,5 +54,3 @@
 #define SLEW_RATE_THROTTLE_MAX_PER_SEC 0.5f
 #define SLEW_RATE_STEERING_MAX_PER_SEC 1.0f
 
-// Общий конфиг (переиспользуемые таймауты/дефолты).
-#include "../../common/config_common.hpp"

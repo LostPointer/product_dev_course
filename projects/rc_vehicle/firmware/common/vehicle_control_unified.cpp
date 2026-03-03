@@ -4,28 +4,11 @@
 #include <cmath>
 #include <cstdio>
 
+#include "config.hpp"
 #include "rc_vehicle_common.hpp"
 #include "slew_rate.hpp"
 
 namespace rc_vehicle {
-
-// ═════════════════════════════════════════════════════════════════════════
-// Константы (будут перенесены в config_common.hpp позже)
-// ═════════════════════════════════════════════════════════════════════════
-
-namespace {
-constexpr uint32_t CONTROL_LOOP_PERIOD_MS = 2;   // 500 Hz
-constexpr uint32_t PWM_UPDATE_INTERVAL_MS = 20;  // 50 Hz
-constexpr uint32_t RC_IN_POLL_INTERVAL_MS = 20;  // 50 Hz
-constexpr uint32_t IMU_READ_INTERVAL_MS = 2;     // 500 Hz
-constexpr uint32_t TELEM_SEND_INTERVAL_MS = 50;  // 20 Hz
-constexpr uint32_t WIFI_CMD_TIMEOUT_MS = 500;
-
-constexpr float SLEW_RATE_THROTTLE_MAX_PER_SEC = 0.5f;
-constexpr float SLEW_RATE_STEERING_MAX_PER_SEC = 1.0f;
-
-constexpr uint32_t DIAG_INTERVAL_MS = 5000;  // Диагностика каждые 5 секунд
-}  // namespace
 
 // ═════════════════════════════════════════════════════════════════════════
 // VehicleControlUnified Implementation
@@ -67,7 +50,7 @@ void VehicleControlUnified::ControlTaskLoop() {
   uint32_t diag_start_ms = platform_->GetTimeMs();
 
   while (true) {
-    platform_->DelayUntilNextTick(CONTROL_LOOP_PERIOD_MS);
+    platform_->DelayUntilNextTick(config::ControlLoopConfig::kPeriodMs);
     const uint32_t now = platform_->GetTimeMs();
     const uint32_t dt_ms = now - last_loop;
     last_loop = now;
@@ -201,7 +184,7 @@ void VehicleControlUnified::ControlTaskLoop() {
     // ─────────────────────────────────────────────────────────────────────
 
     if (imu_handler_ && imu_handler_->IsEnabled()) {
-      if (now - last_log_ms_ >= TELEM_SEND_INTERVAL_MS) {
+      if (now - last_log_ms_ >= config::TelemetryConfig::kSendIntervalMs) {
         TelemetryLogFrame frame;
         frame.ts_ms = now;
         const auto& d = imu_handler_->GetData();
@@ -347,14 +330,14 @@ PlatformError VehicleControlUnified::Init() {
 
 bool VehicleControlUnified::InitializeComponents() {
   if (rc_enabled_) {
-    rc_handler_.reset(new RcInputHandler(*platform_, RC_IN_POLL_INTERVAL_MS));
+    rc_handler_.reset(new RcInputHandler(*platform_, config::RcInputConfig::kPollIntervalMs));
   }
 
-  wifi_handler_.reset(new WifiCommandHandler(*platform_, WIFI_CMD_TIMEOUT_MS));
+  wifi_handler_.reset(new WifiCommandHandler(*platform_, config::WifiConfig::kCommandTimeoutMs));
 
   if (imu_enabled_) {
     imu_handler_.reset(new ImuHandler(*platform_, imu_calib_, madgwick_,
-                                      IMU_READ_INTERVAL_MS));
+                                      config::ImuConfig::kReadIntervalMs));
     imu_handler_->SetEnabled(true);
     // Применить LPF cutoff из конфигурации
     imu_handler_->SetLpfCutoff(stab_config_.lpf_cutoff_hz);
@@ -379,7 +362,7 @@ bool VehicleControlUnified::InitializeComponents() {
       *platform_, static_cast<const RcInputHandler&>(*rc_handler_),
       static_cast<const WifiCommandHandler&>(*wifi_handler_),
       static_cast<const ImuHandler&>(*imu_handler_), imu_calib_, madgwick_,
-      TELEM_SEND_INTERVAL_MS));
+      config::TelemetryConfig::kSendIntervalMs));
   telem_handler_->SetEkf(&ekf_);
   telem_handler_->SetOversteerWarn(oversteer_guard_.GetActivePtr());
 
@@ -447,14 +430,14 @@ void VehicleControlUnified::UpdatePwmWithSlewRate(uint32_t now_ms,
                                                   float& applied_throttle,
                                                   float& applied_steering,
                                                   uint32_t& last_pwm_update) {
-  if (now_ms - last_pwm_update >= PWM_UPDATE_INTERVAL_MS) {
+  if (now_ms - last_pwm_update >= config::PwmConfig::kUpdateIntervalMs) {
     const uint32_t pwm_dt_ms = now_ms - last_pwm_update;
     last_pwm_update = now_ms;
 
     applied_throttle = ApplySlewRate(commanded_throttle, applied_throttle,
-                                     SLEW_RATE_THROTTLE_MAX_PER_SEC, pwm_dt_ms);
+                                     config::SlewRateConfig::kThrottleMaxPerSec, pwm_dt_ms);
     applied_steering = ApplySlewRate(commanded_steering, applied_steering,
-                                     SLEW_RATE_STEERING_MAX_PER_SEC, pwm_dt_ms);
+                                     config::SlewRateConfig::kSteeringMaxPerSec, pwm_dt_ms);
 
     platform_->SetPwm(applied_throttle, applied_steering);
   }
@@ -464,7 +447,7 @@ void VehicleControlUnified::PrintDiagnostics(uint32_t now_ms,
                                              uint32_t& diag_loop_count,
                                              uint32_t& diag_start_ms) {
   const uint32_t elapsed = now_ms - diag_start_ms;
-  if (elapsed >= DIAG_INTERVAL_MS) {
+  if (elapsed >= config::DiagnosticsConfig::kIntervalMs) {
     const uint32_t loop_hz =
         (elapsed > 0) ? (diag_loop_count * 1000u / elapsed) : 0u;
 

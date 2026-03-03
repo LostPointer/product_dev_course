@@ -63,9 +63,16 @@ struct FailsafeConfig {
  */
 struct SlewRateConfig {
   static constexpr float kThrottleMaxPerSec =
-      2.0f;  ///< Макс. изменение газа в секунду
+      0.5f;  ///< Макс. изменение газа в секунду
   static constexpr float kSteeringMaxPerSec =
-      4.0f;  ///< Макс. изменение руля в секунду
+      1.0f;  ///< Макс. изменение руля в секунду
+};
+
+/**
+ * @brief Конфигурация диагностического вывода
+ */
+struct DiagnosticsConfig {
+  static constexpr uint32_t kIntervalMs = 5000;  ///< Интервал вывода диагностики
 };
 
 /**
