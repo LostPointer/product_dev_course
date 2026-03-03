@@ -176,8 +176,33 @@ void VehicleControlUnified::ControlTaskLoop() {
     // ─────────────────────────────────────────────────────────────────────
 
     if (telem_handler_) {
-      telem_handler_->SetActuatorValues(applied_throttle, applied_steering);
-      telem_handler_->Update(now, dt_ms);
+      TelemetrySnapshot snap;
+      snap.rc_ok = rc_handler_ && rc_handler_->IsActive();
+      snap.wifi_ok = wifi_handler_ && wifi_handler_->IsActive();
+      snap.throttle = applied_throttle;
+      snap.steering = applied_steering;
+      if (imu_handler_ && imu_handler_->IsEnabled()) {
+        snap.imu_enabled = true;
+        snap.imu_data = imu_handler_->GetData();
+        snap.filtered_gz = imu_handler_->GetFilteredGyroZ();
+        snap.forward_accel = imu_calib_.GetForwardAccel(snap.imu_data);
+        madgwick_.GetEulerDeg(snap.pitch_deg, snap.roll_deg, snap.yaw_deg);
+        snap.calib_status = imu_calib_.GetStatus();
+        snap.calib_stage = imu_calib_.GetCalibStage();
+        snap.calib_valid = imu_calib_.IsValid();
+        if (snap.calib_valid) {
+          snap.calib_data = imu_calib_.GetData();
+        }
+        snap.ekf_available = true;
+        snap.ekf_vx = ekf_.GetVx();
+        snap.ekf_vy = ekf_.GetVy();
+        snap.ekf_yaw_rate = ekf_.GetYawRate();
+        snap.ekf_slip_deg = ekf_.GetSlipAngleDeg();
+        snap.ekf_speed_ms = ekf_.GetSpeedMs();
+        snap.oversteer_available = true;
+        snap.oversteer_active = oversteer_guard_.IsActive();
+      }
+      telem_handler_->Update(now, snap);
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -358,14 +383,8 @@ bool VehicleControlUnified::InitializeComponents() {
   slip_ctrl_.Init(stab_config_, ekf_, imu_handler_.get());
   oversteer_guard_.Init(stab_config_, ekf_, imu_handler_.get());
 
-  // Телеметрия (требует const ссылки)
-  telem_handler_.reset(new TelemetryHandler(
-      *platform_, static_cast<const RcInputHandler&>(*rc_handler_),
-      static_cast<const WifiCommandHandler&>(*wifi_handler_),
-      static_cast<const ImuHandler&>(*imu_handler_), imu_calib_, madgwick_,
-      config::TelemetryConfig::kSendIntervalMs));
-  telem_handler_->SetEkf(&ekf_);
-  telem_handler_->SetOversteerWarn(oversteer_guard_.GetActivePtr());
+  // Телеметрия
+  telem_handler_.reset(new TelemetryHandler(*platform_, config::TelemetryConfig::kSendIntervalMs));
 
   return true;
 }

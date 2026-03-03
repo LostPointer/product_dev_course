@@ -1393,26 +1393,28 @@ TEST(EkfIntegrationTest, UpdateGyroZ_DpsToRadConversion_YawRateConverges) {
   EXPECT_NEAR(ekf.GetYawRate(), gz_rad, 0.001f);
 }
 
-// TelemetryHandler включает раздел "ekf" когда EKF установлен
+// TelemetryHandler включает раздел "ekf" когда ekf_available == true
 TEST(EkfIntegrationTest, TelemetryHandler_WithEkf_JsonContainsEkfSection) {
   FakePlatform fake;
   fake.SetWebSocketClientCount(1);
   fake.SetTimeMs(100);
 
-  ImuCalibration calib;
-  MadgwickFilter filter;
-  RcInputHandler rc(fake, 20);
-  WifiCommandHandler wifi(fake, 500);
-  ImuHandler imu(fake, calib, filter, 2);
-  imu.SetEnabled(true);  // EKF-секция выводится только когда IMU включён
   // send_interval_ms = 0 → отправит при первом Update
-  TelemetryHandler telem(fake, rc, wifi, imu, calib, filter, 0);
+  TelemetryHandler telem(fake, 0);
 
   VehicleEkf ekf;
   ekf.SetState(3.5f, 1.2f, 0.8f);
-  telem.SetEkf(&ekf);
 
-  telem.Update(100, 50);
+  TelemetrySnapshot snap;
+  snap.imu_enabled = true;  // EKF-секция выводится только когда IMU включён
+  snap.ekf_available = true;
+  snap.ekf_vx = ekf.GetVx();
+  snap.ekf_vy = ekf.GetVy();
+  snap.ekf_yaw_rate = ekf.GetYawRate();
+  snap.ekf_slip_deg = ekf.GetSlipAngleDeg();
+  snap.ekf_speed_ms = ekf.GetSpeedMs();
+
+  telem.Update(100, snap);
 
   const std::string& json = fake.GetLastTelem();
   EXPECT_NE(json.find("\"ekf\""), std::string::npos)
@@ -1423,21 +1425,19 @@ TEST(EkfIntegrationTest, TelemetryHandler_WithEkf_JsonContainsEkfSection) {
       << "Telemetry JSON must contain 'speed_ms' field";
 }
 
-// TelemetryHandler не включает раздел "ekf" когда EKF не установлен
+// TelemetryHandler не включает раздел "ekf" когда ekf_available == false
 TEST(EkfIntegrationTest, TelemetryHandler_WithoutEkf_JsonHasNoEkfSection) {
   FakePlatform fake;
   fake.SetWebSocketClientCount(1);
   fake.SetTimeMs(100);
 
-  ImuCalibration calib;
-  MadgwickFilter filter;
-  RcInputHandler rc(fake, 20);
-  WifiCommandHandler wifi(fake, 500);
-  ImuHandler imu(fake, calib, filter, 2);
-  TelemetryHandler telem(fake, rc, wifi, imu, calib, filter, 0);
-  // SetEkf не вызывается → ekf_ == nullptr
+  TelemetryHandler telem(fake, 0);
 
-  telem.Update(100, 50);
+  TelemetrySnapshot snap;
+  snap.imu_enabled = true;
+  // snap.ekf_available = false (default) → раздел "ekf" не выводится
+
+  telem.Update(100, snap);
 
   const std::string& json = fake.GetLastTelem();
   EXPECT_EQ(json.find("\"ekf\""), std::string::npos)
@@ -1484,21 +1484,13 @@ TEST(EkfIntegrationTest, TelemetryHandler_ImuDisabled_NoEkfInJson) {
   fake.SetWebSocketClientCount(1);
   fake.SetTimeMs(100);
 
-  ImuCalibration calib;
-  MadgwickFilter filter;
-  RcInputHandler rc(fake, 20);
-  WifiCommandHandler wifi(fake, 500);
-  ImuHandler imu(fake, calib, filter, 2);
-  // imu не enabled по умолчанию (enabled_ = false в ImuHandler)
-  TelemetryHandler telem(fake, rc, wifi, imu, calib, filter, 0);
+  TelemetryHandler telem(fake, 0);
 
-  VehicleEkf ekf;
-  ekf.SetState(1.0f, 0.5f, 0.1f);
-  telem.SetEkf(&ekf);
+  TelemetrySnapshot snap;
+  // snap.imu_enabled = false (default) → раздел imu/calib/ekf не выводится
 
-  telem.Update(100, 50);
+  telem.Update(100, snap);
 
-  // Когда IMU отключён, раздел imu/calib/ekf не выводится
   const std::string& json = fake.GetLastTelem();
   EXPECT_EQ(json.find("\"ekf\""), std::string::npos)
       << "EKF section must not appear when IMU is disabled";

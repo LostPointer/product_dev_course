@@ -7,7 +7,6 @@
 #include "lpf_butterworth.hpp"
 #include "madgwick_filter.hpp"
 #include "vehicle_control_platform.hpp"
-#include "vehicle_ekf.hpp"
 
 namespace rc_vehicle {
 
@@ -198,13 +197,60 @@ class ImuHandler : public ControlComponent {
 };
 
 // ═════════════════════════════════════════════════════════════════════════
+// TelemetrySnapshot
+// ═════════════════════════════════════════════════════════════════════════
+
+/**
+ * @brief Снимок данных для телеметрии
+ *
+ * Заполняется в ControlTaskLoop() и передаётся в TelemetryHandler::Update(),
+ * устраняя прямые зависимости от отдельных компонентов.
+ */
+struct TelemetrySnapshot {
+  // Link status
+  bool rc_ok{false};
+  bool wifi_ok{false};
+
+  // IMU
+  bool imu_enabled{false};
+  ImuData imu_data{};
+  float filtered_gz{0.0f};
+  float forward_accel{0.0f};
+  float pitch_deg{0.0f};
+  float roll_deg{0.0f};
+  float yaw_deg{0.0f};
+
+  // Calibration
+  CalibStatus calib_status{CalibStatus::Idle};
+  int calib_stage{0};
+  bool calib_valid{false};
+  ImuCalibData calib_data{};
+
+  // EKF (имеет смысл только при imu_enabled)
+  bool ekf_available{false};
+  float ekf_vx{0.0f};
+  float ekf_vy{0.0f};
+  float ekf_yaw_rate{0.0f};
+  float ekf_slip_deg{0.0f};
+  float ekf_speed_ms{0.0f};
+
+  // Oversteer (имеет смысл только при imu_enabled)
+  bool oversteer_available{false};
+  bool oversteer_active{false};
+
+  // Actuators
+  float throttle{0.0f};
+  float steering{0.0f};
+};
+
+// ═════════════════════════════════════════════════════════════════════════
 // Telemetry Handler
 // ═════════════════════════════════════════════════════════════════════════
 
 /**
  * @brief Обработчик телеметрии
  *
- * Собирает данные от других компонентов и отправляет телеметрию
+ * Получает снимок данных (TelemetrySnapshot) и отправляет телеметрию
  * по WebSocket с заданной частотой.
  */
 class TelemetryHandler : public ControlComponent {
@@ -212,69 +258,34 @@ class TelemetryHandler : public ControlComponent {
   /**
    * @brief Конструктор
    * @param platform Платформа для отправки телеметрии
-   * @param rc RC input handler
-   * @param wifi Wi-Fi command handler
-   * @param imu IMU handler
-   * @param calib Калибровка IMU
-   * @param filter Фильтр Madgwick
    * @param send_interval_ms Интервал отправки в миллисекундах (по умолчанию 50
    * ms = 20 Hz)
    */
-  TelemetryHandler(VehicleControlPlatform& platform, const RcInputHandler& rc,
-                   const WifiCommandHandler& wifi, const ImuHandler& imu,
-                   const ImuCalibration& calib, const MadgwickFilter& filter,
+  TelemetryHandler(VehicleControlPlatform& platform,
                    uint32_t send_interval_ms = 50)
-      : platform_(platform),
-        rc_(rc),
-        wifi_(wifi),
-        imu_(imu),
-        calib_(calib),
-        filter_(filter),
-        send_interval_ms_(send_interval_ms) {}
+      : platform_(platform), send_interval_ms_(send_interval_ms) {}
 
-  void Update(uint32_t now_ms, uint32_t dt_ms) override;
+  // Удовлетворяет интерфейсу ControlComponent; использовать перегрузку со snapshot.
+  void Update(uint32_t /*now_ms*/, uint32_t /*dt_ms*/) override {}
 
   /**
-   * @brief Установить значения актуаторов (для отправки в телеметрии)
-   * @param throttle Газ [-1..1]
-   * @param steering Руль [-1..1]
+   * @brief Отправить телеметрию с переданным снимком данных
+   * @param now_ms Текущее время в миллисекундах
+   * @param snap Снимок данных телеметрии
    */
-  void SetActuatorValues(float throttle, float steering) noexcept {
-    applied_throttle_ = throttle;
-    applied_steering_ = steering;
-  }
-
-  /**
-   * @brief Подключить EKF для включения в телеметрию (опционально)
-   * @param ekf Указатель на EKF или nullptr для отключения
-   */
-  void SetEkf(const VehicleEkf* ekf) noexcept { ekf_ = ekf; }
-
-  /**
-   * @brief Подключить флаг oversteer для включения в телеметрию (опционально)
-   * @param ptr Указатель на bool флаг или nullptr для отключения
-   */
-  void SetOversteerWarn(const bool* ptr) noexcept { oversteer_warn_ptr_ = ptr; }
+  void Update(uint32_t now_ms, const TelemetrySnapshot& snap);
 
  private:
   VehicleControlPlatform& platform_;
-  const RcInputHandler& rc_;
-  const WifiCommandHandler& wifi_;
-  const ImuHandler& imu_;
-  const ImuCalibration& calib_;
-  const MadgwickFilter& filter_;
   uint32_t send_interval_ms_;
   uint32_t last_send_ms_{0};
-  float applied_throttle_{0.0f};
-  float applied_steering_{0.0f};
-  const VehicleEkf* ekf_{nullptr};
-  const bool* oversteer_warn_ptr_{nullptr};
 
   /**
    * @brief Построить JSON-строку с телеметрией
+   * @param snap Снимок данных
    * @return JSON-строка
    */
-  [[nodiscard]] std::string BuildTelemJson() const;
+  [[nodiscard]] std::string BuildTelemJson(const TelemetrySnapshot& snap) const;
 };
 
 }  // namespace rc_vehicle

@@ -109,24 +109,21 @@ void ImuHandler::SetLpfCutoff(float cutoff_hz) {
 // TelemetryHandler
 // ═════════════════════════════════════════════════════════════════════════
 
-void TelemetryHandler::Update(uint32_t now_ms, [[maybe_unused]] uint32_t dt_ms) {
-  // Отправка телеметрии с заданной частотой
+void TelemetryHandler::Update(uint32_t now_ms, const TelemetrySnapshot& snap) {
   if (now_ms - last_send_ms_ < send_interval_ms_) {
     return;
   }
   last_send_ms_ = now_ms;
 
-  // Если клиентов нет - не отправляем
   if (platform_.GetWebSocketClientCount() == 0) {
     return;
   }
 
-  // Построить и отправить JSON
-  std::string json = BuildTelemJson();
+  std::string json = BuildTelemJson(snap);
   platform_.SendTelem(json);
 }
 
-std::string TelemetryHandler::BuildTelemJson() const {
+std::string TelemetryHandler::BuildTelemJson(const TelemetrySnapshot& snap) const {
   cJSON* root = cJSON_CreateObject();
   if (!root) return "{}";
 
@@ -137,34 +134,30 @@ std::string TelemetryHandler::BuildTelemJson() const {
   // Link status
   cJSON* link = cJSON_AddObjectToObject(root, "link");
   if (link) {
-    cJSON_AddBoolToObject(link, "rc_ok", rc_.IsActive());
-    cJSON_AddBoolToObject(link, "wifi_ok", wifi_.IsActive());
+    cJSON_AddBoolToObject(link, "rc_ok", snap.rc_ok);
+    cJSON_AddBoolToObject(link, "wifi_ok", snap.wifi_ok);
     cJSON_AddBoolToObject(link, "failsafe", platform_.FailsafeIsActive());
   }
 
   // IMU data (если включен)
-  if (imu_.IsEnabled()) {
-    const auto& data = imu_.GetData();
-
+  if (snap.imu_enabled) {
     cJSON* imu = cJSON_AddObjectToObject(root, "imu");
     if (imu) {
-      cJSON_AddNumberToObject(imu, "ax", data.ax);
-      cJSON_AddNumberToObject(imu, "ay", data.ay);
-      cJSON_AddNumberToObject(imu, "az", data.az);
-      cJSON_AddNumberToObject(imu, "gx", data.gx);
-      cJSON_AddNumberToObject(imu, "gy", data.gy);
-      cJSON_AddNumberToObject(imu, "gz", data.gz);
-      cJSON_AddNumberToObject(imu, "gyro_z_filtered", imu_.GetFilteredGyroZ());
-      cJSON_AddNumberToObject(imu, "forward_accel", calib_.GetForwardAccel(data));
+      cJSON_AddNumberToObject(imu, "ax", snap.imu_data.ax);
+      cJSON_AddNumberToObject(imu, "ay", snap.imu_data.ay);
+      cJSON_AddNumberToObject(imu, "az", snap.imu_data.az);
+      cJSON_AddNumberToObject(imu, "gx", snap.imu_data.gx);
+      cJSON_AddNumberToObject(imu, "gy", snap.imu_data.gy);
+      cJSON_AddNumberToObject(imu, "gz", snap.imu_data.gz);
+      cJSON_AddNumberToObject(imu, "gyro_z_filtered", snap.filtered_gz);
+      cJSON_AddNumberToObject(imu, "forward_accel", snap.forward_accel);
 
       // Orientation (Madgwick)
-      float pitch_deg = 0.0f, roll_deg = 0.0f, yaw_deg = 0.0f;
-      filter_.GetEulerDeg(pitch_deg, roll_deg, yaw_deg);
       cJSON* orientation = cJSON_AddObjectToObject(imu, "orientation");
       if (orientation) {
-        cJSON_AddNumberToObject(orientation, "pitch", pitch_deg);
-        cJSON_AddNumberToObject(orientation, "roll", roll_deg);
-        cJSON_AddNumberToObject(orientation, "yaw", yaw_deg);
+        cJSON_AddNumberToObject(orientation, "pitch", snap.pitch_deg);
+        cJSON_AddNumberToObject(orientation, "roll", snap.roll_deg);
+        cJSON_AddNumberToObject(orientation, "yaw", snap.yaw_deg);
       }
     }
 
@@ -172,18 +165,18 @@ std::string TelemetryHandler::BuildTelemJson() const {
     cJSON* calib = cJSON_AddObjectToObject(root, "calib");
     if (calib) {
       const char* status_str = "unknown";
-      switch (calib_.GetStatus()) {
+      switch (snap.calib_status) {
         case CalibStatus::Idle:       status_str = "idle";       break;
         case CalibStatus::Collecting: status_str = "collecting"; break;
         case CalibStatus::Done:       status_str = "done";       break;
         case CalibStatus::Failed:     status_str = "failed";     break;
       }
       cJSON_AddStringToObject(calib, "status", status_str);
-      cJSON_AddNumberToObject(calib, "stage", calib_.GetCalibStage());
-      cJSON_AddBoolToObject(calib, "valid", calib_.IsValid());
+      cJSON_AddNumberToObject(calib, "stage", snap.calib_stage);
+      cJSON_AddBoolToObject(calib, "valid", snap.calib_valid);
 
-      if (calib_.IsValid()) {
-        const auto& cd = calib_.GetData();
+      if (snap.calib_valid) {
+        const auto& cd = snap.calib_data;
         cJSON* bias = cJSON_AddObjectToObject(calib, "bias");
         if (bias) {
           cJSON_AddNumberToObject(bias, "gx", cd.gyro_bias[0]);
@@ -212,22 +205,22 @@ std::string TelemetryHandler::BuildTelemJson() const {
     }
 
     // EKF: динамическое состояние (vx, vy, r, slip angle)
-    if (ekf_) {
+    if (snap.ekf_available) {
       cJSON* ekf = cJSON_AddObjectToObject(root, "ekf");
       if (ekf) {
-        cJSON_AddNumberToObject(ekf, "vx", ekf_->GetVx());
-        cJSON_AddNumberToObject(ekf, "vy", ekf_->GetVy());
-        cJSON_AddNumberToObject(ekf, "yaw_rate", ekf_->GetYawRate());
-        cJSON_AddNumberToObject(ekf, "slip_deg", ekf_->GetSlipAngleDeg());
-        cJSON_AddNumberToObject(ekf, "speed_ms", ekf_->GetSpeedMs());
+        cJSON_AddNumberToObject(ekf, "vx", snap.ekf_vx);
+        cJSON_AddNumberToObject(ekf, "vy", snap.ekf_vy);
+        cJSON_AddNumberToObject(ekf, "yaw_rate", snap.ekf_yaw_rate);
+        cJSON_AddNumberToObject(ekf, "slip_deg", snap.ekf_slip_deg);
+        cJSON_AddNumberToObject(ekf, "speed_ms", snap.ekf_speed_ms);
       }
     }
 
     // Oversteer warning (Phase 4.2)
-    if (oversteer_warn_ptr_) {
+    if (snap.oversteer_available) {
       cJSON* warn = cJSON_AddObjectToObject(root, "warn");
       if (warn) {
-        cJSON_AddBoolToObject(warn, "oversteer", *oversteer_warn_ptr_);
+        cJSON_AddBoolToObject(warn, "oversteer", snap.oversteer_active);
       }
     }
   }
@@ -235,8 +228,8 @@ std::string TelemetryHandler::BuildTelemJson() const {
   // Actuators
   cJSON* act = cJSON_AddObjectToObject(root, "act");
   if (act) {
-    cJSON_AddNumberToObject(act, "throttle", applied_throttle_);
-    cJSON_AddNumberToObject(act, "steering", applied_steering_);
+    cJSON_AddNumberToObject(act, "throttle", snap.throttle);
+    cJSON_AddNumberToObject(act, "steering", snap.steering);
   }
 
   char* str = cJSON_PrintUnformatted(root);
