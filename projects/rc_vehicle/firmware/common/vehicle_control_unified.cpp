@@ -306,7 +306,7 @@ PlatformError VehicleControlUnified::Init() {
     }
 
     // Применить конфигурацию к фильтрам
-    madgwick_.SetBeta(stab_config_.madgwick_beta);
+    madgwick_.SetBeta(stab_config_.filter.madgwick_beta);
 
     // Автокалибровка при старте
     imu_calib_.StartCalibration(CalibMode::Full, 1000);
@@ -370,7 +370,7 @@ bool VehicleControlUnified::InitializeComponents() {
                                       config::ImuConfig::kReadIntervalMs));
     imu_handler_->SetEnabled(true);
     // Применить LPF cutoff из конфигурации
-    imu_handler_->SetLpfCutoff(stab_config_.lpf_cutoff_hz);
+    imu_handler_->SetLpfCutoff(stab_config_.filter.lpf_cutoff_hz);
   }
 
   // Создаём пустые handlers если они не были созданы (для телеметрии)
@@ -570,11 +570,11 @@ bool VehicleControlUnified::SetStabilizationConfig(
   }
 
   // Применить к фильтрам
-  madgwick_.SetBeta(validated_config.madgwick_beta);
+  madgwick_.SetBeta(validated_config.filter.madgwick_beta);
 
   // Применить к LPF (если IMU включен)
   if (imu_handler_) {
-    imu_handler_->SetLpfCutoff(validated_config.lpf_cutoff_hz);
+    imu_handler_->SetLpfCutoff(validated_config.filter.lpf_cutoff_hz);
   }
 
   // Обновить коэффициенты ПИД yaw rate и slip angle

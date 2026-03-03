@@ -403,10 +403,19 @@ class ImuCalibration { ... };
    - Moved [`ImuCalibration`](common/imu_calibration.hpp:47) and related types (`ImuCalibData`, `CalibMode`, `CalibStatus`) into `rc_vehicle` namespace
    - Updated corresponding `.cpp` files with namespace declarations
 
-### Phase 2: Configuration Cleanup (2-3 days)
-1. Restructure `StabilizationConfig` with nested structs
-2. Update JSON serialization
-3. Update NVS storage (migration path)
+### Phase 2: Configuration Cleanup (2-3 days) ✅ **COMPLETED**
+1. ✅ Restructure `StabilizationConfig` with nested structs
+   - Created nested structs: `PidConfig`, `FilterConfig`, `AdaptiveConfig`, `OversteerConfig`, `YawRateConfig`, `SlipAngleConfig`, `PitchCompensationConfig`
+   - Replaced flat 30+ field structure with organized hierarchy
+   - Updated [`stabilization_config.hpp`](common/stabilization_config.hpp:1) with new structure
+   - Updated [`stabilization_config.cpp`](common/stabilization_config.cpp:1) with implementations for all nested structs
+2. ✅ Update JSON serialization
+   - Updated [`stabilization_config_json.cpp`](esp32_s3/main/stabilization_config_json.cpp:1) to serialize/deserialize nested structure
+   - JSON now has hierarchical format: `filter`, `yaw_rate`, `slip_angle`, `adaptive`, `oversteer`, `pitch_comp`
+3. ✅ Update all code using StabilizationConfig
+   - Updated [`stabilization_pipeline.cpp`](common/stabilization_pipeline.cpp:1) to access nested fields
+   - Updated [`vehicle_control_unified.cpp`](common/vehicle_control_unified.cpp:1) to use `cfg.filter.*` instead of flat fields
+   - NVS storage continues to work with binary serialization (no migration needed as structure size unchanged)
 
 ### Phase 3: Architecture Improvements (1 week)
 1. Extract `CalibrationManager`, `StabilizationManager`, `TelemetryManager`
