@@ -19,10 +19,10 @@
 
 | # | Проблема | Файл | Строки |
 |---|----------|------|--------|
-| 4 | **Quaternion singularity** — если норма кватерниона -> 0, `InvSqrt()` возвращает 0, кватернион обнуляется | `common/madgwick_filter.cpp` | 83, 209 |
-| 5 | **NVS Load без Clamp()** — конфиг загружается из NVS, проверяется `IsValid()`, но не ограничивается допустимыми диапазонами. Фикс в одну строку | `esp32_common/stabilization_config_nvs.cpp` | 32 |
-| 6 | **Race condition: WiFi status** — `WiFiStaGetStatus()` копирует 40-байтную структуру без мьютекса, event handler может обновить её в середине копирования | `esp32_common/wifi_ap.cpp` | 416 |
-| 7 | **WebSocket send не потокобезопасен** — `WebSocketSendTelem()` получает список клиентов и шлёт данные без синхронизации с подключением/отключением | `esp32_common/websocket_server.cpp` | 110-135 |
+| 4 | ~~**Quaternion singularity**~~ — **ИСПРАВЛЕНО**: перед нормализацией проверяется `qSqNorm < 1e-12f`; при singularity кватернион сбрасывается на единичный `(1,0,0,0)` | `common/madgwick_filter.cpp` | 83 |
+| 5 | ~~**NVS Load без Clamp()**~~ — **ИСПРАВЛЕНО**: после `IsValid()` добавлен вызов `config.Clamp()` | `esp32_common/stabilization_config_nvs.cpp` | 32 |
+| 6 | ~~**Race condition: WiFi status**~~ — FALSE POSITIVE: `portENTER_CRITICAL(&s_wifi_mux)` уже обёртывает `*out_status = s_sta_status` на строке 416; все сеттеры (`StaStatusSetConnected`, `StaStatusSetIp`, `StaStatusSetDisconnectReason`) тоже защищены тем же спинлоком | `esp32_common/wifi_ap.cpp` | 416 |
+| 7 | ~~**WebSocket send не потокобезопасен**~~ — FALSE POSITIVE: паттерн `httpd_get_client_list` → `httpd_ws_get_fd_info` → `httpd_ws_send_data` — официально рекомендованный ESP-IDF v5.x способ рассылки из стороннего таска; stale FD фильтруется `httpd_ws_get_fd_info` (строки 132-135), ошибка отправки обрабатывается логом | `esp32_common/websocket_server.cpp` | 110-135 |
 
 ---
 
@@ -30,7 +30,7 @@
 
 | # | Проблема | Файл |
 |---|----------|------|
-| 8 | **StabilizationManager: race condition на config_** — WebSocket-поток пишет конфиг, control loop читает без синхронизации | `common/stabilization_manager.cpp` |
+| 8 | ~~**StabilizationManager: race condition на config_**~~ — **ИСПРАВЛЕНО**: добавлен `mutable std::mutex config_mutex_`; `GetConfig()` возвращает по значению; `SetConfig()`/`LoadFromNvs()` блокируют запись, `UpdateWeights()`/`ApplyConfig()` берут локальную копию под локом | `common/stabilization_manager.cpp` |
 | 9 | **Failsafe `GetTimeSinceLastActive()` без проверки переполнения** — в отличие от `Update()`, не обрабатывает wraparound `uint32_t` | `common/failsafe.cpp:62-66` |
 | 10 | **`const_cast` на payload WebSocket** — UB если httpd-слой модифицирует буфер | `esp32_common/websocket_server.cpp:123` |
 | 11 | **NVS CalibBlob без версионирования** — при изменении структуры старые данные прочитаются некорректно | `esp32_common/imu_calibration_nvs.cpp` |

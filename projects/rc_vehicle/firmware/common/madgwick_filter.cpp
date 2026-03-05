@@ -80,7 +80,16 @@ void MadgwickFilter::Update(float ax, float ay, float az, float gx, float gy,
   q3_ += qDot4 * dt_sec;
 
   // Нормализация кватерниона
-  const float qNorm = InvSqrt(q0_ * q0_ + q1_ * q1_ + q2_ * q2_ + q3_ * q3_);
+  const float qSqNorm = q0_ * q0_ + q1_ * q1_ + q2_ * q2_ + q3_ * q3_;
+  if (qSqNorm < 1e-12f) {
+    // Singularity: норма кватерниона близка к нулю — сбрасываем на единичный
+    q0_ = 1.f;
+    q1_ = 0.f;
+    q2_ = 0.f;
+    q3_ = 0.f;
+    return;
+  }
+  const float qNorm = InvSqrt(qSqNorm);
   q0_ *= qNorm;
   q1_ *= qNorm;
   q2_ *= qNorm;

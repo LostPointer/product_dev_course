@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 
 #include "control_components.hpp"
 #include "madgwick_filter.hpp"
@@ -41,7 +42,7 @@ class StabilizationManager {
    * @brief Получить текущую конфигурацию стабилизации
    * @return Конфигурация стабилизации
    */
-  [[nodiscard]] const StabilizationConfig& GetConfig() const { return config_; }
+  [[nodiscard]] StabilizationConfig GetConfig() const;
 
   /**
    * @brief Установить конфигурацию стабилизации
@@ -94,6 +95,7 @@ class StabilizationManager {
   SlipAngleController& slip_ctrl_;
   ImuHandler* imu_handler_;
 
+  mutable std::mutex config_mutex_;
   StabilizationConfig config_;
 
   // Плавное включение/выключение стабилизации

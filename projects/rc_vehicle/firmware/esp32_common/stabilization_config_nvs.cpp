@@ -30,6 +30,7 @@ esp_err_t Load(StabilizationConfig& config) {
 
   if (err == ESP_OK) {
     if (required_size == sizeof(StabilizationConfig) && config.IsValid()) {
+      config.Clamp();
       ESP_LOGI(TAG,
                "Loaded stabilization config: enabled=%d beta=%.3f "
                "lpf_cutoff=%.1f Hz mode=%d",
