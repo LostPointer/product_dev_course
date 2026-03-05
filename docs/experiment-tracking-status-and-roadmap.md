@@ -140,20 +140,13 @@
 
 ### Backlog
 
-#### Bootstrap admin-пользователя при чистой установке
+#### ~~Bootstrap admin-пользователя при чистой установке~~ ✅ Реализовано
 
-**Проблема:** при деплое без данных нет ни одного пользователя. Хардкод-пароль в миграции
-небезопасен и требует ручного исправления.
-
-**Решение:**
-- Убрать хардкод из миграции. `001_initial_schema.sql` создаёт только схему без данных.
-- Добавить env-переменную `ADMIN_BOOTSTRAP_SECRET` (генерируется оператором при деплое).
-- Эндпоинт `POST /auth/admin/bootstrap` (открытый, одноразовый):
-  - Принимает `{ "secret": "...", "username": "admin", "password": "..." }`.
-  - Проверяет `secret == ADMIN_BOOTSTRAP_SECRET` и что пользователей ещё нет.
-  - Создаёт первого пользователя с флагом `is_superadmin = true`.
-  - После создания эндпоинт перестаёт работать (идемпотентно).
-- Альтернатива: CLI-команда `auth-service bootstrap-admin --secret $SECRET`.
+**Реализовано:**
+- Хардкод убран: `001_initial_schema.sql` создаёт только схему без данных; миграция `007_remove_hardcoded_admin.sql` удаляет устаревшего дефолтного admin-пользователя.
+- Env-переменная `ADMIN_BOOTSTRAP_SECRET` в `settings.py`; если не задана — endpoint возвращает 404.
+- `POST /auth/admin/bootstrap` (открытый, одноразовый): принимает `secret`, `username`, `email`, `password`; проверяет секрет и что admin'ов ещё нет (`count_admins() == 0`); создаёт первого пользователя с `is_admin=true`; возвращает токены.
+- Тесты: `test_bootstrap_admin_success`, `test_bootstrap_admin_wrong_secret`, `test_bootstrap_admin_disabled`, `test_bootstrap_admin_already_exists`, `test_bootstrap_admin_duplicate_username`, `test_bootstrap_admin_invalid_password`.
 
 #### Сброс пароля пользователя
 
@@ -180,7 +173,7 @@
 #### Управление пользователями (admin UI)
 
 - ✅ **Backend:** `GET /auth/admin/users`, `PATCH /auth/admin/users/{user_id}` (is_active / is_admin), `DELETE /auth/admin/users/{user_id}`; защита последнего admin'а; `is_active` блокирует логин и token lookup.
-- ❌ **Frontend:** страница `/admin/users` с таблицей пользователей, кнопками инвайта и сброса пароля.
+- ✅ **Frontend:** страница `/admin/users` с таблицей пользователей, кнопками инвайта и сброса пароля. Компонент `AdminUsers.tsx` с вкладками «Пользователи» (поиск, фильтр, activate/deactivate, toggle admin, reset password, delete) и «Инвайты» (создание, список, отзыв, копирование токена). Тесты: `AdminUsers.test.tsx`.
 
 #### Опционально: отдельный сервис управления доступами
 
@@ -247,10 +240,13 @@
 - **Массовые операции:** ✅ Реализовано (`POST /api/v1/runs:batch-status`).
 - **Bulk tagging:** ✅ Реализовано (`POST /api/v1/runs:bulk-tags`).
 - **Расширенная сущность CaptureSession:** ✅ Реализовано (ordinal_number, статусы, связь с ingest).
-- **Контроль доменных инвариантов:** ⚠️ Частично реализовано.
+- **Контроль доменных инвариантов:** ✅ Реализовано.
   - ✅ нельзя финализировать `Run`, если есть активные `CaptureSession`
   - ✅ нельзя удалить `Sensor`, если он участвует в активных `CaptureSession`
   - ✅ нельзя удалить активную `CaptureSession`
+  - ✅ нельзя удалить `Run`, если есть активные `CaptureSession` (`RunService.delete_run` + новый эндпоинт `DELETE /api/v1/runs/{run_id}`)
+  - ✅ нельзя удалить `Experiment`, если есть `Run` в статусе `running` (`ExperimentService.delete_experiment` + `RunRepository.has_running_runs_for_experiment`)
+  - ✅ нельзя создать `CaptureSession` для `Run` в терминальном статусе (succeeded/failed/archived)
 - **Webhook-триггеры:** ✅ Реализовано (outbox + background dispatcher + dedupe/retry; best-effort delivery).
 - **Frontend:** ✅ UI для управления webhooks (список/создание/удаление подписок, просмотр delivery log с фильтрацией по статусу, ручной retry). Реализовано: страница `/webhooks` (`Webhooks.tsx`), навигация в sidebar.
 - **Аудит-лог действий пользователей:** ✅ Реализовано для `Run`/`CaptureSession` (events + API для чтения).
@@ -428,7 +424,7 @@
    - `GET /api/v1/runs/{run_id}/capture-sessions/{session_id}/telemetry/export`
    - Query params: `format=csv|json`, `sensor_id` (опционально, фильтр), `signal` (опционально), `include_late=true|false`, `raw_or_physical=raw|physical|both`.
    - CSV-формат: `timestamp, sensor_id, signal, raw_value, physical_value, conversion_status, capture_session_id`.
-   - TODO: стриминговая отдача (chunked transfer) для больших выгрузок (текущая реализация — in-memory, лимит 100 000 записей).
+   - ✅ Стриминговая отдача: `web.StreamResponse` + `conn.cursor(prefetch=5000)` — данные пишутся батчами по 5 000 строк, без in-memory накопления и без лимита на число записей.
 
 2. **Экспорт по run (все capture sessions):** ✅
    - `GET /api/v1/runs/{run_id}/telemetry/export`
@@ -440,7 +436,7 @@
    - CSV-формат: `bucket, sensor_id, signal, capture_session_id, sample_count, avg_raw, min_raw, max_raw, avg_physical, min_physical, max_physical`.
 
 4. **Ограничения и безопасность:** ✅ (частично)
-   - ✅ Лимит записей: 100 000 с header `X-Export-Truncated: true` если превышен.
+   - ✅ Лимит снят: streaming cursor, без in-memory накопления.
    - ✅ RBAC: доступ к данным только для участников проекта (через `resolve_project_id` + `ensure_project_access`).
    - ❌ Rate limit: не реализован (backlog).
 
@@ -475,7 +471,7 @@
 - [x] API: экспорт readings по capture session в CSV с фильтрами sensor_id, signal, raw/physical, include_late, aggregation.
 - [x] API: экспорт readings по run (все capture sessions) в CSV/JSON.
 - [x] Frontend: кнопка экспорта в RunDetail, скачивание файла.
-- [ ] Стриминг: экспорт 50k+ записей без OOM (текущий лимит 100k in-memory, достаточно для MVP).
+- [x] Стриминг: экспорт 50k+ записей без OOM — реализовано через `StreamResponse` + cursor.
 - [x] Тесты: integration (создать session -> ingest data -> export -> verify CSV).
 
 ### 5. Hardening & Launch (итерация 8+)

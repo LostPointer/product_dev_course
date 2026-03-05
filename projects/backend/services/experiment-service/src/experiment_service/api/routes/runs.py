@@ -405,3 +405,20 @@ async def list_run_events(request: web.Request):
         total=total,
     )
     return web.json_response(payload)
+
+
+@routes.delete("/api/v1/runs/{run_id}")
+async def delete_run(request: web.Request):
+    user = await require_current_user(request)
+    project_id = resolve_project_id(
+        user, request.rel_url.query.get("project_id"), require_role=("owner", "editor")
+    )
+    run_id = parse_uuid(request.match_info["run_id"], "run_id")
+    service = await get_run_service(request)
+    try:
+        await service.delete_run(project_id, run_id)
+    except InvalidStatusTransitionError as exc:
+        raise web.HTTPBadRequest(text=str(exc)) from exc
+    except NotFoundError as exc:
+        raise web.HTTPNotFound(text=str(exc)) from exc
+    return web.Response(status=204)

@@ -31,10 +31,16 @@ class CaptureSessionService:
         self._run_repository = run_repository
         self._telemetry_repository = telemetry_repository
 
+    _TERMINAL_RUN_STATUSES = frozenset({"succeeded", "failed", "archived"})
+
     async def create_session(self, data: CaptureSessionCreateDTO) -> CaptureSession:
         run = await self._run_repository.get(data.project_id, data.run_id)
         if run.project_id != data.project_id:
             raise ScopeMismatchError("Run does not belong to project")
+        if run.status.value in self._TERMINAL_RUN_STATUSES:
+            raise InvalidStatusTransitionError(
+                f"Cannot create capture session for a run in '{run.status.value}' status"
+            )
         # Only one active capture session per project (recording window).
         if await self._repository.has_active_for_project(data.project_id):
             raise InvalidStatusTransitionError("Active capture session already exists for this project")

@@ -155,7 +155,8 @@ async def get_experiment_service(request: web.Request) -> ExperimentService:
     async def builder(_: web.Request) -> ExperimentService:
         pool = await get_pool()
         repository = ExperimentRepository(pool)
-        return ExperimentService(repository)
+        run_repository = RunRepository(pool)
+        return ExperimentService(repository, run_repository)
 
     return await _get_or_create_service(request, _EXPERIMENT_SERVICE_KEY, builder)
 

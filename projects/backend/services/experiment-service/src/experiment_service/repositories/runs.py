@@ -203,6 +203,24 @@ class RunRepository(BaseRepository):
         )
         return int(record["total"]) if record else 0
 
+    async def has_running_runs_for_experiment(
+        self, project_id: UUID, experiment_id: UUID
+    ) -> bool:
+        """Return True if there is at least one run in 'running' status for the experiment."""
+        record = await self._fetchrow(
+            """
+            SELECT 1
+            FROM runs
+            WHERE project_id = $1
+              AND experiment_id = $2
+              AND status = 'running'
+            LIMIT 1
+            """,
+            project_id,
+            experiment_id,
+        )
+        return record is not None
+
     async def update(
         self,
         project_id: UUID,
