@@ -43,6 +43,11 @@ class Settings(BaseServiceSettings):
     # WebSocket ingest limits
     ws_max_message_bytes: int = 1 * 1024 * 1024  # 1 MB per message
 
+    # WebSocket per-sensor rate limiting (fixed window)
+    ws_rate_limit_messages_per_window: int = 600    # max frames per window
+    ws_rate_limit_readings_per_window: int = 60_000 # max readings per window
+    ws_rate_limit_window_seconds: float = 1.0       # window duration in seconds
+
     # Disk spool — write-ahead buffer when DB writes are unavailable
     spool_enabled: bool = True
     spool_dir: str = "/tmp/telemetry-spool"

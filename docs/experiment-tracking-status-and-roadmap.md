@@ -230,7 +230,8 @@
 - ✅ **Fatal ошибки** (auth, internal) — WS закрывается с кодом `1008` / `1011`.
 - ✅ **Та же бизнес-логика, что REST ingest:** sensor auth, run/capture scope resolution, auto-attach active capture session, late-data marking, conversion profiles.
 - ✅ **Auth-proxy:** `websocket: true` уже стоит в `@fastify/http-proxy` для telemetry-маршрутов — проксирование работает без изменений.
-- ✅ **Тесты:** `tests/test_api_ws_ingest.py` — 8 интеграционных тестов (happy path, seq echo, multiple batches, 400/401 до upgrade, invalid JSON, validation error, Authorization header).
+- ✅ **Rate limiting (per sensor, fixed window):** `WsRateLimiter` с двумя счётчиками — `messages` (кадров/окно) и `readings` (точек/окно); recoverable ошибка `rate_limited` с `retry_after`; настраивается через env (`WS_RATE_LIMIT_MESSAGES_PER_WINDOW`, `WS_RATE_LIMIT_READINGS_PER_WINDOW`, `WS_RATE_LIMIT_WINDOW_SECONDS`). Defaults: 600 сообщений/сек, 60 000 точек/сек.
+- ✅ **Тесты:** `tests/test_api_ws_ingest.py` — 8 интеграционных тестов (happy path, seq echo, multiple batches, 400/401 до upgrade, invalid JSON, validation error, Authorization header); `tests/test_ws_rate_limit.py` — 7 unit + 3 интеграционных теста.
 
 #### Ключевые файлы
 
@@ -244,7 +245,7 @@
 #### Ограничения / backlog
 
 - Максимальный размер одного сообщения: `ws_max_message_bytes` (1 MB, настраивается через env).
-- Rate limiting не реализован (общий backlog для telemetry-ingest-service).
+- Rate limiting ✅ реализован (`WsRateLimiter`, per-sensor fixed window).
 - Нет server-push: сервер только отвечает на входящие батчи. Для просмотра телеметрии используйте SSE `GET /api/v1/telemetry/stream`.
 
 ---
@@ -474,7 +475,7 @@
 4. **Ограничения и безопасность:** ✅ (частично)
    - ✅ Лимит снят: streaming cursor, без in-memory накопления.
    - ✅ RBAC: доступ к данным только для участников проекта (через `resolve_project_id` + `ensure_project_access`).
-   - ❌ Rate limit: не реализован (backlog).
+   - ✅ Rate limit: реализован в `experiment-service` (`ExportRateLimiter`, per-user fixed window, default 10 req/60s).
 
 ##### Этап 2: Frontend — UI экспорта телеметрии ✅ (базовый)
 

@@ -18,12 +18,19 @@ from telemetry_ingest_service.core.exceptions import (
     UnauthorizedError,
 )
 from telemetry_ingest_service.domain.dto import TelemetryIngestDTO, WsIngestMessageDTO
+from telemetry_ingest_service.middleware.ws_rate_limit import WsRateLimiter
 from telemetry_ingest_service.services.telemetry import TelemetryIngestService, hash_sensor_token
 from telemetry_ingest_service.settings import settings
 
 logger = structlog.get_logger(__name__)
 
 ws_routes = web.RouteTableDef()
+
+_ws_limiter = WsRateLimiter(
+    max_messages=settings.ws_rate_limit_messages_per_window,
+    max_readings=settings.ws_rate_limit_readings_per_window,
+    window_seconds=settings.ws_rate_limit_window_seconds,
+)
 
 
 def _extract_ws_token(request: web.Request) -> str | None:
@@ -147,6 +154,17 @@ async def _handle_message(
         ws_msg = WsIngestMessageDTO.model_validate(data)
     except ValidationError as exc:
         await ws.send_json({"status": "error", "code": "validation_error", "message": str(exc)})
+        return
+
+    # --- rate limiting (per sensor, fixed window) ---
+    limit_hit = _ws_limiter.check(sensor_id, len(ws_msg.readings))
+    if limit_hit is not None:
+        await ws.send_json({
+            "status": "error",
+            "code": "rate_limited",
+            "message": f"Rate limit exceeded ({limit_hit.reason}). Retry in {limit_hit.retry_after}s.",
+            "retry_after": limit_hit.retry_after,
+        })
         return
 
     # --- build DTO (sensor_id injected from connection context) ---
