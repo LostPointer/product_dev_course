@@ -144,11 +144,9 @@ class TestUserRepositoryCreate:
     """Tests for UserRepository.create method."""
 
     @pytest.mark.asyncio
-    async def test_create_user_success(self):
+    async def test_create_user_success(self, mock_pool_with_conn):
         """Test create user returns User object."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
 
         mock_row = {
             "id": uuid4(),
@@ -175,11 +173,9 @@ class TestUserRepositoryCreate:
         assert user.email == "test@example.com"
 
     @pytest.mark.asyncio
-    async def test_create_user_with_password_change_required(self):
+    async def test_create_user_with_password_change_required(self, mock_pool_with_conn):
         """Test create user with password_change_required=True."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
         mock_row = {
             "id": uuid4(),
             "username": "testuser",
@@ -204,11 +200,9 @@ class TestUserRepositoryCreate:
         assert user.password_change_required is True
 
     @pytest.mark.asyncio
-    async def test_create_user_raises_on_failure(self):
+    async def test_create_user_raises_on_failure(self, mock_pool_with_conn):
         """Test create raises RuntimeError on failure."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
         mock_conn.fetchrow = AsyncMock(return_value=None)
 
         repo = UserRepository(mock_pool)
@@ -225,11 +219,9 @@ class TestUserRepositoryGetters:
     """Tests for UserRepository get methods."""
 
     @pytest.mark.asyncio
-    async def test_get_by_id_found(self):
+    async def test_get_by_id_found(self, mock_pool_with_conn):
         """Test get_by_id returns User when found."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
 
         user_id = uuid4()
         mock_row = {
@@ -252,11 +244,9 @@ class TestUserRepositoryGetters:
         assert user.id == user_id
 
     @pytest.mark.asyncio
-    async def test_get_by_id_not_found(self):
+    async def test_get_by_id_not_found(self, mock_pool_with_conn):
         """Test get_by_id returns None when not found."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
         mock_conn.fetchrow = AsyncMock(return_value=None)
 
         repo = UserRepository(mock_pool)
@@ -265,11 +255,9 @@ class TestUserRepositoryGetters:
         assert user is None
 
     @pytest.mark.asyncio
-    async def test_get_by_username_found(self):
+    async def test_get_by_username_found(self, mock_pool_with_conn):
         """Test get_by_username returns User when found."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
         mock_row = {
             "id": uuid4(),
             "username": "testuser",
@@ -290,11 +278,9 @@ class TestUserRepositoryGetters:
         assert user.username == "testuser"
 
     @pytest.mark.asyncio
-    async def test_get_by_username_not_found(self):
+    async def test_get_by_username_not_found(self, mock_pool_with_conn):
         """Test get_by_username returns None when not found."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
         mock_conn.fetchrow = AsyncMock(return_value=None)
 
         repo = UserRepository(mock_pool)
@@ -303,11 +289,9 @@ class TestUserRepositoryGetters:
         assert user is None
 
     @pytest.mark.asyncio
-    async def test_get_by_email_found(self):
+    async def test_get_by_email_found(self, mock_pool_with_conn):
         """Test get_by_email returns User when found."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
         mock_row = {
             "id": uuid4(),
             "username": "testuser",
@@ -328,11 +312,9 @@ class TestUserRepositoryGetters:
         assert user.email == "test@example.com"
 
     @pytest.mark.asyncio
-    async def test_get_by_email_not_found(self):
+    async def test_get_by_email_not_found(self, mock_pool_with_conn):
         """Test get_by_email returns None when not found."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
         mock_conn.fetchrow = AsyncMock(return_value=None)
 
         repo = UserRepository(mock_pool)
@@ -345,11 +327,9 @@ class TestUserRepositoryUpdate:
     """Tests for UserRepository update methods."""
 
     @pytest.mark.asyncio
-    async def test_update_password_success(self):
+    async def test_update_password_success(self, mock_pool_with_conn):
         """Test update_password returns updated User."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
 
         user_id = uuid4()
         mock_row = {
@@ -372,11 +352,9 @@ class TestUserRepositoryUpdate:
         assert user.hashed_password == "newhash123"
 
     @pytest.mark.asyncio
-    async def test_update_password_with_change_required(self):
+    async def test_update_password_with_change_required(self, mock_pool_with_conn):
         """Test update_password with password_change_required."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
 
         user_id = uuid4()
         mock_row = {
@@ -398,11 +376,9 @@ class TestUserRepositoryUpdate:
         assert user.password_change_required is True
 
     @pytest.mark.asyncio
-    async def test_update_password_raises_on_failure(self):
+    async def test_update_password_raises_on_failure(self, mock_pool_with_conn):
         """Test update_password raises on failure."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
         mock_conn.fetchrow = AsyncMock(return_value=None)
 
         repo = UserRepository(mock_pool)
@@ -411,11 +387,9 @@ class TestUserRepositoryUpdate:
             await repo.update_password(uuid4(), "newhash123")
 
     @pytest.mark.asyncio
-    async def test_set_active_success(self):
+    async def test_set_active_success(self, mock_pool_with_conn):
         """Test set_active returns updated User."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
 
         user_id = uuid4()
         mock_row = {
@@ -437,11 +411,9 @@ class TestUserRepositoryUpdate:
         assert user.is_active is False
 
     @pytest.mark.asyncio
-    async def test_set_active_raises_on_not_found(self):
+    async def test_set_active_raises_on_not_found(self, mock_pool_with_conn):
         """Test set_active raises on user not found."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
         mock_conn.fetchrow = AsyncMock(return_value=None)
 
         repo = UserRepository(mock_pool)
@@ -450,11 +422,9 @@ class TestUserRepositoryUpdate:
             await repo.set_active(uuid4(), False)
 
     @pytest.mark.asyncio
-    async def test_set_admin_success(self):
+    async def test_set_admin_success(self, mock_pool_with_conn):
         """Test set_admin returns updated User."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
 
         user_id = uuid4()
         mock_row = {
@@ -476,11 +446,9 @@ class TestUserRepositoryUpdate:
         assert user.is_admin is True
 
     @pytest.mark.asyncio
-    async def test_set_admin_raises_on_not_found(self):
+    async def test_set_admin_raises_on_not_found(self, mock_pool_with_conn):
         """Test set_admin raises on user not found."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
         mock_conn.fetchrow = AsyncMock(return_value=None)
 
         repo = UserRepository(mock_pool)
@@ -493,11 +461,9 @@ class TestUserRepositoryQueries:
     """Tests for UserRepository query methods."""
 
     @pytest.mark.asyncio
-    async def test_user_exists_true(self):
+    async def test_user_exists_true(self, mock_pool_with_conn):
         """Test user_exists returns True when user exists."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
         mock_conn.fetchrow = AsyncMock(return_value={"exists": True})
 
         repo = UserRepository(mock_pool)
@@ -506,11 +472,9 @@ class TestUserRepositoryQueries:
         assert exists is True
 
     @pytest.mark.asyncio
-    async def test_user_exists_false(self):
+    async def test_user_exists_false(self, mock_pool_with_conn):
         """Test user_exists returns False when user doesn't exist."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
         mock_conn.fetchrow = AsyncMock(return_value={"exists": False})
 
         repo = UserRepository(mock_pool)
@@ -519,11 +483,9 @@ class TestUserRepositoryQueries:
         assert exists is False
 
     @pytest.mark.asyncio
-    async def test_user_exists_handles_none(self):
+    async def test_user_exists_handles_none(self, mock_pool_with_conn):
         """Test user_exists handles None response."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
         mock_conn.fetchrow = AsyncMock(return_value=None)
 
         repo = UserRepository(mock_pool)
@@ -532,11 +494,9 @@ class TestUserRepositoryQueries:
         assert exists is False
 
     @pytest.mark.asyncio
-    async def test_list_all_without_search(self):
+    async def test_list_all_without_search(self, mock_pool_with_conn):
         """Test list_all returns all users."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
         mock_conn.fetch = AsyncMock(return_value=[
             {
                 "id": uuid4(),
@@ -569,11 +529,9 @@ class TestUserRepositoryQueries:
         assert all(isinstance(u, User) for u in users)
 
     @pytest.mark.asyncio
-    async def test_list_all_with_search(self):
+    async def test_list_all_with_search(self, mock_pool_with_conn):
         """Test list_all with search filter."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
         mock_conn.fetch = AsyncMock(return_value=[
             {
                 "id": uuid4(),
@@ -595,11 +553,9 @@ class TestUserRepositoryQueries:
         assert users[0].username == "testuser"
 
     @pytest.mark.asyncio
-    async def test_list_all_empty(self):
+    async def test_list_all_empty(self, mock_pool_with_conn):
         """Test list_all returns empty list."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
         mock_conn.fetch = AsyncMock(return_value=[])
 
         repo = UserRepository(mock_pool)
@@ -608,11 +564,9 @@ class TestUserRepositoryQueries:
         assert users == []
 
     @pytest.mark.asyncio
-    async def test_count_admins(self):
+    async def test_count_admins(self, mock_pool_with_conn):
         """Test count_admins returns count."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
         mock_conn.fetchrow = AsyncMock(return_value={"count": 3})
 
         repo = UserRepository(mock_pool)
@@ -621,11 +575,9 @@ class TestUserRepositoryQueries:
         assert count == 3
 
     @pytest.mark.asyncio
-    async def test_count_admins_zero(self):
+    async def test_count_admins_zero(self, mock_pool_with_conn):
         """Test count_admins returns 0."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
         mock_conn.fetchrow = AsyncMock(return_value={"count": 0})
 
         repo = UserRepository(mock_pool)
@@ -634,11 +586,9 @@ class TestUserRepositoryQueries:
         assert count == 0
 
     @pytest.mark.asyncio
-    async def test_delete_success(self):
+    async def test_delete_success(self, mock_pool_with_conn):
         """Test delete returns True on success."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
         mock_conn.execute = AsyncMock(return_value="DELETE 1")
 
         repo = UserRepository(mock_pool)
@@ -647,11 +597,9 @@ class TestUserRepositoryQueries:
         assert result is True
 
     @pytest.mark.asyncio
-    async def test_delete_not_found(self):
+    async def test_delete_not_found(self, mock_pool_with_conn):
         """Test delete returns False when not found."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
         mock_conn.execute = AsyncMock(return_value="DELETE 0")
 
         repo = UserRepository(mock_pool)
@@ -668,11 +616,9 @@ class TestProjectRepositoryCreate:
     """Tests for ProjectRepository.create method."""
 
     @pytest.mark.asyncio
-    async def test_create_project_success(self):
+    async def test_create_project_success(self, mock_pool_with_conn):
         """Test create project returns Project object."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
 
         owner_id = uuid4()
         mock_row = {
@@ -697,11 +643,9 @@ class TestProjectRepositoryCreate:
         assert project.description == "Test description"
 
     @pytest.mark.asyncio
-    async def test_create_project_without_description(self):
+    async def test_create_project_without_description(self, mock_pool_with_conn):
         """Test create project with None description."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
 
         owner_id = uuid4()
         mock_row = {
@@ -724,11 +668,9 @@ class TestProjectRepositoryCreate:
         assert project.description is None
 
     @pytest.mark.asyncio
-    async def test_create_project_raises_on_failure(self):
+    async def test_create_project_raises_on_failure(self, mock_pool_with_conn):
         """Test create raises RuntimeError on failure."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
         mock_conn.fetchrow = AsyncMock(return_value=None)
 
         repo = ProjectRepository(mock_pool)
@@ -745,11 +687,9 @@ class TestProjectRepositoryGetters:
     """Tests for ProjectRepository get methods."""
 
     @pytest.mark.asyncio
-    async def test_get_by_id_found(self):
+    async def test_get_by_id_found(self, mock_pool_with_conn):
         """Test get_by_id returns Project when found."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
 
         project_id = uuid4()
         mock_row = {
@@ -769,11 +709,9 @@ class TestProjectRepositoryGetters:
         assert project.id == project_id
 
     @pytest.mark.asyncio
-    async def test_get_by_id_not_found(self):
+    async def test_get_by_id_not_found(self, mock_pool_with_conn):
         """Test get_by_id returns None when not found."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
         mock_conn.fetchrow = AsyncMock(return_value=None)
 
         repo = ProjectRepository(mock_pool)
@@ -782,11 +720,9 @@ class TestProjectRepositoryGetters:
         assert project is None
 
     @pytest.mark.asyncio
-    async def test_get_by_id_or_raise_found(self):
+    async def test_get_by_id_or_raise_found(self, mock_pool_with_conn):
         """Test get_by_id_or_raise returns Project when found."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
 
         project_id = uuid4()
         mock_row = {
@@ -805,11 +741,9 @@ class TestProjectRepositoryGetters:
         assert isinstance(project, Project)
 
     @pytest.mark.asyncio
-    async def test_get_by_id_or_raise_not_found(self):
+    async def test_get_by_id_or_raise_not_found(self, mock_pool_with_conn):
         """Test get_by_id_or_raise raises NotFoundError."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
         mock_conn.fetchrow = AsyncMock(return_value=None)
 
         repo = ProjectRepository(mock_pool)
@@ -818,11 +752,9 @@ class TestProjectRepositoryGetters:
             await repo.get_by_id_or_raise(uuid4())
 
     @pytest.mark.asyncio
-    async def test_list_by_user(self):
+    async def test_list_by_user(self, mock_pool_with_conn):
         """Test list_by_user returns user's projects."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
 
         user_id = uuid4()
         mock_conn.fetch = AsyncMock(return_value=[
@@ -851,11 +783,9 @@ class TestProjectRepositoryGetters:
         assert all(isinstance(p, Project) for p in projects)
 
     @pytest.mark.asyncio
-    async def test_list_by_user_empty(self):
+    async def test_list_by_user_empty(self, mock_pool_with_conn):
         """Test list_by_user returns empty list."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
         mock_conn.fetch = AsyncMock(return_value=[])
 
         repo = ProjectRepository(mock_pool)
@@ -864,11 +794,9 @@ class TestProjectRepositoryGetters:
         assert projects == []
 
     @pytest.mark.asyncio
-    async def test_list_by_owner(self):
+    async def test_list_by_owner(self, mock_pool_with_conn):
         """Test list_by_owner returns owned projects."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
 
         owner_id = uuid4()
         mock_conn.fetch = AsyncMock(return_value=[
@@ -893,11 +821,9 @@ class TestProjectRepositoryUpdate:
     """Tests for ProjectRepository.update method."""
 
     @pytest.mark.asyncio
-    async def test_update_name(self):
+    async def test_update_name(self, mock_pool_with_conn):
         """Test update project name."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
 
         project_id = uuid4()
         mock_row = {
@@ -916,11 +842,9 @@ class TestProjectRepositoryUpdate:
         assert project.name == "Updated Name"
 
     @pytest.mark.asyncio
-    async def test_update_description(self):
+    async def test_update_description(self, mock_pool_with_conn):
         """Test update project description."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
 
         project_id = uuid4()
         mock_row = {
@@ -939,11 +863,9 @@ class TestProjectRepositoryUpdate:
         assert project.description == "Updated description"
 
     @pytest.mark.asyncio
-    async def test_update_no_fields(self):
+    async def test_update_no_fields(self, mock_pool_with_conn):
         """Test update with no fields returns existing project."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
 
         project_id = uuid4()
         mock_row = {
@@ -968,11 +890,9 @@ class TestProjectRepositoryUpdate:
         assert project.name == "Test Project"
 
     @pytest.mark.asyncio
-    async def test_update_not_found(self):
+    async def test_update_not_found(self, mock_pool_with_conn):
         """Test update raises NotFoundError."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
         mock_conn.fetchrow = AsyncMock(return_value=None)
 
         repo = ProjectRepository(mock_pool)
@@ -985,11 +905,9 @@ class TestProjectRepositoryMembers:
     """Tests for ProjectRepository member methods."""
 
     @pytest.mark.asyncio
-    async def test_is_member_true(self):
+    async def test_is_member_true(self, mock_pool_with_conn):
         """Test is_member returns True."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
         mock_conn.fetchrow = AsyncMock(return_value={"exists": True})
 
         repo = ProjectRepository(mock_pool)
@@ -998,11 +916,9 @@ class TestProjectRepositoryMembers:
         assert result is True
 
     @pytest.mark.asyncio
-    async def test_is_member_false(self):
+    async def test_is_member_false(self, mock_pool_with_conn):
         """Test is_member returns False."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
         mock_conn.fetchrow = AsyncMock(return_value={"exists": False})
 
         repo = ProjectRepository(mock_pool)
@@ -1011,11 +927,9 @@ class TestProjectRepositoryMembers:
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_get_member_role_found(self):
+    async def test_get_member_role_found(self, mock_pool_with_conn):
         """Test get_member_role returns role."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
         mock_conn.fetchrow = AsyncMock(return_value={"role": "editor"})
 
         repo = ProjectRepository(mock_pool)
@@ -1024,11 +938,9 @@ class TestProjectRepositoryMembers:
         assert role == "editor"
 
     @pytest.mark.asyncio
-    async def test_get_member_role_not_found(self):
+    async def test_get_member_role_not_found(self, mock_pool_with_conn):
         """Test get_member_role returns None."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
         mock_conn.fetchrow = AsyncMock(return_value=None)
 
         repo = ProjectRepository(mock_pool)
@@ -1037,11 +949,9 @@ class TestProjectRepositoryMembers:
         assert role is None
 
     @pytest.mark.asyncio
-    async def test_add_member_success(self):
+    async def test_add_member_success(self, mock_pool_with_conn):
         """Test add_member returns ProjectMember."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
 
         mock_row = {
             "project_id": uuid4(),
@@ -1058,11 +968,9 @@ class TestProjectRepositoryMembers:
         assert member.role == "editor"
 
     @pytest.mark.asyncio
-    async def test_add_member_raises_on_failure(self):
+    async def test_add_member_raises_on_failure(self, mock_pool_with_conn):
         """Test add_member raises on failure."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
         mock_conn.fetchrow = AsyncMock(return_value=None)
 
         repo = ProjectRepository(mock_pool)
@@ -1071,11 +979,9 @@ class TestProjectRepositoryMembers:
             await repo.add_member(uuid4(), uuid4(), "editor")
 
     @pytest.mark.asyncio
-    async def test_remove_member_success(self):
+    async def test_remove_member_success(self, mock_pool_with_conn):
         """Test remove_member succeeds."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
         mock_conn.execute = AsyncMock(return_value="DELETE 1")
 
         repo = ProjectRepository(mock_pool)
@@ -1083,11 +989,9 @@ class TestProjectRepositoryMembers:
         await repo.remove_member(uuid4(), uuid4())
 
     @pytest.mark.asyncio
-    async def test_remove_member_not_found(self):
+    async def test_remove_member_not_found(self, mock_pool_with_conn):
         """Test remove_member raises NotFoundError."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
         mock_conn.execute = AsyncMock(return_value="DELETE 0")
 
         repo = ProjectRepository(mock_pool)
@@ -1096,11 +1000,9 @@ class TestProjectRepositoryMembers:
             await repo.remove_member(uuid4(), uuid4())
 
     @pytest.mark.asyncio
-    async def test_list_members(self):
+    async def test_list_members(self, mock_pool_with_conn):
         """Test list_members returns members with usernames."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
         mock_conn.fetch = AsyncMock(return_value=[
             {
                 "project_id": uuid4(),
@@ -1130,11 +1032,9 @@ class TestProjectRepositoryDelete:
     """Tests for ProjectRepository.delete method."""
 
     @pytest.mark.asyncio
-    async def test_delete_success(self):
+    async def test_delete_success(self, mock_pool_with_conn):
         """Test delete succeeds."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
         mock_conn.execute = AsyncMock(return_value="DELETE 1")
 
         repo = ProjectRepository(mock_pool)
@@ -1142,11 +1042,9 @@ class TestProjectRepositoryDelete:
         await repo.delete(uuid4())
 
     @pytest.mark.asyncio
-    async def test_delete_not_found(self):
+    async def test_delete_not_found(self, mock_pool_with_conn):
         """Test delete raises NotFoundError."""
-        mock_pool = AsyncMock()
-        mock_conn = AsyncMock()
-        mock_pool.acquire.return_value.__aenter__.return_value = mock_conn
+        mock_pool, mock_conn = mock_pool_with_conn
         mock_conn.execute = AsyncMock(return_value="DELETE 0")
 
         repo = ProjectRepository(mock_pool)

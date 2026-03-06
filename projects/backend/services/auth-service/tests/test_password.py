@@ -301,9 +301,10 @@ class TestPasswordErrorHandling:
         """Test verification with corrupted hash."""
         password = "testpassword"
         full_hash = hash_password(password)
-
-        # Corrupt some characters
-        corrupted = full_hash.replace("a", "X", 3)
+        
+        # Corrupt the cost factor (positions 4-6 in $2b$12$...)
+        # This makes the hash invalid
+        corrupted = full_hash[:4] + "99" + full_hash[6:]
         assert verify_password(password, corrupted) is False
 
     def test_verify_password_encoding_error_handling(self):
