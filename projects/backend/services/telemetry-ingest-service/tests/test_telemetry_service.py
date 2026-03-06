@@ -714,7 +714,12 @@ class TestTelemetryIngestServiceIngest:
             ],
         )
 
-        with patch("telemetry_ingest_service.services.telemetry.get_pool") as mock_get_pool:
+        with patch("telemetry_ingest_service.services.telemetry.get_pool") as mock_get_pool, \
+             patch("telemetry_ingest_service.services.telemetry.settings") as mock_settings:
+
+            mock_settings.telemetry_max_batch_meta_bytes = 1024 * 1024
+            mock_settings.telemetry_max_reading_meta_bytes = 1024 * 1024  # 1MB
+            mock_settings.telemetry_max_reading_meta_bytes = 1024 * 1024  # 1MB
             mock_pool = MagicMock()
             mock_get_pool.return_value = mock_pool
 
@@ -812,6 +817,8 @@ class TestTelemetryIngestServiceIngest:
              patch("telemetry_ingest_service.services.telemetry.write_spool") as mock_write_spool:
 
             mock_settings.spool_enabled = True
+            mock_settings.telemetry_max_batch_meta_bytes = 1024 * 1024
+            mock_settings.telemetry_max_reading_meta_bytes = 1024 * 1024
             mock_pool = MagicMock()
             mock_get_pool.return_value = mock_pool
 
@@ -867,6 +874,8 @@ class TestTelemetryIngestServiceIngest:
              patch("telemetry_ingest_service.services.telemetry.settings") as mock_settings:
 
             mock_settings.spool_enabled = False
+            mock_settings.telemetry_max_batch_meta_bytes = 1024 * 1024
+            mock_settings.telemetry_max_reading_meta_bytes = 1024 * 1024
             mock_pool = MagicMock()
             mock_get_pool.return_value = mock_pool
 
