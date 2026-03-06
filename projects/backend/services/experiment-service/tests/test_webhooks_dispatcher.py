@@ -1,6 +1,7 @@
 """Unit tests for experiment_service.webhooks_dispatcher module."""
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -139,7 +140,7 @@ class TestBackoffSeconds:
 
     def test_attempt_6(self):
         """Test backoff for attempt 6."""
-        assert _backoff_seconds(6) == 64  # 2^6, but capped at 60
+        assert _backoff_seconds(6) == 60  # 2^6=64, but capped at 60
 
     def test_attempt_7(self):
         """Test backoff for attempt 7 (capped)."""
@@ -170,10 +171,15 @@ class TestDeliver:
     @pytest.mark.asyncio
     async def test_successful_delivery(self):
         """Test successful webhook delivery."""
-        session = AsyncMock()
+        session = MagicMock()
         response = AsyncMock()
+        response.text = AsyncMock(return_value="")
         response.status = 200
-        session.post.return_value.__aenter__.return_value = response
+        response.text = AsyncMock(return_value="")
+        mock_cm = MagicMock()
+        mock_cm.__aenter__ = AsyncMock(return_value=response)
+        mock_cm.__aexit__ = AsyncMock(return_value=None)
+        session.post.return_value = mock_cm
 
         delivery = WebhookDelivery(
             id=uuid4(),
@@ -202,10 +208,14 @@ class TestDeliver:
     @pytest.mark.asyncio
     async def test_successful_delivery_with_secret(self):
         """Test successful delivery includes signature header."""
-        session = AsyncMock()
+        session = MagicMock()
         response = AsyncMock()
+        response.text = AsyncMock(return_value="")
         response.status = 200
-        session.post.return_value.__aenter__.return_value = response
+        mock_cm = MagicMock()
+        mock_cm.__aenter__ = AsyncMock(return_value=response)
+        mock_cm.__aexit__ = AsyncMock(return_value=None)
+        session.post.return_value = mock_cm
 
         delivery = WebhookDelivery(
             id=uuid4(),
@@ -239,11 +249,15 @@ class TestDeliver:
     @pytest.mark.asyncio
     async def test_4xx_status_returns_error(self):
         """Test 4xx status returns error."""
-        session = AsyncMock()
+        session = MagicMock()
         response = AsyncMock()
+        response.text = AsyncMock(return_value="")
         response.status = 400
         response.text = AsyncMock(return_value="Bad request")
-        session.post.return_value.__aenter__.return_value = response
+        mock_cm = MagicMock()
+        mock_cm.__aenter__ = AsyncMock(return_value=response)
+        mock_cm.__aexit__ = AsyncMock(return_value=None)
+        session.post.return_value = mock_cm
 
         delivery = WebhookDelivery(
             id=uuid4(),
@@ -272,11 +286,15 @@ class TestDeliver:
     @pytest.mark.asyncio
     async def test_5xx_status_returns_error(self):
         """Test 5xx status returns error."""
-        session = AsyncMock()
+        session = MagicMock()
         response = AsyncMock()
+        response.text = AsyncMock(return_value="")
         response.status = 500
         response.text = AsyncMock(return_value="Internal server error")
-        session.post.return_value.__aenter__.return_value = response
+        mock_cm = MagicMock()
+        mock_cm.__aenter__ = AsyncMock(return_value=response)
+        mock_cm.__aexit__ = AsyncMock(return_value=None)
+        session.post.return_value = mock_cm
 
         delivery = WebhookDelivery(
             id=uuid4(),
@@ -305,7 +323,7 @@ class TestDeliver:
     @pytest.mark.asyncio
     async def test_network_error_returns_error(self):
         """Test network error returns error."""
-        session = AsyncMock()
+        session = MagicMock()
         session.post.side_effect = ConnectionError("Connection refused")
 
         delivery = WebhookDelivery(
@@ -335,7 +353,7 @@ class TestDeliver:
     @pytest.mark.asyncio
     async def test_timeout_error_returns_error(self):
         """Test timeout error returns error."""
-        session = AsyncMock()
+        session = MagicMock()
         session.post.side_effect = TimeoutError("Request timed out")
 
         delivery = WebhookDelivery(
@@ -364,10 +382,14 @@ class TestDeliver:
     @pytest.mark.asyncio
     async def test_sends_correct_headers(self):
         """Test correct headers are sent."""
-        session = AsyncMock()
+        session = MagicMock()
         response = AsyncMock()
+        response.text = AsyncMock(return_value="")
         response.status = 200
-        session.post.return_value.__aenter__.return_value = response
+        mock_cm = MagicMock()
+        mock_cm.__aenter__ = AsyncMock(return_value=response)
+        mock_cm.__aexit__ = AsyncMock(return_value=None)
+        session.post.return_value = mock_cm
 
         delivery = WebhookDelivery(
             id=uuid4(),
@@ -398,10 +420,14 @@ class TestDeliver:
     @pytest.mark.asyncio
     async def test_sends_correct_body(self):
         """Test correct body is sent."""
-        session = AsyncMock()
+        session = MagicMock()
         response = AsyncMock()
+        response.text = AsyncMock(return_value="")
         response.status = 200
-        session.post.return_value.__aenter__.return_value = response
+        mock_cm = MagicMock()
+        mock_cm.__aenter__ = AsyncMock(return_value=response)
+        mock_cm.__aexit__ = AsyncMock(return_value=None)
+        session.post.return_value = mock_cm
 
         delivery = WebhookDelivery(
             id=uuid4(),
@@ -425,22 +451,26 @@ class TestDeliver:
 
         call_args = session.post.call_args
         data = call_args.kwargs["data"]
-        # Should be compact JSON
+        # Should be compact JSON (as bytes)
         assert data == json.dumps(
             {"key": "value", "nested": {"a": 1}},
             separators=(",", ":"),
             ensure_ascii=False,
-        )
+        ).encode("utf-8")
 
     @pytest.mark.asyncio
     async def test_truncates_long_error_messages(self):
         """Test long error messages are truncated."""
-        session = AsyncMock()
+        session = MagicMock()
         response = AsyncMock()
+        response.text = AsyncMock(return_value="")
         response.status = 500
         long_text = "x" * 3000
         response.text = AsyncMock(return_value=long_text)
-        session.post.return_value.__aenter__.return_value = response
+        mock_cm = MagicMock()
+        mock_cm.__aenter__ = AsyncMock(return_value=response)
+        mock_cm.__aexit__ = AsyncMock(return_value=None)
+        session.post.return_value = mock_cm
 
         delivery = WebhookDelivery(
             id=uuid4(),
@@ -469,10 +499,14 @@ class TestDeliver:
     @pytest.mark.asyncio
     async def test_uses_timeout(self):
         """Test timeout is used."""
-        session = AsyncMock()
+        session = MagicMock()
         response = AsyncMock()
+        response.text = AsyncMock(return_value="")
         response.status = 200
-        session.post.return_value.__aenter__.return_value = response
+        mock_cm = MagicMock()
+        mock_cm.__aenter__ = AsyncMock(return_value=response)
+        mock_cm.__aexit__ = AsyncMock(return_value=None)
+        session.post.return_value = mock_cm
 
         delivery = WebhookDelivery(
             id=uuid4(),
@@ -509,7 +543,7 @@ class TestStartWebhookDispatcher:
         app = web.Application()
 
         with patch("experiment_service.webhooks_dispatcher.ClientSession") as MockSession:
-            mock_session = AsyncMock()
+            mock_session = MagicMock()
             MockSession.return_value = mock_session
 
             await start_webhook_dispatcher(app)
@@ -536,7 +570,7 @@ class TestStartWebhookDispatcher:
         app = web.Application()
 
         with patch("experiment_service.webhooks_dispatcher.ClientSession") as MockSession:
-            mock_session = AsyncMock()
+            mock_session = MagicMock()
             MockSession.return_value = mock_session
 
             await start_webhook_dispatcher(app)
@@ -566,7 +600,7 @@ class TestStopWebhookDispatcher:
     async def test_closes_client_session(self):
         """Test stop_webhook_dispatcher closes session."""
         app = web.Application()
-        mock_session = AsyncMock()
+        mock_session = MagicMock()
         app["webhook_http_session"] = mock_session
 
         await stop_webhook_dispatcher(app)
@@ -577,7 +611,7 @@ class TestStopWebhookDispatcher:
     async def test_handles_missing_task(self):
         """Test stop_webhook_dispatcher handles missing task."""
         app = web.Application()
-        mock_session = AsyncMock()
+        mock_session = MagicMock()
         app["webhook_http_session"] = mock_session
 
         # Should not raise
@@ -614,7 +648,7 @@ class TestStopWebhookDispatcher:
         mock_task.__await__ = raise_cancelled
 
         app["webhook_dispatcher_task"] = mock_task
-        mock_session = AsyncMock()
+        mock_session = MagicMock()
         app["webhook_http_session"] = mock_session
 
         # Should not raise
@@ -628,13 +662,17 @@ class TestWebhookDispatcherLoop:
     async def test_dispatcher_claims_and_delivers(self):
         """Test dispatcher claims due deliveries and delivers them."""
         app = web.Application()
-        mock_session = AsyncMock()
+        mock_session = MagicMock()
         app["webhook_http_session"] = mock_session
 
         # Mock response
         response = AsyncMock()
+        response.text = AsyncMock(return_value="")
         response.status = 200
-        mock_session.post.return_value.__aenter__.return_value = response
+        mock_mock_cm = MagicMock()
+        mock_cm.__aenter__ = AsyncMock(return_value=response)
+        mock_cm.__aexit__ = AsyncMock(return_value=None)
+        session.post.return_value = mock_cm
 
         # Mock repository
         mock_delivery = WebhookDelivery(
@@ -683,7 +721,7 @@ class TestWebhookDispatcherLoop:
     async def test_dispatcher_handles_empty_queue(self):
         """Test dispatcher handles empty queue."""
         app = web.Application()
-        mock_session = AsyncMock()
+        mock_session = MagicMock()
         app["webhook_http_session"] = mock_session
 
         with patch("experiment_service.webhooks_dispatcher.get_pool") as mock_get_pool, \
@@ -712,10 +750,14 @@ class TestWebhookDispatcherLoop:
     async def test_dispatcher_marks_successful_delivery(self):
         """Test dispatcher marks successful deliveries."""
         app = web.Application()
-        mock_session = AsyncMock()
+        mock_session = MagicMock()
         response = AsyncMock()
+        response.text = AsyncMock(return_value="")
         response.status = 200
-        mock_session.post.return_value.__aenter__.return_value = response
+        mock_mock_cm = MagicMock()
+        mock_cm.__aenter__ = AsyncMock(return_value=response)
+        mock_cm.__aexit__ = AsyncMock(return_value=None)
+        session.post.return_value = mock_cm
         app["webhook_http_session"] = mock_session
 
         mock_delivery = WebhookDelivery(
@@ -765,11 +807,15 @@ class TestWebhookDispatcherLoop:
     async def test_dispatcher_marks_failed_after_max_attempts(self):
         """Test dispatcher marks delivery as dead_lettered after max attempts."""
         app = web.Application()
-        mock_session = AsyncMock()
+        mock_session = MagicMock()
         response = AsyncMock()
+        response.text = AsyncMock(return_value="")
         response.status = 500
         response.text = AsyncMock(return_value="Error")
-        mock_session.post.return_value.__aenter__.return_value = response
+        mock_mock_cm = MagicMock()
+        mock_cm.__aenter__ = AsyncMock(return_value=response)
+        mock_cm.__aexit__ = AsyncMock(return_value=None)
+        session.post.return_value = mock_cm
         app["webhook_http_session"] = mock_session
 
         mock_delivery = WebhookDelivery(
@@ -818,11 +864,15 @@ class TestWebhookDispatcherLoop:
     async def test_dispatcher_schedules_retry_for_failed_delivery(self):
         """Test dispatcher schedules retry for failed delivery."""
         app = web.Application()
-        mock_session = AsyncMock()
+        mock_session = MagicMock()
         response = AsyncMock()
+        response.text = AsyncMock(return_value="")
         response.status = 500
         response.text = AsyncMock(return_value="Error")
-        mock_session.post.return_value.__aenter__.return_value = response
+        mock_mock_cm = MagicMock()
+        mock_cm.__aenter__ = AsyncMock(return_value=response)
+        mock_cm.__aexit__ = AsyncMock(return_value=None)
+        session.post.return_value = mock_cm
         app["webhook_http_session"] = mock_session
 
         mock_delivery = WebhookDelivery(
