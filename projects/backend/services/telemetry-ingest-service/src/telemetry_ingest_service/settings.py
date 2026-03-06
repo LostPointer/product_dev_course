@@ -40,6 +40,15 @@ class Settings(BaseServiceSettings):
     # Auth-service (for user-authenticated telemetry stream access)
     auth_service_url: str = "http://auth-service:8001"
 
+    # WebSocket ingest limits
+    ws_max_message_bytes: int = 1 * 1024 * 1024  # 1 MB per message
+
+    # Disk spool — write-ahead buffer when DB writes are unavailable
+    spool_enabled: bool = True
+    spool_dir: str = "/tmp/telemetry-spool"
+    spool_flush_interval_seconds: float = 5.0
+    spool_max_files: int = 10_000
+
 
 @lru_cache
 def get_settings() -> Settings:

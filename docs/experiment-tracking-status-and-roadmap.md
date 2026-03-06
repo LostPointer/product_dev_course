@@ -203,13 +203,49 @@
 ### Текущее состояние (актуализируется)
 - **✅ Завершено (Foundation):** блок Foundation полностью (миграции, CRUD для `Experiment/Run/CaptureSession`, idempotency, пагинация, OpenAPI, RBAC). Добавлены домены `Sensor` и `ConversionProfile`, статусные машины и покрытие тестами (`tests/test_api_*`). Множественные проекты для датчиков реализованы полностью (backend: таблица `sensor_projects` в миграции `001_initial_schema.sql`, API endpoints, тесты; frontend: UI для управления проектами в `SensorDetail.tsx`). UI для управления доступом к проектам реализован (`ProjectMembersModal` с тестами). Профиль пользователя реализован (`UserProfileModal` с тестами).
 - **✅ Завершено (Runs & Capture Management):** batch-update статусов, `CaptureSession` (ordinal_number + статусы), bulk tagging, audit-log (Run/CaptureSession), webhooks (outbox + dispatcher), **backfill/late-data процесс** (API start/complete, привязка late-записей, UI). Остаётся: расширение доменных инвариантов ⚠️.
-- **❌ Не реализовано / в backlog:** Telemetry ingest (WebSocket), бизнес‑политики доступа, SLO/SLI мониторинг, chaos‑тесты, operational документация.
+- **❌ Не реализовано / в backlog:** бизнес‑политики доступа, SLO/SLI мониторинг, chaos‑тесты, operational документация.
   - Примечание: **REST ingest** реализован отдельным сервисом `telemetry-ingest-service` (`POST /api/v1/telemetry`).
+  - Примечание: **WebSocket ingest** ✅ реализован в `telemetry-ingest-service` (`GET /api/v1/telemetry/ws`). Подробнее — см. раздел «WebSocket ingest» ниже.
   - Примечание: **SSE stream (MVP)** реализован в `telemetry-ingest-service` (`GET /api/v1/telemetry/stream`) и используется во фронтенде (например, `TelemetryStreamModal`, `/telemetry` через `TelemetryViewer`/`TelemetryPanel`).
   - Примечание: **SSE auth (MVP)**: `telemetry-ingest-service` принимает токен как sensor token, так и user JWT (через auth-proxy); для клиентов без возможности выставить заголовок поддержан query `access_token`.
   - Примечание: **MVP late-data политика**: данные после stop capture session не “приклеиваются” обратно к сессии (помечаются в `meta.__system` как late); ingest запрещён для `archived`.
   - В `experiment-service` публичной ручки `/api/v1/telemetry` больше нет; real-time режимы со стороны `experiment-service` и полноценная интеграция со сценариями backfill/реплея — в backlog.
 - **Зависимости:** сервис собран на `aiohttp 3.10`, `asyncpg 0.31`, `pydantic-settings 2.4`, `structlog`, `opentelemetry-sdk`/`opentelemetry-instrumentation-aiohttp-server`; тестируется через `pytest`, `pytest-aiohttp`, `yandex-taxi-testsuite[postgresql]`; кодоген — `openapi-generator-cli 7.17`.
+
+### WebSocket ingest (`GET /api/v1/telemetry/ws`) ✅
+
+> **Статус:** ✅ Реализовано.
+> **Цель:** низкоlatency ingest для высокочастотных источников (RC-машинка 500 Гц), где HTTP-overhead на каждый батч неприемлем.
+
+#### Что реализовано
+
+- ✅ **Endpoint:** `GET /api/v1/telemetry/ws?sensor_id=<uuid>` в `telemetry-ingest-service`.
+- ✅ **Аутентификация до WebSocket upgrade:** токен проверяется как обычный HTTP-запрос → клиент получает `401` / `400` без открытия WS-соединения.
+- ✅ **Два способа передать токен:** `Authorization: Bearer <token>` (для устройств) или `?token=` / `?access_token=` (для браузеров, которые не могут выставить заголовок).
+- ✅ **Протокол** (JSON text frames):
+  - **Клиент → сервер:** `{ "run_id": "...", "capture_session_id": "...", "meta": {}, "readings": [...], "seq": 42 }`
+  - **Ack:** `{ "status": "accepted", "accepted": 5, "seq": 42 }`
+  - **Recoverable error** (соединение живёт): `{ "status": "error", "code": "validation_error", "message": "..." }`
+- ✅ **Recoverable ошибки** (invalid JSON, validation error, scope mismatch) — error-сообщение без закрытия соединения.
+- ✅ **Fatal ошибки** (auth, internal) — WS закрывается с кодом `1008` / `1011`.
+- ✅ **Та же бизнес-логика, что REST ingest:** sensor auth, run/capture scope resolution, auto-attach active capture session, late-data marking, conversion profiles.
+- ✅ **Auth-proxy:** `websocket: true` уже стоит в `@fastify/http-proxy` для telemetry-маршрутов — проксирование работает без изменений.
+- ✅ **Тесты:** `tests/test_api_ws_ingest.py` — 8 интеграционных тестов (happy path, seq echo, multiple batches, 400/401 до upgrade, invalid JSON, validation error, Authorization header).
+
+#### Ключевые файлы
+
+| Файл | Назначение |
+|------|-----------|
+| `telemetry-ingest-service/src/.../api/routes/ws_ingest.py` | WebSocket handler |
+| `telemetry-ingest-service/src/.../domain/dto.py` | `WsIngestMessageDTO` (без `sensor_id`, он из URL; опциональный `seq`) |
+| `telemetry-ingest-service/src/.../settings.py` | `ws_max_message_bytes` (default 1 MB) |
+| `telemetry-ingest-service/tests/test_api_ws_ingest.py` | Интеграционные тесты |
+
+#### Ограничения / backlog
+
+- Максимальный размер одного сообщения: `ws_max_message_bytes` (1 MB, настраивается через env).
+- Rate limiting не реализован (общий backlog для telemetry-ingest-service).
+- Нет server-push: сервер только отвечает на входящие батчи. Для просмотра телеметрии используйте SSE `GET /api/v1/telemetry/stream`.
 
 ---
 
@@ -478,6 +514,6 @@
 - **SLO/SLI мониторинг:** ❌
 - **Трассировка (OpenTelemetry):** ✅ Реализовано: `TracerProvider` + OTLP HTTP exporter + авто-инструментализация aiohttp-server (`opentelemetry-instrumentation-aiohttp-server`); активируется при наличии `OTEL_EXPORTER_ENDPOINT`; `get_tracer()` доступен для ручных спанов в сервисном/репозиторном коде; graceful shutdown с flush спанов.
 - **Chaos-тесты и отказоустойчивость:** ❌
-- **Telemetry ingest disk spool:** ❌
+- **Telemetry ingest disk spool:** ✅ Реализовано (см. раздел «WebSocket ingest» выше для контекста; детали ниже).
 - **Документация:** ✅ (индекс `docs/README.md`, quickstart `docs/local-dev-docker-setup.md`, demo `docs/demo-flow.md`, E2E чеклист `docs/manual-testing.md`, дебаг `docs/ui-debugging.md`)
 
