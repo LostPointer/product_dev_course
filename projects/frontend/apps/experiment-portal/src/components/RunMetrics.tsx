@@ -91,6 +91,7 @@ export default function RunMetrics({ runId }: Props) {
   const activeSeries = series.find((s) => s.name === selectedName) ?? series[0]
   const activeIndex = series.findIndex((s) => s.name === activeSeries.name)
   const color = SERIES_COLORS[activeIndex % SERIES_COLORS.length]
+  const lastPoint = activeSeries.points[activeSeries.points.length - 1]
 
   return (
     <div className="run-metrics">
@@ -114,8 +115,7 @@ export default function RunMetrics({ runId }: Props) {
       <MetricChart key={activeSeries.name} series={activeSeries} color={color} />
       <p className="run-metrics__summary">
         {activeSeries.points.length} точек · последнее значение:{' '}
-        <strong>{activeSeries.points.at(-1)?.value ?? '—'}</strong> на шаге{' '}
-        <strong>{activeSeries.points.at(-1)?.step ?? '—'}</strong>
+        <strong>{lastPoint?.value ?? '—'}</strong> на шаге <strong>{lastPoint?.step ?? '—'}</strong>
       </p>
     </div>
   )

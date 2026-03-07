@@ -20,7 +20,10 @@ vi.mock('../api/auth', () => ({
 const createWrapper = () => {
     const queryClient = new QueryClient({
         defaultOptions: {
-            queries: { retry: false },
+            queries: { 
+                retry: false,
+                networkMode: 'always',
+            },
             mutations: { retry: false },
         },
     })
@@ -115,10 +118,21 @@ describe('AdminUsers', () => {
         })
 
         it('shows error state when fetch fails', async () => {
-            vi.mocked(authApi).adminListUsers.mockRejectedValue(new Error('Server error'))
-            render(<AdminUsers />, { wrapper: createWrapper() })
-
-            expect(await screen.findByText('Server error')).toBeInTheDocument()
+            const mockError = new Error('Server error')
+            vi.mocked(authApi).adminListUsers.mockRejectedValue(mockError)
+            
+            const { container } = render(<AdminUsers />, { wrapper: createWrapper() })
+            
+            // Wait for loading to finish and error to appear
+            await waitFor(
+                () => {
+                    const errorDiv = container.querySelector('.error')
+                    expect(errorDiv).toBeInTheDocument()
+                },
+                { timeout: 2000 }
+            )
+            
+            expect(container.querySelector('.error')?.textContent).toMatch(/server error/i)
         })
 
         it('shows pwd badge for user with password_change_required', async () => {
