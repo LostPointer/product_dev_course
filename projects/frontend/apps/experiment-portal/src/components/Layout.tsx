@@ -258,7 +258,7 @@ function Layout({ children }: LayoutProps) {
             className="sidebar-brand"
             onClick={() => setIsMenuOpen(false)}
           >
-            <span className="sidebar-brand__eyebrow">Lab Atlas</span>
+            <span className="sidebar-brand__eyebrow">Bartini Labs</span>
             <span className="sidebar-brand__mark">LA</span>
             <span className="sidebar-brand__title">Experiment Portal</span>
             <span className="sidebar-brand__caption">
