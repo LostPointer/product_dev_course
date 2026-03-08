@@ -11,7 +11,7 @@
   letter-spacing: 0.14em;
   text-transform: uppercase;
   border: 1px solid transparent;
-  background-color: rgba(91, 105, 118, 0.12);
+  background-color: rgba(98, 91, 113, 0.12);
   color: var(--text-secondary);
 }
 
@@ -25,39 +25,39 @@
 }
 
 .badge-primary {
-  background-color: rgba(15, 118, 110, 0.12);
+  background-color: rgba(103, 80, 164, 0.12);
   color: var(--primary);
-  border-color: rgba(15, 118, 110, 0.14);
+  border-color: rgba(103, 80, 164, 0.14);
 }
 
 .badge-success {
-  background-color: rgba(22, 101, 52, 0.12);
+  background-color: rgba(56, 106, 32, 0.12);
   color: var(--success);
-  border-color: rgba(22, 101, 52, 0.16);
+  border-color: rgba(56, 106, 32, 0.16);
 }
 
 .badge-warning {
-  background-color: rgba(154, 77, 2, 0.12);
+  background-color: rgba(124, 78, 0, 0.12);
   color: $text-warning;
-  border-color: rgba(154, 77, 2, 0.16);
+  border-color: rgba(124, 78, 0, 0.16);
 }
 
 .badge-danger {
-  background-color: rgba(180, 35, 24, 0.12);
+  background-color: rgba(179, 38, 30, 0.12);
   color: var(--error);
-  border-color: rgba(180, 35, 24, 0.16);
+  border-color: rgba(179, 38, 30, 0.16);
 }
 
 .badge-info {
-  background-color: rgba(12, 74, 110, 0.12);
+  background-color: rgba(0, 99, 155, 0.12);
   color: var(--info);
-  border-color: rgba(12, 74, 110, 0.16);
+  border-color: rgba(0, 99, 155, 0.16);
 }
 
 .badge-secondary {
-  background-color: rgba(91, 105, 118, 0.12);
+  background-color: rgba(98, 91, 113, 0.12);
   color: var(--text-secondary);
-  border-color: rgba(91, 105, 118, 0.12);
+  border-color: rgba(98, 91, 113, 0.12);
 }
 
 .btn-sm {
@@ -93,7 +93,7 @@
   align-items: flex-start;
   gap: 16px;
   padding: 12px 0;
-  border-bottom: 1px solid rgba(91, 105, 118, 0.14);
+  border-bottom: 1px solid rgba(98, 91, 113, 0.14);
 }
 
 .info-row:last-child {
