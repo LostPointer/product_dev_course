@@ -36,6 +36,8 @@ async def test_health_returns_503_when_db_unavailable(service_client, monkeypatc
         raise RuntimeError("simulated DB failure")
 
     monkeypatch.setattr(pool_module, "get_pool_service", _bad_pool)
+    import experiment_service.api.routes.health as health_module
+    monkeypatch.setattr(health_module, "get_pool", _bad_pool)
 
     response = await service_client.get("/health")
     assert response.status == 503
