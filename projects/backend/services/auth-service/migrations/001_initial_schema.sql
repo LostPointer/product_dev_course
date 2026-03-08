@@ -1,9 +1,8 @@
 -- 001_initial_schema.sql
 -- Initial Auth Service schema with default admin user.
 
+-- pgcrypto создаётся при создании БД (Terraform / init script), не миграцией (нет прав у app user).
 BEGIN;
-
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE OR REPLACE FUNCTION set_updated_at()
 RETURNS TRIGGER AS $$
@@ -31,18 +30,6 @@ CREATE TRIGGER users_set_updated_at
     BEFORE UPDATE ON users
     FOR EACH ROW
     EXECUTE FUNCTION set_updated_at();
-
--- Создаём пользователя по умолчанию (пароль: admin123)
--- ВАЖНО: В production обязательно смените пароль при первом входе!
--- Хеш пароля "admin123" с bcrypt (12 rounds)
-INSERT INTO users (username, email, hashed_password, password_change_required)
-VALUES (
-    'admin',
-    'admin@example.com',
-    '$2b$12$0QfCvOcgNkygw/I79ieV5eOIwAjWXUjdFUr/QvRgDMewN1OfENrmG',  -- admin123
-    true  -- Требуется смена пароля при первом входе
-)
-ON CONFLICT (username) DO NOTHING;
 
 -- Schema migrations tracking
 CREATE TABLE IF NOT EXISTS schema_migrations (

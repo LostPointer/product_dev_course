@@ -2,7 +2,7 @@
 .PHONY: backend-install
 .PHONY: logs logs-follow logs-service logs-proxy logs-auth-service logs-errors
 .PHONY: logs-stack logs-stack-up logs-stack-down logs-stack-restart
-.PHONY: dev dev-up dev-down dev-restart dev-rebuild dev-rebuild-changed dev-logs dev-fix dev-clean grafana-reset-password
+.PHONY: dev dev-up dev-down dev-restart dev-rebuild dev-rebuild-changed dev-logs dev-status dev-fix dev-clean grafana-reset-password
 
 BACKEND_SERVICES_DIR := projects/backend/services
 BACKEND_DIR := projects/backend/services/experiment-service
@@ -23,6 +23,8 @@ FRONTEND_NODE_IMAGE ?= node:24-alpine
 DOCKER_BUILDKIT ?= 1
 COMPOSE_DOCKER_CLI_BUILD ?= 1
 DOCKER_BUILD_ENV := DOCKER_BUILDKIT=$(DOCKER_BUILDKIT) COMPOSE_DOCKER_CLI_BUILD=$(COMPOSE_DOCKER_CLI_BUILD)
+# Таймаут HTTP-запросов к Docker daemon (секунды). Увеличьте при медленной сборке/запуске контейнеров.
+COMPOSE_HTTP_TIMEOUT ?= 120
 BACKEND_BASE_DOCKERFILE := projects/backend/Dockerfile.base
 BACKEND_BASE_HASH := $(shell sha256sum $(BACKEND_BASE_DOCKERFILE) 2>/dev/null | awk '{print $$1}')
 BACKEND_DEV_SERVICES := auth-service experiment-service telemetry-ingest-service
@@ -110,27 +112,29 @@ test-backend: backend-install
 		echo "⚠️  Не найдено ни одного backend сервиса в $(BACKEND_SERVICES_DIR)"; \
 		exit 1; \
 	fi; \
-	echo "🐘 Starting TimescaleDB (postgres) for backend tests..."; \
-	docker-compose up -d postgres >/dev/null 2>&1 || (echo "❌ docker-compose failed to start postgres" && exit 1); \
-	# Wait for readiness (up to ~30s). \
-	for i in $$(seq 1 60); do \
-		docker-compose exec -T postgres pg_isready -U postgres -d postgres >/dev/null 2>&1 && break; \
-		sleep 0.5; \
-	done; \
-	if ! docker-compose exec -T postgres pg_isready -U postgres -d postgres >/dev/null 2>&1; then \
-		echo "❌ Postgres is not ready"; \
-		docker-compose logs --tail=80 postgres; \
-		exit 1; \
-	fi; \
 	PG_TEST_DSN="$(TEST_POSTGRESQL_DSN)"; \
 	if [ -z "$$PG_TEST_DSN" ]; then \
+		echo "🐘 Starting TimescaleDB (postgres) for backend tests..."; \
+		docker-compose up -d postgres >/dev/null 2>&1 || { \
+			echo "❌ docker-compose failed to start postgres"; \
+			echo "   If you see 'Permission denied' on the Docker socket, add your user to the docker group:"; \
+			echo "   sudo usermod -aG docker \$$USER && newgrp docker"; \
+			echo "   Or run tests against an existing Postgres: make test-backend TEST_POSTGRESQL_DSN='postgresql://user:pass@host:5432/dbname'"; \
+			exit 1; \
+		}; \
+		for i in $$(seq 1 60); do \
+			docker-compose exec -T postgres pg_isready -U postgres -d postgres >/dev/null 2>&1 && break; \
+			sleep 0.5; \
+		done; \
+		if ! docker-compose exec -T postgres pg_isready -U postgres -d postgres >/dev/null 2>&1; then \
+			echo "❌ Postgres is not ready"; \
+			docker-compose logs --tail=80 postgres; \
+			exit 1; \
+		fi; \
 		hostport="$$(docker-compose port postgres 5432 2>/dev/null | tail -n 1 | sed 's/.*://')"; \
 		if [ -z "$$hostport" ]; then hostport=5433; fi; \
-		# Strip quotes if .env uses POSTGRES_USER="..." format. \
 		pg_user="$$(docker-compose exec -T postgres sh -lc 'printf \"%s\" \"$${POSTGRES_USER:-postgres}\"' | sed 's/\"//g')"; \
 		pg_pass="$$(docker-compose exec -T postgres sh -lc 'printf \"%s\" \"$${POSTGRES_PASSWORD:-postgres}\"' | sed 's/\"//g')"; \
-		# If the postgres volume already exists, POSTGRES_PASSWORD env won't update the actual role password. \
-		# Ensure the role password matches what we'll use in the DSN. \
 		docker-compose exec -T postgres psql -U postgres -d postgres -c "ALTER USER \"$${pg_user}\" WITH PASSWORD '$${pg_pass}';" >/dev/null 2>&1 || true; \
 		PG_TEST_DSN="postgresql://$${pg_user}:$${pg_pass}@localhost:$${hostport}/postgres"; \
 	fi; \
@@ -283,7 +287,7 @@ dev-up:
 		echo "⚠️  Файл .env не найден. Создаю из примера..."; \
 		cp env.docker.example .env 2>/dev/null || true; \
 	fi
-	docker-compose up -d postgres auth-service experiment-service telemetry-ingest-service auth-proxy experiment-portal sensor-simulator loki alloy grafana
+	COMPOSE_HTTP_TIMEOUT=$(COMPOSE_HTTP_TIMEOUT) docker-compose up -d postgres auth-service experiment-service telemetry-ingest-service auth-proxy experiment-portal sensor-simulator loki alloy grafana
 	@echo ""
 	@echo "✅ Сервисы запущены!"
 	@echo "🌐 Фронтенд доступен на http://localhost:3000"
@@ -473,6 +477,11 @@ backend-base-check:
 dev-logs:
 	@echo "Просмотр логов всех dev-сервисов (Ctrl+C для выхода)"
 	docker-compose logs -f --tail=50 postgres auth-service experiment-service telemetry-ingest-service auth-proxy experiment-portal sensor-simulator loki alloy grafana
+
+# Статус dev-сервисов (какие контейнеры запущены)
+dev-status:
+	@echo "Статус dev-сервисов:"
+	@docker-compose ps postgres auth-service experiment-service telemetry-ingest-service auth-proxy experiment-portal sensor-simulator loki alloy grafana 2>/dev/null || docker-compose ps
 
 # Исправление ошибки ContainerConfig (удаление проблемных контейнеров и пересоздание)
 dev-fix:

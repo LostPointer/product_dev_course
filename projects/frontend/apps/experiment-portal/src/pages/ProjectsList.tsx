@@ -9,165 +9,166 @@ import ProjectMembersModal from '../components/ProjectMembersModal'
 import './ProjectsList.scss'
 
 function ProjectsList() {
-    const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
-    const [selectedProjectOwnerId, setSelectedProjectOwnerId] = useState<string | null>(null)
-    const [projectModal, setProjectModal] = useState<{
-        isOpen: boolean
-        mode: 'create' | 'view' | 'edit'
-        projectId?: string
-    }>({ isOpen: false, mode: 'create' })
-    const { data, isLoading, error, isError, status } = useQuery({
-        queryKey: ['projects'],
-        queryFn: async () => {
-            console.log('ProjectsList: Starting fetch...')
-            try {
-                const result = await projectsApi.list()
-                console.log('ProjectsList: Fetch success:', result)
-                return result
-            } catch (err) {
-                console.error('ProjectsList: Fetch error:', err)
-                throw err
-            }
-        },
-        retry: 1,
-        refetchOnWindowFocus: false,
-        staleTime: 0, // Не кешировать данные
-    })
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
+  const [selectedProjectOwnerId, setSelectedProjectOwnerId] = useState<string | null>(null)
+  const [projectModal, setProjectModal] = useState<{
+    isOpen: boolean
+    mode: 'create' | 'view' | 'edit'
+    projectId?: string
+  }>({ isOpen: false, mode: 'create' })
 
-    // Получаем текущего пользователя для проверки роли
-    const { data: currentUser, isLoading: userLoading } = useQuery({
-        queryKey: ['auth', 'me'],
-        queryFn: () => authApi.me(),
-    })
+  const { data, isLoading, error, isError } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => projectsApi.list(),
+    retry: 1,
+    refetchOnWindowFocus: false,
+    staleTime: 0,
+  })
 
-    // Отладочная информация
-    console.log('ProjectsList render:', { isLoading, isError, status, hasData: !!data, data })
+  const { data: currentUser, isLoading: userLoading } = useQuery({
+    queryKey: ['auth', 'me'],
+    queryFn: () => authApi.me(),
+  })
 
-    // Показываем контент, если данные загружены
-    const showContent = !isLoading && !isError && data
+  const showContent = !isLoading && !isError && data
 
-    const handleManageMembers = (projectId: string, ownerId: string) => {
-        setSelectedProjectId(projectId)
-        setSelectedProjectOwnerId(ownerId)
-    }
+  const handleManageMembers = (projectId: string, ownerId: string) => {
+    setSelectedProjectId(projectId)
+    setSelectedProjectOwnerId(ownerId)
+  }
 
-    const handleCloseMembersModal = () => {
-        setSelectedProjectId(null)
-        setSelectedProjectOwnerId(null)
-    }
+  const handleCloseMembersModal = () => {
+    setSelectedProjectId(null)
+    setSelectedProjectOwnerId(null)
+  }
 
-    const openCreateProject = () => setProjectModal({ isOpen: true, mode: 'create' })
-    const openProject = (projectId: string, ownerId: string) => {
-        // Пока в списке у нас есть только owner_id; если владелец — даём edit, иначе view.
-        const mode = currentUser?.id === ownerId ? 'edit' : 'view'
-        setProjectModal({ isOpen: true, mode, projectId })
-    }
-    const closeProjectModal = () => setProjectModal((prev) => ({ ...prev, isOpen: false }))
+  const openCreateProject = () => setProjectModal({ isOpen: true, mode: 'create' })
 
-    const isProjectOwner = (projectOwnerId: string) => {
-        return currentUser?.id === projectOwnerId
-    }
-    const actionsDisabled = isLoading || userLoading
+  const openProject = (projectId: string, ownerId: string) => {
+    const mode = currentUser?.id === ownerId ? 'edit' : 'view'
+    setProjectModal({ isOpen: true, mode, projectId })
+  }
 
-    return (
-        <div className="projects-list">
-            {isLoading && <Loading message="Загрузка проектов..." />}
-            {isError && error && (
-                <Error
-                    message={
-                        error instanceof Error
-                            ? error.message
-                            : 'Ошибка загрузки проектов'
-                    }
-                />
-            )}
+  const closeProjectModal = () => setProjectModal((prev) => ({ ...prev, isOpen: false }))
 
-            {showContent && data && (
-                <>
-                    {data.projects.length === 0 ? (
-                        <EmptyState message="У вас пока нет проектов">
-                            <button
-                                className="btn btn-primary"
-                                onClick={openCreateProject}
-                            >
-                                Создать первый проект
-                            </button>
-                        </EmptyState>
-                    ) : (
-                        <div className="projects-grid">
-                            {data.projects.map((project) => (
-                                <div
-                                    key={project.id}
-                                    className="project-card card"
-                                >
-                                    <div className="project-card-header">
-                                        <h3>{project.name}</h3>
-                                        <div className="project-card-actions">
-                                            <button
-                                                className="btn btn-sm btn-secondary"
-                                                onClick={() => openProject(project.id, project.owner_id)}
-                                                title={isProjectOwner(project.owner_id) ? 'Просмотр и редактирование' : 'Просмотр'}
-                                                aria-label="Открыть проект"
-                                                disabled={actionsDisabled}
-                                            >
-                                                {isProjectOwner(project.owner_id) ? '✏️' : 'ℹ️'}
-                                            </button>
-                                            {isProjectOwner(project.owner_id) && (
-                                                <button
-                                                    className="btn btn-sm btn-secondary"
-                                                    onClick={() => handleManageMembers(project.id, project.owner_id)}
-                                                    title="Управление участниками"
-                                                    aria-label="Управление участниками"
-                                                    disabled={actionsDisabled}
-                                                >
-                                                    👥
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-                                    {project.description && (
-                                        <p className="project-description">{project.description}</p>
-                                    )}
-                                    <div className="project-card-footer">
-                                        <span className="project-meta">
-                                            Создан: {new Date(project.created_at).toLocaleDateString('ru-RU')}
-                                        </span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </>
-            )}
+  const isProjectOwner = (projectOwnerId: string) => currentUser?.id === projectOwnerId
+  const actionsDisabled = isLoading || userLoading
 
-            <ProjectModal
-                isOpen={projectModal.isOpen}
-                onClose={closeProjectModal}
-                mode={projectModal.mode}
-                projectId={projectModal.projectId}
-            />
+  return (
+    <div className="projects-list">
+      {isLoading && <Loading message="Загрузка проектов..." />}
+      {isError && error && (
+        <Error message={error instanceof Error ? error.message : 'Ошибка загрузки проектов'} />
+      )}
 
-            {selectedProjectId && selectedProjectOwnerId && (
-                <ProjectMembersModal
-                    isOpen={!!selectedProjectId}
-                    onClose={handleCloseMembersModal}
-                    projectId={selectedProjectId}
-                    projectOwnerId={selectedProjectOwnerId}
-                />
-            )}
+      {showContent && data && (
+        <>
+          {data.projects.length === 0 ? (
+            <EmptyState message="У вас пока нет проектов. Создайте первое рабочее пространство и свяжите с ним эксперименты, сенсоры и участников.">
+              <button className="btn btn-primary" onClick={openCreateProject}>
+                Создать первый проект
+              </button>
+            </EmptyState>
+          ) : (
+            <div className="projects-grid">
+              {data.projects.map((project) => {
+                const owner = isProjectOwner(project.owner_id)
 
-            {typeof document !== 'undefined' &&
-                createPortal(
-                    <FloatingActionButton
-                        onClick={openCreateProject}
-                        title="Создать проект"
-                        ariaLabel="Создать проект"
-                    />,
-                    document.body
-                )}
-        </div>
-    )
+                return (
+                  <article key={project.id} className="project-card card">
+                    <div className="project-card__eyebrow-row">
+                      <span className={`meta-chip${owner ? ' meta-chip--owner' : ''}`}>
+                        {owner ? 'Владелец' : 'Участник'}
+                      </span>
+                      <span className="project-card__date">
+                        c {new Date(project.created_at).toLocaleDateString('ru-RU')}
+                      </span>
+                    </div>
+
+                    <div className="project-card-header">
+                      <div>
+                        <h3>{project.name}</h3>
+                        <p className="project-card__supporting-text">
+                          {owner
+                            ? 'Полный доступ к конфигурации проекта и составу команды.'
+                            : 'Доступ к просмотру и совместной работе в рамках проекта.'}
+                        </p>
+                      </div>
+
+                      <div className="project-card-actions">
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => openProject(project.id, project.owner_id)}
+                          title={owner ? 'Просмотр и редактирование' : 'Просмотр'}
+                          aria-label="Открыть проект"
+                          disabled={actionsDisabled}
+                        >
+                          {owner ? 'Открыть' : 'Просмотр'}
+                        </button>
+                        {owner && (
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => handleManageMembers(project.id, project.owner_id)}
+                            title="Управление участниками"
+                            aria-label="Управление участниками"
+                            disabled={actionsDisabled}
+                          >
+                            Команда
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <p className="project-description">
+                      {project.description ||
+                        'Добавьте описание проекта, чтобы команда быстрее ориентировалась в целях, ограничениях и контексте исследований.'}
+                    </p>
+
+                    <div className="project-card__meta-grid">
+                      <div className="project-card__meta-item">
+                        <span>Роль</span>
+                        <strong>{owner ? 'Управление' : 'Совместная работа'}</strong>
+                      </div>
+                      <div className="project-card__meta-item">
+                        <span>Дата создания</span>
+                        <strong>{new Date(project.created_at).toLocaleDateString('ru-RU')}</strong>
+                      </div>
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+          )}
+        </>
+      )}
+
+      <ProjectModal
+        isOpen={projectModal.isOpen}
+        onClose={closeProjectModal}
+        mode={projectModal.mode}
+        projectId={projectModal.projectId}
+      />
+
+      {selectedProjectId && selectedProjectOwnerId && (
+        <ProjectMembersModal
+          isOpen={!!selectedProjectId}
+          onClose={handleCloseMembersModal}
+          projectId={selectedProjectId}
+          projectOwnerId={selectedProjectOwnerId}
+        />
+      )}
+
+      {typeof document !== 'undefined' &&
+        createPortal(
+          <FloatingActionButton
+            onClick={openCreateProject}
+            title="Создать проект"
+            ariaLabel="Создать проект"
+          />,
+          document.body
+        )}
+    </div>
+  )
 }
 
 export default ProjectsList
-

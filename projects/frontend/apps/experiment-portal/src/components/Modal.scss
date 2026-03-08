@@ -140,3 +140,30 @@
     margin-bottom: 20px;
     font-size: 14px;
 }
+
+.modal-form__hint {
+    display: block;
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+// TelemetryExportModal
+.export-modal__radio-row {
+    display: flex;
+    gap: 20px;
+}
+
+.export-modal__radio-label,
+.export-modal__checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 400;
+    cursor: pointer;
+
+    input {
+        width: auto;
+        cursor: pointer;
+    }
+}

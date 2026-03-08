@@ -18,7 +18,7 @@ from auth_service.domain.dto import (
 )
 from auth_service.repositories.projects import ProjectRepository
 from auth_service.repositories.users import UserRepository
-from auth_service.services.auth import AuthService
+from auth_service.services.jwt import get_user_id_from_token as jwt_get_user_id
 from auth_service.services.projects import ProjectService
 
 logger = structlog.get_logger(__name__)
@@ -46,8 +46,15 @@ async def get_user_id_from_token(request: web.Request) -> UUID:
 
     pool = await get_pool()
     user_repo = UserRepository(pool)
-    auth_service = AuthService(user_repo)
-    user = await auth_service.get_user_by_token(token)
+    try:
+        user_id_str = jwt_get_user_id(token)
+    except ValueError as e:
+        from auth_service.core.exceptions import InvalidCredentialsError
+        raise InvalidCredentialsError(str(e)) from e
+    user = await user_repo.get_by_id(UUID(user_id_str))
+    if not user:
+        from auth_service.core.exceptions import UserNotFoundError
+        raise UserNotFoundError()
     return user.id
 
 

@@ -1,100 +1,131 @@
 @import './colors';
 
-// Badge variants (already in App.scss, but extracted for reuse)
 .badge {
-    display: inline-block;
-    padding: 4px 10px;
-    border-radius: var(--radius-pill);
-    font-size: 12px;
-    font-weight: 600;
-    background-color: var(--surface-variant);
-    color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+  background-color: rgba(98, 91, 113, 0.12);
+  color: var(--text-secondary);
+}
+
+.badge::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.68;
 }
 
 .badge-primary {
-    background-color: var(--primary-container);
-    color: var(--primary);
+  background-color: rgba(103, 80, 164, 0.12);
+  color: var(--primary);
+  border-color: rgba(103, 80, 164, 0.14);
 }
 
 .badge-success {
-    background-color: var(--success-container);
-    color: var(--success);
+  background-color: rgba(56, 106, 32, 0.12);
+  color: var(--success);
+  border-color: rgba(56, 106, 32, 0.16);
 }
 
 .badge-warning {
-    background-color: var(--warning-container);
-    color: $text-warning;
+  background-color: rgba(124, 78, 0, 0.12);
+  color: $text-warning;
+  border-color: rgba(124, 78, 0, 0.16);
 }
 
 .badge-danger {
-    background-color: var(--error-container);
-    color: var(--error);
+  background-color: rgba(179, 38, 30, 0.12);
+  color: var(--error);
+  border-color: rgba(179, 38, 30, 0.16);
 }
 
 .badge-info {
-    background-color: var(--info-container);
-    color: var(--info);
+  background-color: rgba(0, 99, 155, 0.12);
+  color: var(--info);
+  border-color: rgba(0, 99, 155, 0.16);
 }
 
 .badge-secondary {
-    background-color: var(--surface-variant);
-    color: var(--text-secondary);
+  background-color: rgba(98, 91, 113, 0.12);
+  color: var(--text-secondary);
+  border-color: rgba(98, 91, 113, 0.12);
 }
 
-// Button sizes
 .btn-sm {
-    padding: 4px 12px;
-    font-size: 0.875rem;
+  min-height: 38px;
+  padding: 0 14px;
+  font-size: 0.8125rem;
 }
 
-// Text utilities
 .text-muted {
-    color: var(--text-secondary);
-    font-style: italic;
-    font-size: 0.875rem;
+  color: var(--text-secondary);
+  font-size: 0.9375rem;
 }
 
-// Section header
 .section-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 
 .section-header h3 {
-    margin: 0;
-    color: var(--text);
-    font-size: 18px;
-    font-weight: 600;
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: clamp(1.1rem, 1.6vw, 1.35rem);
+  letter-spacing: -0.03em;
 }
 
-// Info row (common pattern)
 .info-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 0;
-    border-bottom: 1px solid var(--outline);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(98, 91, 113, 0.14);
 }
 
 .info-row:last-child {
-    border-bottom: none;
+  border-bottom: none;
 }
 
 .info-row strong {
-    color: var(--text-secondary);
-    font-weight: 500;
-    min-width: 200px;
+  color: var(--text-secondary);
+  font-weight: 600;
+  min-width: 160px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.72rem;
 }
 
 .info-row span {
-    color: var(--text);
-    text-align: right;
+  color: var(--text);
+  text-align: right;
 }
 
-// Mono text
 .mono {
-    font-family: 'Courier New', monospace;
-    font-size: 12px;
+  font-family: 'IBM Plex Mono', 'SFMono-Regular', 'Consolas', 'Liberation Mono', monospace;
+  font-size: 0.82rem;
+}
+
+@media (max-width: 640px) {
+  .info-row {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .info-row span {
+    text-align: left;
+  }
 }

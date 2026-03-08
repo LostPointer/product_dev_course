@@ -1,4 +1,4 @@
-"""Telemetry data export endpoints (CSV / JSON)."""
+"""Telemetry data export endpoints (CSV / JSON) — streaming via aiohttp StreamResponse."""
 from __future__ import annotations
 
 import csv
@@ -10,6 +10,8 @@ from aiohttp import web
 
 from backend_common.db.pool import get_pool_service as get_pool
 from experiment_service.api.utils import parse_uuid
+from experiment_service.core.exceptions import NotFoundError
+from experiment_service.middleware.export_rate_limit import ExportRateLimiter
 from experiment_service.services.dependencies import (
     ensure_project_access,
     get_capture_session_service,
@@ -17,10 +19,16 @@ from experiment_service.services.dependencies import (
     require_current_user,
     resolve_project_id,
 )
+from experiment_service.settings import settings
 
 routes = web.RouteTableDef()
 
-TELEMETRY_EXPORT_LIMIT = 100_000  # max telemetry rows per export
+STREAM_BATCH_SIZE = 5_000
+
+_export_limiter = ExportRateLimiter(
+    max_requests=settings.export_rate_limit_requests,
+    window_seconds=settings.export_rate_limit_window_seconds,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -35,19 +43,21 @@ def _parse_value_mode(raw: str | None) -> str:
     return mode
 
 
-async def _fetch_telemetry_rows(
-    pool,
+def _val(v) -> str:
+    return str(v) if v is not None else ""
+
+
+def _fval(v):
+    return float(v) if v is not None else None
+
+
+def _build_raw_query(
     capture_session_ids: list[UUID],
     *,
     sensor_id: UUID | None = None,
     signal: str | None = None,
     include_late: bool = True,
-    limit: int = TELEMETRY_EXPORT_LIMIT,
-) -> tuple[list, bool]:
-    """Fetch telemetry rows for given capture sessions.
-
-    Returns (rows, truncated).
-    """
+) -> tuple[str, list]:
     conditions = ["capture_session_id = ANY($1::uuid[])"]
     params: list = [capture_session_ids]
     idx = 2
@@ -76,26 +86,16 @@ async def _fetch_telemetry_rows(
         FROM telemetry_records
         WHERE {where}
         ORDER BY timestamp ASC
-        LIMIT {limit + 1}
     """
-    async with pool.acquire() as conn:
-        rows = await conn.fetch(query, *params)
-
-    truncated = len(rows) > limit
-    if truncated:
-        rows = rows[:limit]
-    return rows, truncated
+    return query, params
 
 
-async def _fetch_telemetry_aggregated(
-    pool,
+def _build_agg_query(
     capture_session_ids: list[UUID],
     *,
     sensor_id: UUID | None = None,
     signal: str | None = None,
-    limit: int = TELEMETRY_EXPORT_LIMIT,
-) -> tuple[list, bool]:
-    """Fetch aggregated (1-minute) telemetry from continuous aggregate."""
+) -> tuple[str, list]:
     conditions = ["capture_session_id = ANY($1::uuid[])"]
     params: list = [capture_session_ids]
     idx = 2
@@ -120,130 +120,154 @@ async def _fetch_telemetry_aggregated(
         FROM telemetry_1m
         WHERE {where}
         ORDER BY bucket ASC
-        LIMIT {limit + 1}
     """
-    async with pool.acquire() as conn:
-        rows = await conn.fetch(query, *params)
-
-    truncated = len(rows) > limit
-    if truncated:
-        rows = rows[:limit]
-    return rows, truncated
+    return query, params
 
 
 # ---------------------------------------------------------------------------
-# Formatters
+# Row formatters (used inside streaming helpers)
 # ---------------------------------------------------------------------------
 
-def _val(v) -> str:
-    return str(v) if v is not None else ""
 
-
-def _fval(v):
-    return float(v) if v is not None else None
-
-
-def _telemetry_rows_to_csv(rows, value_mode: str) -> str:
-    buf = io.StringIO()
-    writer = csv.writer(buf)
-    header = ["timestamp", "sensor_id", "signal"]
+def _write_raw_csv_row(writer, row, value_mode: str) -> None:
+    line = [
+        row["timestamp"].isoformat() if row["timestamp"] else "",
+        str(row["sensor_id"]),
+        row["signal"] or "",
+    ]
     if value_mode in ("raw", "both"):
-        header.append("raw_value")
+        line.append(_val(row["raw_value"]))
     if value_mode in ("physical", "both"):
-        header.append("physical_value")
-    header.extend(["conversion_status", "capture_session_id"])
-    writer.writerow(header)
-
-    for row in rows:
-        line = [
-            row["timestamp"].isoformat() if row["timestamp"] else "",
-            str(row["sensor_id"]),
-            row["signal"] or "",
-        ]
-        if value_mode in ("raw", "both"):
-            line.append(_val(row["raw_value"]))
-        if value_mode in ("physical", "both"):
-            line.append(_val(row["physical_value"]))
-        line.extend([
-            row["conversion_status"] or "",
-            str(row["capture_session_id"]) if row["capture_session_id"] else "",
-        ])
-        writer.writerow(line)
-    return buf.getvalue()
+        line.append(_val(row["physical_value"]))
+    line.extend([
+        row["conversion_status"] or "",
+        str(row["capture_session_id"]) if row["capture_session_id"] else "",
+    ])
+    writer.writerow(line)
 
 
-def _telemetry_rows_to_json(rows, value_mode: str) -> str:
-    result = []
-    for row in rows:
-        item: dict = {
-            "timestamp": row["timestamp"].isoformat() if row["timestamp"] else None,
-            "sensor_id": str(row["sensor_id"]),
-            "signal": row["signal"],
-        }
-        if value_mode in ("raw", "both"):
-            item["raw_value"] = _fval(row["raw_value"])
-        if value_mode in ("physical", "both"):
-            item["physical_value"] = _fval(row["physical_value"])
-        item["conversion_status"] = row["conversion_status"]
-        item["capture_session_id"] = (
+def _raw_row_to_dict(row, value_mode: str) -> dict:
+    item: dict = {
+        "timestamp": row["timestamp"].isoformat() if row["timestamp"] else None,
+        "sensor_id": str(row["sensor_id"]),
+        "signal": row["signal"],
+    }
+    if value_mode in ("raw", "both"):
+        item["raw_value"] = _fval(row["raw_value"])
+    if value_mode in ("physical", "both"):
+        item["physical_value"] = _fval(row["physical_value"])
+    item["conversion_status"] = row["conversion_status"]
+    item["capture_session_id"] = (
+        str(row["capture_session_id"]) if row["capture_session_id"] else None
+    )
+    return item
+
+
+def _write_agg_csv_row(writer, row) -> None:
+    writer.writerow([
+        row["bucket"].isoformat() if row["bucket"] else "",
+        str(row["sensor_id"]),
+        row["signal"] or "",
+        str(row["capture_session_id"]) if row["capture_session_id"] else "",
+        row["sample_count"] or 0,
+        _val(row["avg_raw"]), _val(row["min_raw"]), _val(row["max_raw"]),
+        _val(row["avg_physical"]), _val(row["min_physical"]), _val(row["max_physical"]),
+    ])
+
+
+def _agg_row_to_dict(row) -> dict:
+    return {
+        "bucket": row["bucket"].isoformat() if row["bucket"] else None,
+        "sensor_id": str(row["sensor_id"]),
+        "signal": row["signal"],
+        "capture_session_id": (
             str(row["capture_session_id"]) if row["capture_session_id"] else None
-        )
-        result.append(item)
-    return json.dumps(result, ensure_ascii=False, indent=2)
+        ),
+        "sample_count": row["sample_count"] or 0,
+        "avg_raw": _fval(row["avg_raw"]),
+        "min_raw": _fval(row["min_raw"]),
+        "max_raw": _fval(row["max_raw"]),
+        "avg_physical": _fval(row["avg_physical"]),
+        "min_physical": _fval(row["min_physical"]),
+        "max_physical": _fval(row["max_physical"]),
+    }
 
 
-def _aggregated_to_csv(rows) -> str:
+# ---------------------------------------------------------------------------
+# Streaming helpers
+# ---------------------------------------------------------------------------
+
+
+async def _stream_csv(
+    request: web.Request,
+    pool,
+    query: str,
+    params: list,
+    filename: str,
+    header: list[str],
+    row_fn,  # callable(writer, row) -> None
+) -> web.StreamResponse:
+    response = web.StreamResponse()
+    response.content_type = "text/csv"
+    response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    await response.prepare(request)
+
     buf = io.StringIO()
     writer = csv.writer(buf)
-    writer.writerow([
-        "bucket", "sensor_id", "signal", "capture_session_id", "sample_count",
-        "avg_raw", "min_raw", "max_raw",
-        "avg_physical", "min_physical", "max_physical",
-    ])
-    for row in rows:
-        writer.writerow([
-            row["bucket"].isoformat() if row["bucket"] else "",
-            str(row["sensor_id"]),
-            row["signal"] or "",
-            str(row["capture_session_id"]) if row["capture_session_id"] else "",
-            row["sample_count"] or 0,
-            _val(row["avg_raw"]), _val(row["min_raw"]), _val(row["max_raw"]),
-            _val(row["avg_physical"]), _val(row["min_physical"]), _val(row["max_physical"]),
-        ])
-    return buf.getvalue()
+    writer.writerow(header)
+    await response.write(buf.getvalue().encode())
+
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            batch: list = []
+            async for row in conn.cursor(query, *params, prefetch=STREAM_BATCH_SIZE):
+                batch.append(row)
+                if len(batch) >= STREAM_BATCH_SIZE:
+                    buf = io.StringIO()
+                    writer = csv.writer(buf)
+                    for r in batch:
+                        row_fn(writer, r)
+                    await response.write(buf.getvalue().encode())
+                    batch = []
+            if batch:
+                buf = io.StringIO()
+                writer = csv.writer(buf)
+                for r in batch:
+                    row_fn(writer, r)
+                await response.write(buf.getvalue().encode())
+
+    await response.write_eof()
+    return response
 
 
-def _aggregated_to_json(rows) -> str:
-    result = []
-    for row in rows:
-        result.append({
-            "bucket": row["bucket"].isoformat() if row["bucket"] else None,
-            "sensor_id": str(row["sensor_id"]),
-            "signal": row["signal"],
-            "capture_session_id": (
-                str(row["capture_session_id"]) if row["capture_session_id"] else None
-            ),
-            "sample_count": row["sample_count"] or 0,
-            "avg_raw": _fval(row["avg_raw"]),
-            "min_raw": _fval(row["min_raw"]),
-            "max_raw": _fval(row["max_raw"]),
-            "avg_physical": _fval(row["avg_physical"]),
-            "min_physical": _fval(row["min_physical"]),
-            "max_physical": _fval(row["max_physical"]),
-        })
-    return json.dumps(result, ensure_ascii=False, indent=2)
+async def _stream_json(
+    request: web.Request,
+    pool,
+    query: str,
+    params: list,
+    filename: str,
+    row_fn,  # callable(row) -> dict
+) -> web.StreamResponse:
+    response = web.StreamResponse()
+    response.content_type = "application/json"
+    response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    await response.prepare(request)
 
+    await response.write(b"[")
+    first = True
 
-def _export_response(
-    body: str, fmt: str, filename: str, truncated: bool,
-) -> web.Response:
-    content_type = "application/json" if fmt == "json" else "text/csv"
-    headers: dict[str, str] = {
-        "Content-Disposition": f'attachment; filename="{filename}"',
-    }
-    if truncated:
-        headers["X-Export-Truncated"] = "true"
-    return web.Response(text=body, content_type=content_type, headers=headers)
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            async for row in conn.cursor(query, *params, prefetch=STREAM_BATCH_SIZE):
+                chunk = ("\n  " if first else ",\n  ") + json.dumps(
+                    row_fn(row), ensure_ascii=False
+                )
+                await response.write(chunk.encode())
+                first = False
+
+    await response.write(b"]" if first else b"\n]")
+    await response.write_eof()
+    return response
 
 
 # ---------------------------------------------------------------------------
@@ -267,6 +291,7 @@ async def export_session_telemetry(request: web.Request):
       - aggregation: 1m (optional; uses continuous aggregate)
     """
     user = await require_current_user(request)
+    _export_limiter.check(user.user_id)
     project_id = resolve_project_id(
         user, request.rel_url.query.get("project_id"),
     )
@@ -276,9 +301,15 @@ async def export_session_telemetry(request: web.Request):
     session_id = parse_uuid(request.match_info["session_id"], "session_id")
 
     run_service = await get_run_service(request)
-    await run_service.get_run(project_id, run_id)
+    try:
+        await run_service.get_run(project_id, run_id)
+    except NotFoundError as exc:
+        raise web.HTTPNotFound(text=str(exc)) from exc
     cs_service = await get_capture_session_service(request)
-    await cs_service.get_session(project_id, session_id)
+    try:
+        await cs_service.get_session(project_id, session_id)
+    except NotFoundError as exc:
+        raise web.HTTPNotFound(text=str(exc)) from exc
 
     fmt = request.rel_url.query.get("format", "csv").lower()
     if fmt not in ("csv", "json"):
@@ -296,28 +327,38 @@ async def export_session_telemetry(request: web.Request):
     pool = await get_pool()
 
     if aggregation == "1m":
-        rows, truncated = await _fetch_telemetry_aggregated(
-            pool, [session_id],
-            sensor_id=sensor_id, signal=signal_filter,
-        )
-        body = (
-            _aggregated_to_json(rows) if fmt == "json"
-            else _aggregated_to_csv(rows)
+        query, params = _build_agg_query(
+            [session_id], sensor_id=sensor_id, signal=signal_filter,
         )
         filename = f"telemetry_agg_{session_id}.{fmt}"
-    else:
-        rows, truncated = await _fetch_telemetry_rows(
-            pool, [session_id],
-            sensor_id=sensor_id, signal=signal_filter,
-            include_late=include_late,
-        )
-        body = (
-            _telemetry_rows_to_json(rows, value_mode) if fmt == "json"
-            else _telemetry_rows_to_csv(rows, value_mode)
-        )
-        filename = f"telemetry_{session_id}.{fmt}"
+        if fmt == "json":
+            return await _stream_json(request, pool, query, params, filename, _agg_row_to_dict)
+        header = [
+            "bucket", "sensor_id", "signal", "capture_session_id", "sample_count",
+            "avg_raw", "min_raw", "max_raw",
+            "avg_physical", "min_physical", "max_physical",
+        ]
+        return await _stream_csv(request, pool, query, params, filename, header, _write_agg_csv_row)
 
-    return _export_response(body, fmt, filename, truncated)
+    query, params = _build_raw_query(
+        [session_id], sensor_id=sensor_id, signal=signal_filter, include_late=include_late,
+    )
+    filename = f"telemetry_{session_id}.{fmt}"
+    if fmt == "json":
+        return await _stream_json(
+            request, pool, query, params, filename,
+            lambda row: _raw_row_to_dict(row, value_mode),
+        )
+    csv_header = ["timestamp", "sensor_id", "signal"]
+    if value_mode in ("raw", "both"):
+        csv_header.append("raw_value")
+    if value_mode in ("physical", "both"):
+        csv_header.append("physical_value")
+    csv_header.extend(["conversion_status", "capture_session_id"])
+    return await _stream_csv(
+        request, pool, query, params, filename, csv_header,
+        lambda writer, row: _write_raw_csv_row(writer, row, value_mode),
+    )
 
 
 @routes.get("/api/v1/runs/{run_id}/telemetry/export")
@@ -335,6 +376,7 @@ async def export_run_telemetry(request: web.Request):
       - aggregation: 1m (optional; uses continuous aggregate)
     """
     user = await require_current_user(request)
+    _export_limiter.check(user.user_id)
     project_id = resolve_project_id(
         user, request.rel_url.query.get("project_id"),
     )
@@ -342,7 +384,10 @@ async def export_run_telemetry(request: web.Request):
 
     run_id = parse_uuid(request.match_info["run_id"], "run_id")
     run_service = await get_run_service(request)
-    await run_service.get_run(project_id, run_id)
+    try:
+        await run_service.get_run(project_id, run_id)
+    except NotFoundError as exc:
+        raise web.HTTPNotFound(text=str(exc)) from exc
 
     fmt = request.rel_url.query.get("format", "csv").lower()
     if fmt not in ("csv", "json"):
@@ -363,39 +408,53 @@ async def export_run_telemetry(request: web.Request):
         session_ids = [parse_uuid(cs_filter_raw, "capture_session_id")]
     else:
         cs_service = await get_capture_session_service(request)
-        sessions, _total = await cs_service.list_sessions(
+        sessions, _total = await cs_service.list_sessions_for_run(
             project_id, run_id, limit=500, offset=0,
         )
         session_ids = [s.id for s in sessions]
 
     if not session_ids:
-        body = "[]" if fmt == "json" else ""
-        return _export_response(
-            body, fmt, f"telemetry_run_{run_id}.{fmt}", False,
+        content_type = "application/json" if fmt == "json" else "text/csv"
+        return web.Response(
+            text="[]" if fmt == "json" else "",
+            content_type=content_type,
+            headers={
+                "Content-Disposition": f'attachment; filename="telemetry_run_{run_id}.{fmt}"',
+            },
         )
 
     pool = await get_pool()
 
     if aggregation == "1m":
-        rows, truncated = await _fetch_telemetry_aggregated(
-            pool, session_ids,
-            sensor_id=sensor_id, signal=signal_filter,
-        )
-        body = (
-            _aggregated_to_json(rows) if fmt == "json"
-            else _aggregated_to_csv(rows)
+        query, params = _build_agg_query(
+            session_ids, sensor_id=sensor_id, signal=signal_filter,
         )
         filename = f"telemetry_run_{run_id}_agg.{fmt}"
-    else:
-        rows, truncated = await _fetch_telemetry_rows(
-            pool, session_ids,
-            sensor_id=sensor_id, signal=signal_filter,
-            include_late=include_late,
-        )
-        body = (
-            _telemetry_rows_to_json(rows, value_mode) if fmt == "json"
-            else _telemetry_rows_to_csv(rows, value_mode)
-        )
-        filename = f"telemetry_run_{run_id}.{fmt}"
+        if fmt == "json":
+            return await _stream_json(request, pool, query, params, filename, _agg_row_to_dict)
+        header = [
+            "bucket", "sensor_id", "signal", "capture_session_id", "sample_count",
+            "avg_raw", "min_raw", "max_raw",
+            "avg_physical", "min_physical", "max_physical",
+        ]
+        return await _stream_csv(request, pool, query, params, filename, header, _write_agg_csv_row)
 
-    return _export_response(body, fmt, filename, truncated)
+    query, params = _build_raw_query(
+        session_ids, sensor_id=sensor_id, signal=signal_filter, include_late=include_late,
+    )
+    filename = f"telemetry_run_{run_id}.{fmt}"
+    if fmt == "json":
+        return await _stream_json(
+            request, pool, query, params, filename,
+            lambda row: _raw_row_to_dict(row, value_mode),
+        )
+    csv_header = ["timestamp", "sensor_id", "signal"]
+    if value_mode in ("raw", "both"):
+        csv_header.append("raw_value")
+    if value_mode in ("physical", "both"):
+        csv_header.append("physical_value")
+    csv_header.extend(["conversion_status", "capture_session_id"])
+    return await _stream_csv(
+        request, pool, query, params, filename, csv_header,
+        lambda writer, row: _write_raw_csv_row(writer, row, value_mode),
+    )

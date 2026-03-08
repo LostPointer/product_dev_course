@@ -221,6 +221,8 @@ async def delete_experiment(request: web.Request):
     experiment_id = parse_uuid(request.match_info["experiment_id"], "experiment_id")
     try:
         await service.delete_experiment(project_id, experiment_id)
+    except InvalidStatusTransitionError as exc:
+        raise web.HTTPBadRequest(text=str(exc)) from exc
     except NotFoundError as exc:
         raise web.HTTPNotFound(text=str(exc)) from exc
     return web.Response(status=204)

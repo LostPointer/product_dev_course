@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
@@ -16,6 +16,8 @@ class User:
     email: str
     hashed_password: str
     password_change_required: bool
+    is_admin: bool
+    is_active: bool
     created_at: datetime
     updated_at: datetime
 
@@ -28,6 +30,8 @@ class User:
             email=row["email"],
             hashed_password=row["hashed_password"],
             password_change_required=row.get("password_change_required", False),
+            is_admin=row.get("is_admin", False),
+            is_active=row.get("is_active", True),
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )
@@ -39,12 +43,47 @@ class User:
             "username": self.username,
             "email": self.email,
             "password_change_required": self.password_change_required,
+            "is_admin": self.is_admin,
+            "is_active": self.is_active,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
         }
         if not exclude_password:
             data["hashed_password"] = self.hashed_password
         return data
+
+
+@dataclass
+class InviteToken:
+    """Invite token domain model."""
+
+    id: UUID
+    token: UUID
+    created_by: UUID
+    email_hint: str | None
+    expires_at: datetime
+    used_at: datetime | None
+    used_by: UUID | None
+    created_at: datetime
+
+    @classmethod
+    def from_row(cls, row: dict[str, Any]) -> "InviteToken":
+        """Create InviteToken from database row."""
+        return cls(
+            id=row["id"],
+            token=row["token"],
+            created_by=row["created_by"],
+            email_hint=row.get("email_hint"),
+            expires_at=row["expires_at"],
+            used_at=row.get("used_at"),
+            used_by=row.get("used_by"),
+            created_at=row["created_at"],
+        )
+
+    @property
+    def is_active(self) -> bool:
+        """True if token has not been used and has not expired."""
+        return self.used_at is None and self.expires_at > datetime.now(timezone.utc)
 
 
 @dataclass

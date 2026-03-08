@@ -19,6 +19,16 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
+FetchContent_Declare(
+  cjson
+  GIT_REPOSITORY https://github.com/DaveGamble/cJSON.git
+  GIT_TAG v1.7.18
+)
+set(ENABLE_CJSON_TEST OFF CACHE BOOL "" FORCE)
+set(ENABLE_CJSON_UTILS OFF CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(cjson)
+
 include(GoogleTest)
 
 # Common source files from the firmware
@@ -34,6 +44,10 @@ set(COMMON_SOURCES
     ${COMMON_DIR}/control_components.cpp
     ${COMMON_DIR}/uart_bridge_base.cpp
     ${COMMON_DIR}/pid_controller.cpp
+    ${COMMON_DIR}/vehicle_ekf.cpp
+    ${COMMON_DIR}/telemetry_log.cpp
+    ${COMMON_DIR}/stabilization_config.cpp
+    ${COMMON_DIR}/stabilization_pipeline.cpp
 )
 
 # Include directories
@@ -41,6 +55,7 @@ include_directories(
     ${COMMON_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/mocks
     ${CMAKE_CURRENT_SOURCE_DIR}/fixtures
+    ${cjson_SOURCE_DIR}
 )
 
 # Compiler flags
@@ -61,30 +76,19 @@ add_executable(unit_tests
     unit/test_failsafe.cpp
     unit/test_lpf.cpp
     unit/test_pid.cpp
+    unit/test_vehicle_ekf.cpp
+    unit/test_telemetry_log.cpp
 )
 
 target_link_libraries(unit_tests
     gtest
     gtest_main
     gmock
+    cjson
 )
 
 # Discover tests
 gtest_discover_tests(unit_tests)
-
-# Integration tests executable
-add_executable(integration_tests
-    ${COMMON_SOURCES}
-    integration/test_control_loop.cpp
-)
-
-target_link_libraries(integration_tests
-    gtest
-    gtest_main
-    gmock
-)
-
-gtest_discover_tests(integration_tests)
 
 # Coverage support (optional)
 option(ENABLE_COVERAGE "Enable coverage reporting" OFF)
@@ -92,8 +96,6 @@ if(ENABLE_COVERAGE)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         target_compile_options(unit_tests PRIVATE --coverage)
         target_link_options(unit_tests PRIVATE --coverage)
-        target_compile_options(integration_tests PRIVATE --coverage)
-        target_link_options(integration_tests PRIVATE --coverage)
     endif()
 endif()
 

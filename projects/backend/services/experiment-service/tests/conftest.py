@@ -1,5 +1,11 @@
 import asyncio
+import os
 from pathlib import Path
+
+# IMPORTANT: Set POSTGRESQL_CONFIGS_DIR BEFORE importing testsuite plugins
+# This ensures testsuite uses our custom config with TimescaleDB enabled
+_PGSQL_CONFIG_DIR = Path(__file__).parent / "pgsql_config"
+os.environ["POSTGRESQL_CONFIGS_DIR"] = str(_PGSQL_CONFIG_DIR)
 
 import pytest
 from testsuite.databases.pgsql import discover

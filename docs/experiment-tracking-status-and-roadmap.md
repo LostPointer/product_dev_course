@@ -119,6 +119,70 @@
 
 ---
 
+## Auth Service — управление пользователями и доступом
+
+### Текущее состояние
+
+- ✅ **Регистрация и логин:** `POST /auth/register`, `POST /auth/login`, JWT (access + refresh токены), bcrypt.
+- ✅ **Смена пароля** (с подтверждением старого): `POST /auth/change-password`.
+- ✅ **Проекты и роли:** CRUD проектов, `project_members` с ролями `owner` / `editor` / `viewer`.
+- ✅ **Logout / отзыв токенов:** `POST /auth/logout` отзывает refresh-токен (JWT blacklist через таблицу `revoked_tokens`).
+- ✅ **Восстановление пароля (self-service):** `POST /auth/password-reset/request` → reset-токен в ответе (dev/учебный режим, без email); `POST /auth/password-reset/confirm` → новый JWT.
+- ✅ **Принудительный сброс пароля (admin):** `POST /auth/admin/users/{user_id}/reset` — admin задаёт новый временный пароль, устанавливает `password_change_required = true`; требует поля `is_admin` (миграция `004_password_reset.sql`).
+- ✅ **Инвайт-система:** `POST /auth/admin/invites` / `GET /auth/admin/invites` / `DELETE /auth/admin/invites/{token}` (только admin); конфигурационный флаг `REGISTRATION_MODE=open|invite`; при `invite` — `POST /auth/register` принимает обязательный `invite_token`, проверяет активность (не истёк, не использован), помечает `used_at`; миграция `005_invite_system.sql`.
+- ✅ **Управление пользователями admin'ом (backend):** поле `is_active` в таблице `users` (миграция `006_user_is_active.sql`); логин и доступ по токену блокируется для деактивированных аккаунтов.
+  - `GET /auth/admin/users?search=&is_active=` — список всех пользователей с фильтрацией.
+  - `PATCH /auth/admin/users/{user_id}` — изменить `is_active` / `is_admin`; нельзя трогать собственный аккаунт; защита от разжалования/удаления последнего активного admin'а (409).
+  - `DELETE /auth/admin/users/{user_id}` — удалить пользователя; те же защиты.
+- ⚠️ **Начальный admin:** hardcode в миграции `001_initial_schema.sql` (логин `admin`, пароль `admin123`, `password_change_required = true`) — не подходит для продакшена.
+
+---
+
+### Backlog
+
+#### ~~Bootstrap admin-пользователя при чистой установке~~ ✅ Реализовано
+
+**Реализовано:**
+- Хардкод убран: `001_initial_schema.sql` создаёт только схему без данных; миграция `007_remove_hardcoded_admin.sql` удаляет устаревшего дефолтного admin-пользователя.
+- Env-переменная `ADMIN_BOOTSTRAP_SECRET` в `settings.py`; если не задана — endpoint возвращает 404.
+- `POST /auth/admin/bootstrap` (открытый, одноразовый): принимает `secret`, `username`, `email`, `password`; проверяет секрет и что admin'ов ещё нет (`count_admins() == 0`); создаёт первого пользователя с `is_admin=true`; возвращает токены.
+- Тесты: `test_bootstrap_admin_success`, `test_bootstrap_admin_wrong_secret`, `test_bootstrap_admin_disabled`, `test_bootstrap_admin_already_exists`, `test_bootstrap_admin_duplicate_username`, `test_bootstrap_admin_invalid_password`.
+
+#### Сброс пароля пользователя
+
+**Случаи использования:**
+- Пользователь забыл пароль и нет email-восстановления.
+- Admin хочет принудительно сбросить пароль скомпрометированного аккаунта.
+
+**Решение:**
+- `POST /auth/admin/users/{user_id}/reset-password` (только superadmin):
+  - Генерирует временный пароль или принимает новый пароль.
+  - Устанавливает `password_change_required = true`.
+- Опционально: `POST /auth/forgot-password` → email со ссылкой (требует SMTP-интеграции).
+
+#### ~~Инвайт-система: закрытая регистрация~~ ✅ Реализовано
+
+**Реализовано:**
+- Таблица `invite_tokens` (миграция `005_invite_system.sql`): `id`, `token` (uuid), `created_by`, `email_hint`, `expires_at`, `used_at`, `used_by`.
+- `POST /auth/admin/invites` (только admin) — создать инвайт с `email_hint` и `expires_in_hours` (1–8760); возвращает `InviteResponse` со всеми полями и флагом `is_active`.
+- `GET /auth/admin/invites?active_only=true|false` — список инвайтов.
+- `DELETE /auth/admin/invites/{token}` — отозвать неиспользованный инвайт; использованный → 409.
+- `POST /auth/register` — опциональное поле `invite_token`; при `REGISTRATION_MODE=invite` токен обязателен, проверяется активность, помечается `used_at`.
+- Флаг `REGISTRATION_MODE=open|invite` в settings (default `open` для dev/тестов).
+
+#### Управление пользователями (admin UI)
+
+- ✅ **Backend:** `GET /auth/admin/users`, `PATCH /auth/admin/users/{user_id}` (is_active / is_admin), `DELETE /auth/admin/users/{user_id}`; защита последнего admin'а; `is_active` блокирует логин и token lookup.
+- ✅ **Frontend:** страница `/admin/users` с таблицей пользователей, кнопками инвайта и сброса пароля. Компонент `AdminUsers.tsx` с вкладками «Пользователи» (поиск, фильтр, activate/deactivate, toggle admin, reset password, delete) и «Инвайты» (создание, список, отзыв, копирование токена). Тесты: `AdminUsers.test.tsx`.
+
+#### Опционально: отдельный сервис управления доступами
+
+Если платформа будет масштабироваться (несколько организаций, SSO, LDAP), стоит рассмотреть
+выделение auth-service в полноценный Identity-сервис или интеграцию с Keycloak / Ory Hydra.
+На текущем этапе достаточно описанных выше эндпоинтов в `auth-service`.
+
+---
+
 ## Experiment Service — roadmap
 
 Документ описывает независимый план развития Experiment Service в рамках платформы Experiment Tracking.
@@ -139,13 +203,50 @@
 ### Текущее состояние (актуализируется)
 - **✅ Завершено (Foundation):** блок Foundation полностью (миграции, CRUD для `Experiment/Run/CaptureSession`, idempotency, пагинация, OpenAPI, RBAC). Добавлены домены `Sensor` и `ConversionProfile`, статусные машины и покрытие тестами (`tests/test_api_*`). Множественные проекты для датчиков реализованы полностью (backend: таблица `sensor_projects` в миграции `001_initial_schema.sql`, API endpoints, тесты; frontend: UI для управления проектами в `SensorDetail.tsx`). UI для управления доступом к проектам реализован (`ProjectMembersModal` с тестами). Профиль пользователя реализован (`UserProfileModal` с тестами).
 - **✅ Завершено (Runs & Capture Management):** batch-update статусов, `CaptureSession` (ordinal_number + статусы), bulk tagging, audit-log (Run/CaptureSession), webhooks (outbox + dispatcher), **backfill/late-data процесс** (API start/complete, привязка late-записей, UI). Остаётся: расширение доменных инвариантов ⚠️.
-- **❌ Не реализовано / в backlog:** Telemetry ingest (WebSocket), бизнес‑политики доступа, SLO/SLI мониторинг, chaos‑тесты, operational документация.
+- **❌ Не реализовано / в backlog:** бизнес‑политики доступа, SLO/SLI мониторинг, chaos‑тесты, operational документация.
   - Примечание: **REST ingest** реализован отдельным сервисом `telemetry-ingest-service` (`POST /api/v1/telemetry`).
+  - Примечание: **WebSocket ingest** ✅ реализован в `telemetry-ingest-service` (`GET /api/v1/telemetry/ws`). Подробнее — см. раздел «WebSocket ingest» ниже.
   - Примечание: **SSE stream (MVP)** реализован в `telemetry-ingest-service` (`GET /api/v1/telemetry/stream`) и используется во фронтенде (например, `TelemetryStreamModal`, `/telemetry` через `TelemetryViewer`/`TelemetryPanel`).
   - Примечание: **SSE auth (MVP)**: `telemetry-ingest-service` принимает токен как sensor token, так и user JWT (через auth-proxy); для клиентов без возможности выставить заголовок поддержан query `access_token`.
   - Примечание: **MVP late-data политика**: данные после stop capture session не “приклеиваются” обратно к сессии (помечаются в `meta.__system` как late); ingest запрещён для `archived`.
   - В `experiment-service` публичной ручки `/api/v1/telemetry` больше нет; real-time режимы со стороны `experiment-service` и полноценная интеграция со сценариями backfill/реплея — в backlog.
 - **Зависимости:** сервис собран на `aiohttp 3.10`, `asyncpg 0.31`, `pydantic-settings 2.4`, `structlog`, `opentelemetry-sdk`/`opentelemetry-instrumentation-aiohttp-server`; тестируется через `pytest`, `pytest-aiohttp`, `yandex-taxi-testsuite[postgresql]`; кодоген — `openapi-generator-cli 7.17`.
+
+### WebSocket ingest (`GET /api/v1/telemetry/ws`) ✅
+
+> **Статус:** ✅ Реализовано.
+> **Цель:** низкоlatency ingest для высокочастотных источников (RC-машинка 500 Гц), где HTTP-overhead на каждый батч неприемлем.
+
+#### Что реализовано
+
+- ✅ **Endpoint:** `GET /api/v1/telemetry/ws?sensor_id=<uuid>` в `telemetry-ingest-service`.
+- ✅ **Аутентификация до WebSocket upgrade:** токен проверяется как обычный HTTP-запрос → клиент получает `401` / `400` без открытия WS-соединения.
+- ✅ **Два способа передать токен:** `Authorization: Bearer <token>` (для устройств) или `?token=` / `?access_token=` (для браузеров, которые не могут выставить заголовок).
+- ✅ **Протокол** (JSON text frames):
+  - **Клиент → сервер:** `{ "run_id": "...", "capture_session_id": "...", "meta": {}, "readings": [...], "seq": 42 }`
+  - **Ack:** `{ "status": "accepted", "accepted": 5, "seq": 42 }`
+  - **Recoverable error** (соединение живёт): `{ "status": "error", "code": "validation_error", "message": "..." }`
+- ✅ **Recoverable ошибки** (invalid JSON, validation error, scope mismatch) — error-сообщение без закрытия соединения.
+- ✅ **Fatal ошибки** (auth, internal) — WS закрывается с кодом `1008` / `1011`.
+- ✅ **Та же бизнес-логика, что REST ingest:** sensor auth, run/capture scope resolution, auto-attach active capture session, late-data marking, conversion profiles.
+- ✅ **Auth-proxy:** `websocket: true` уже стоит в `@fastify/http-proxy` для telemetry-маршрутов — проксирование работает без изменений.
+- ✅ **Rate limiting (per sensor, fixed window):** `WsRateLimiter` с двумя счётчиками — `messages` (кадров/окно) и `readings` (точек/окно); recoverable ошибка `rate_limited` с `retry_after`; настраивается через env (`WS_RATE_LIMIT_MESSAGES_PER_WINDOW`, `WS_RATE_LIMIT_READINGS_PER_WINDOW`, `WS_RATE_LIMIT_WINDOW_SECONDS`). Defaults: 600 сообщений/сек, 60 000 точек/сек.
+- ✅ **Тесты:** `tests/test_api_ws_ingest.py` — 8 интеграционных тестов (happy path, seq echo, multiple batches, 400/401 до upgrade, invalid JSON, validation error, Authorization header); `tests/test_ws_rate_limit.py` — 7 unit + 3 интеграционных теста.
+
+#### Ключевые файлы
+
+| Файл | Назначение |
+|------|-----------|
+| `telemetry-ingest-service/src/.../api/routes/ws_ingest.py` | WebSocket handler |
+| `telemetry-ingest-service/src/.../domain/dto.py` | `WsIngestMessageDTO` (без `sensor_id`, он из URL; опциональный `seq`) |
+| `telemetry-ingest-service/src/.../settings.py` | `ws_max_message_bytes` (default 1 MB) |
+| `telemetry-ingest-service/tests/test_api_ws_ingest.py` | Интеграционные тесты |
+
+#### Ограничения / backlog
+
+- Максимальный размер одного сообщения: `ws_max_message_bytes` (1 MB, настраивается через env).
+- Rate limiting ✅ реализован (`WsRateLimiter`, per-sensor fixed window).
+- Нет server-push: сервер только отвечает на входящие батчи. Для просмотра телеметрии используйте SSE `GET /api/v1/telemetry/stream`.
 
 ---
 
@@ -176,10 +277,13 @@
 - **Массовые операции:** ✅ Реализовано (`POST /api/v1/runs:batch-status`).
 - **Bulk tagging:** ✅ Реализовано (`POST /api/v1/runs:bulk-tags`).
 - **Расширенная сущность CaptureSession:** ✅ Реализовано (ordinal_number, статусы, связь с ingest).
-- **Контроль доменных инвариантов:** ⚠️ Частично реализовано.
+- **Контроль доменных инвариантов:** ✅ Реализовано.
   - ✅ нельзя финализировать `Run`, если есть активные `CaptureSession`
   - ✅ нельзя удалить `Sensor`, если он участвует в активных `CaptureSession`
   - ✅ нельзя удалить активную `CaptureSession`
+  - ✅ нельзя удалить `Run`, если есть активные `CaptureSession` (`RunService.delete_run` + новый эндпоинт `DELETE /api/v1/runs/{run_id}`)
+  - ✅ нельзя удалить `Experiment`, если есть `Run` в статусе `running` (`ExperimentService.delete_experiment` + `RunRepository.has_running_runs_for_experiment`)
+  - ✅ нельзя создать `CaptureSession` для `Run` в терминальном статусе (succeeded/failed/archived)
 - **Webhook-триггеры:** ✅ Реализовано (outbox + background dispatcher + dedupe/retry; best-effort delivery).
 - **Frontend:** ✅ UI для управления webhooks (список/создание/удаление подписок, просмотр delivery log с фильтрацией по статусу, ручной retry). Реализовано: страница `/webhooks` (`Webhooks.tsx`), навигация в sidebar.
 - **Аудит-лог действий пользователей:** ✅ Реализовано для `Run`/`CaptureSession` (events + API для чтения).
@@ -357,7 +461,7 @@
    - `GET /api/v1/runs/{run_id}/capture-sessions/{session_id}/telemetry/export`
    - Query params: `format=csv|json`, `sensor_id` (опционально, фильтр), `signal` (опционально), `include_late=true|false`, `raw_or_physical=raw|physical|both`.
    - CSV-формат: `timestamp, sensor_id, signal, raw_value, physical_value, conversion_status, capture_session_id`.
-   - TODO: стриминговая отдача (chunked transfer) для больших выгрузок (текущая реализация — in-memory, лимит 100 000 записей).
+   - ✅ Стриминговая отдача: `web.StreamResponse` + `conn.cursor(prefetch=5000)` — данные пишутся батчами по 5 000 строк, без in-memory накопления и без лимита на число записей.
 
 2. **Экспорт по run (все capture sessions):** ✅
    - `GET /api/v1/runs/{run_id}/telemetry/export`
@@ -369,9 +473,9 @@
    - CSV-формат: `bucket, sensor_id, signal, capture_session_id, sample_count, avg_raw, min_raw, max_raw, avg_physical, min_physical, max_physical`.
 
 4. **Ограничения и безопасность:** ✅ (частично)
-   - ✅ Лимит записей: 100 000 с header `X-Export-Truncated: true` если превышен.
+   - ✅ Лимит снят: streaming cursor, без in-memory накопления.
    - ✅ RBAC: доступ к данным только для участников проекта (через `resolve_project_id` + `ensure_project_access`).
-   - ❌ Rate limit: не реализован (backlog).
+   - ✅ Rate limit: реализован в `experiment-service` (`ExportRateLimiter`, per-user fixed window, default 10 req/60s).
 
 ##### Этап 2: Frontend — UI экспорта телеметрии ✅ (базовый)
 
@@ -379,16 +483,12 @@
    - Кнопка «Экспорт телеметрии» рядом с каждой capture session → скачать CSV readings этой сессии.
    - Кнопка «Экспорт всей телеметрии» на уровне run → скачать readings всех capture sessions.
 
-2. **Диалог настроек экспорта:** ❌ (backlog)
-   - Выбор формата: CSV / JSON.
-   - Фильтр по датчикам (multi-select из sensor list).
-   - Фильтр по сигналам.
-   - Выбор данных: raw / physical / оба.
-   - Включать ли late data.
-   - Агрегация: сырые данные / 1-минутная агрегация.
+2. **Диалог настроек экспорта:** ✅ Реализовано.
+   - Компонент `TelemetryExportModal`: формат (CSV/JSON), значения (raw/physical/both), агрегация 1m, include_late, фильтр по датчику и сигналу, фильтр по сессии (для экспорта всего run).
+   - Интегрирован в `RunDetail` — кнопки «Экспорт телеметрии…» у каждой сессии и для всего run.
 
-3. **TelemetryViewer (history mode):** ❌ (backlog)
-   - Кнопка «Экспорт видимых данных» — экспортирует ровно то, что сейчас отображается на графиках (текущие фильтры, time range, выбранные датчики).
+3. **TelemetryViewer (history mode):** ✅ Реализовано.
+   - Кнопка «Экспорт данных…» открывает `TelemetryExportModal`, предзаполненный текущим состоянием (сессия, датчик, raw/physical, include_late, агрегация).
 
 ##### Этап 3: Расширенный экспорт (backlog)
 
@@ -408,13 +508,13 @@
 - [x] API: экспорт readings по capture session в CSV с фильтрами sensor_id, signal, raw/physical, include_late, aggregation.
 - [x] API: экспорт readings по run (все capture sessions) в CSV/JSON.
 - [x] Frontend: кнопка экспорта в RunDetail, скачивание файла.
-- [ ] Стриминг: экспорт 50k+ записей без OOM (текущий лимит 100k in-memory, достаточно для MVP).
-- [ ] Тесты: integration (создать session -> ingest data -> export -> verify CSV).
+- [x] Стриминг: экспорт 50k+ записей без OOM — реализовано через `StreamResponse` + cursor.
+- [x] Тесты: integration (создать session -> ingest data -> export -> verify CSV).
 
 ### 5. Hardening & Launch (итерация 8+)
 - **SLO/SLI мониторинг:** ❌
 - **Трассировка (OpenTelemetry):** ✅ Реализовано: `TracerProvider` + OTLP HTTP exporter + авто-инструментализация aiohttp-server (`opentelemetry-instrumentation-aiohttp-server`); активируется при наличии `OTEL_EXPORTER_ENDPOINT`; `get_tracer()` доступен для ручных спанов в сервисном/репозиторном коде; graceful shutdown с flush спанов.
 - **Chaos-тесты и отказоустойчивость:** ❌
-- **Telemetry ingest disk spool:** ❌
+- **Telemetry ingest disk spool:** ✅ Реализовано (см. раздел «WebSocket ingest» выше для контекста; детали ниже).
 - **Документация:** ✅ (индекс `docs/README.md`, quickstart `docs/local-dev-docker-setup.md`, demo `docs/demo-flow.md`, E2E чеклист `docs/manual-testing.md`, дебаг `docs/ui-debugging.md`)
 

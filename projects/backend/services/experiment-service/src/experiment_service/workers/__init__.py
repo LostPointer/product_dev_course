@@ -13,6 +13,7 @@ from backend_common.worker import BackgroundWorker, WorkerTask
 from experiment_service.settings import settings
 from experiment_service.workers.conversion_backfill import conversion_backfill
 from experiment_service.workers.idempotency_cleanup import idempotency_cleanup
+from experiment_service.workers.scheduled_profile_activation import scheduled_profile_activation
 from experiment_service.workers.stale_session_cleanup import stale_session_cleanup
 from experiment_service.workers.webhook_purge import webhook_purge_succeeded
 from experiment_service.workers.webhook_reclaim import webhook_reclaim_stuck
@@ -22,6 +23,7 @@ worker = BackgroundWorker(
     tasks=[
         WorkerTask(name="idempotency_cleanup", fn=idempotency_cleanup),
         WorkerTask(name="stale_session_cleanup", fn=stale_session_cleanup),
+        WorkerTask(name="scheduled_profile_activation", fn=scheduled_profile_activation),
         WorkerTask(name="webhook_reclaim_stuck", fn=webhook_reclaim_stuck),
         WorkerTask(name="webhook_purge_succeeded", fn=webhook_purge_succeeded),
         WorkerTask(name="conversion_backfill", fn=conversion_backfill),

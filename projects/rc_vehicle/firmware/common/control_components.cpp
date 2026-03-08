@@ -1,8 +1,11 @@
 #include "control_components.hpp"
 
+#include <cstdlib>
 #include <cstring>
-#include <sstream>
+#include <string>
 
+#include "cJSON.h"
+#include "config.hpp"
 #include "imu_calibration.hpp"
 #include "madgwick_filter.hpp"
 
@@ -12,7 +15,7 @@ namespace rc_vehicle {
 // RcInputHandler
 // ═════════════════════════════════════════════════════════════════════════
 
-void RcInputHandler::Update(uint32_t now_ms, uint32_t dt_ms) {
+void RcInputHandler::Update(uint32_t now_ms, [[maybe_unused]] uint32_t dt_ms) {
   // Опрос RC с заданной частотой
   if (now_ms - last_poll_ms_ < poll_interval_ms_) {
     return;
@@ -28,7 +31,8 @@ void RcInputHandler::Update(uint32_t now_ms, uint32_t dt_ms) {
 // WifiCommandHandler
 // ═════════════════════════════════════════════════════════════════════════
 
-void WifiCommandHandler::Update(uint32_t now_ms, uint32_t dt_ms) {
+void WifiCommandHandler::Update(uint32_t now_ms,
+                                [[maybe_unused]] uint32_t dt_ms) {
   // Попытаться получить команду из очереди
   auto cmd = platform_.TryReceiveWifiCommand();
   if (cmd) {
@@ -43,7 +47,7 @@ void WifiCommandHandler::Update(uint32_t now_ms, uint32_t dt_ms) {
 // ImuHandler
 // ═════════════════════════════════════════════════════════════════════════
 
-void ImuHandler::Update(uint32_t now_ms, uint32_t dt_ms) {
+void ImuHandler::Update(uint32_t now_ms, [[maybe_unused]] uint32_t dt_ms) {
   if (!enabled_) {
     return;
   }
@@ -74,7 +78,7 @@ void ImuHandler::Update(uint32_t now_ms, uint32_t dt_ms) {
   // Инициализация с дефолтными параметрами, если ещё не настроен
   if (!lpf_gyro_z_.IsConfigured()) {
     const float fs_hz = 1000.f / static_cast<float>(read_interval_ms_);
-    lpf_gyro_z_.SetParams(30.f, fs_hz);  // 30 Hz cutoff по умолчанию
+    lpf_gyro_z_.SetParams(config::LpfConfig::kDefaultCutoffHz, fs_hz);
   }
   filtered_gz_ = lpf_gyro_z_.Step(data_.gz);
 
@@ -95,7 +99,8 @@ void ImuHandler::Update(uint32_t now_ms, uint32_t dt_ms) {
 }
 
 void ImuHandler::SetLpfCutoff(float cutoff_hz) {
-  if (cutoff_hz < 5.f || cutoff_hz > 100.f) {
+  if (cutoff_hz < config::LpfConfig::kMinCutoffHz ||
+      cutoff_hz > config::LpfConfig::kMaxCutoffHz) {
     return;  // Игнорировать невалидные значения
   }
   const float fs_hz = 1000.f / static_cast<float>(read_interval_ms_);
@@ -107,107 +112,144 @@ void ImuHandler::SetLpfCutoff(float cutoff_hz) {
 // TelemetryHandler
 // ═════════════════════════════════════════════════════════════════════════
 
-void TelemetryHandler::Update(uint32_t now_ms, uint32_t dt_ms) {
-  // Отправка телеметрии с заданной частотой
+void TelemetryHandler::Update(uint32_t now_ms, const TelemetrySnapshot& snap) {
   if (now_ms - last_send_ms_ < send_interval_ms_) {
     return;
   }
   last_send_ms_ = now_ms;
 
-  // Если клиентов нет - не отправляем
   if (platform_.GetWebSocketClientCount() == 0) {
     return;
   }
 
-  // Построить и отправить JSON
-  std::string json = BuildTelemJson();
+  std::string json = BuildTelemJson(snap);
   platform_.SendTelem(json);
 }
 
-std::string TelemetryHandler::BuildTelemJson() const {
-  std::ostringstream oss;
-  oss << "{\"type\":\"telem\",";
+std::string TelemetryHandler::BuildTelemJson(
+    const TelemetrySnapshot& snap) const {
+  cJSON* root = cJSON_CreateObject();
+  if (!root) return "{}";
 
+  cJSON_AddStringToObject(root, "type", "telem");
   // Для совместимости: "mcu_pong_ok" = "контроллер жив"
-  oss << "\"mcu_pong_ok\":true,";
+  cJSON_AddBoolToObject(root, "mcu_pong_ok", true);
 
   // Link status
-  oss << "\"link\":{";
-  oss << "\"rc_ok\":" << (rc_.IsActive() ? "true" : "false") << ",";
-  oss << "\"wifi_ok\":" << (wifi_.IsActive() ? "true" : "false") << ",";
-  oss << "\"failsafe\":" << (platform_.FailsafeIsActive() ? "true" : "false");
-  oss << "},";
+  cJSON* link = cJSON_AddObjectToObject(root, "link");
+  if (link) {
+    cJSON_AddBoolToObject(link, "rc_ok", snap.rc_ok);
+    cJSON_AddBoolToObject(link, "wifi_ok", snap.wifi_ok);
+    cJSON_AddBoolToObject(link, "failsafe", platform_.FailsafeIsActive());
+  }
 
   // IMU data (если включен)
-  if (imu_.IsEnabled()) {
-    const auto& data = imu_.GetData();
-    oss << "\"imu\":{";
-    oss << "\"ax\":" << data.ax << ",";
-    oss << "\"ay\":" << data.ay << ",";
-    oss << "\"az\":" << data.az << ",";
-    oss << "\"gx\":" << data.gx << ",";
-    oss << "\"gy\":" << data.gy << ",";
-    oss << "\"gz\":" << data.gz << ",";
-    oss << "\"gyro_z_filtered\":" << imu_.GetFilteredGyroZ() << ",";
-    oss << "\"forward_accel\":" << calib_.GetForwardAccel(data) << ",";
+  if (snap.imu_enabled) {
+    cJSON* imu = cJSON_AddObjectToObject(root, "imu");
+    if (imu) {
+      cJSON_AddNumberToObject(imu, "ax", snap.imu_data.ax);
+      cJSON_AddNumberToObject(imu, "ay", snap.imu_data.ay);
+      cJSON_AddNumberToObject(imu, "az", snap.imu_data.az);
+      cJSON_AddNumberToObject(imu, "gx", snap.imu_data.gx);
+      cJSON_AddNumberToObject(imu, "gy", snap.imu_data.gy);
+      cJSON_AddNumberToObject(imu, "gz", snap.imu_data.gz);
+      cJSON_AddNumberToObject(imu, "gyro_z_filtered", snap.filtered_gz);
+      cJSON_AddNumberToObject(imu, "forward_accel", snap.forward_accel);
 
-    // Orientation (Madgwick)
-    float pitch_deg = 0.0f, roll_deg = 0.0f, yaw_deg = 0.0f;
-    filter_.GetEulerDeg(pitch_deg, roll_deg, yaw_deg);
-    oss << "\"orientation\":{";
-    oss << "\"pitch\":" << pitch_deg << ",";
-    oss << "\"roll\":" << roll_deg << ",";
-    oss << "\"yaw\":" << yaw_deg;
-    oss << "}";
-    oss << "},";
+      // Orientation (Madgwick)
+      cJSON* orientation = cJSON_AddObjectToObject(imu, "orientation");
+      if (orientation) {
+        cJSON_AddNumberToObject(orientation, "pitch", snap.pitch_deg);
+        cJSON_AddNumberToObject(orientation, "roll", snap.roll_deg);
+        cJSON_AddNumberToObject(orientation, "yaw", snap.yaw_deg);
+      }
+    }
 
     // Calibration status
-    oss << "\"calib\":{";
-    const char* status_str = "unknown";
-    switch (calib_.GetStatus()) {
-      case CalibStatus::Idle:
-        status_str = "idle";
-        break;
-      case CalibStatus::Collecting:
-        status_str = "collecting";
-        break;
-      case CalibStatus::Done:
-        status_str = "done";
-        break;
-      case CalibStatus::Failed:
-        status_str = "failed";
-        break;
-    }
-    oss << "\"status\":\"" << status_str << "\",";
-    oss << "\"stage\":" << calib_.GetCalibStage() << ",";
-    oss << "\"valid\":" << (calib_.IsValid() ? "true" : "false");
+    cJSON* calib = cJSON_AddObjectToObject(root, "calib");
+    if (calib) {
+      const char* status_str = "unknown";
+      switch (snap.calib_status) {
+        case CalibStatus::Idle:
+          status_str = "idle";
+          break;
+        case CalibStatus::Collecting:
+          status_str = "collecting";
+          break;
+        case CalibStatus::Done:
+          status_str = "done";
+          break;
+        case CalibStatus::Failed:
+          status_str = "failed";
+          break;
+      }
+      cJSON_AddStringToObject(calib, "status", status_str);
+      cJSON_AddNumberToObject(calib, "stage", snap.calib_stage);
+      cJSON_AddBoolToObject(calib, "valid", snap.calib_valid);
 
-    if (calib_.IsValid()) {
-      const auto& cd = calib_.GetData();
-      oss << ",\"bias\":{";
-      oss << "\"gx\":" << cd.gyro_bias[0] << ",";
-      oss << "\"gy\":" << cd.gyro_bias[1] << ",";
-      oss << "\"gz\":" << cd.gyro_bias[2] << ",";
-      oss << "\"ax\":" << cd.accel_bias[0] << ",";
-      oss << "\"ay\":" << cd.accel_bias[1] << ",";
-      oss << "\"az\":" << cd.accel_bias[2];
-      oss << "},";
-      oss << "\"gravity_vec\":[" << cd.gravity_vec[0] << ","
-          << cd.gravity_vec[1] << "," << cd.gravity_vec[2] << "],";
-      oss << "\"forward_vec\":[" << cd.accel_forward_vec[0] << ","
-          << cd.accel_forward_vec[1] << "," << cd.accel_forward_vec[2] << "]";
+      if (snap.calib_valid) {
+        const auto& cd = snap.calib_data;
+        cJSON* bias = cJSON_AddObjectToObject(calib, "bias");
+        if (bias) {
+          cJSON_AddNumberToObject(bias, "gx", cd.gyro_bias[0]);
+          cJSON_AddNumberToObject(bias, "gy", cd.gyro_bias[1]);
+          cJSON_AddNumberToObject(bias, "gz", cd.gyro_bias[2]);
+          cJSON_AddNumberToObject(bias, "ax", cd.accel_bias[0]);
+          cJSON_AddNumberToObject(bias, "ay", cd.accel_bias[1]);
+          cJSON_AddNumberToObject(bias, "az", cd.accel_bias[2]);
+        }
+        cJSON* gravity = cJSON_AddArrayToObject(calib, "gravity_vec");
+        if (gravity) {
+          cJSON_AddItemToArray(gravity, cJSON_CreateNumber(cd.gravity_vec[0]));
+          cJSON_AddItemToArray(gravity, cJSON_CreateNumber(cd.gravity_vec[1]));
+          cJSON_AddItemToArray(gravity, cJSON_CreateNumber(cd.gravity_vec[2]));
+        }
+        cJSON* forward = cJSON_AddArrayToObject(calib, "forward_vec");
+        if (forward) {
+          cJSON_AddItemToArray(forward,
+                               cJSON_CreateNumber(cd.accel_forward_vec[0]));
+          cJSON_AddItemToArray(forward,
+                               cJSON_CreateNumber(cd.accel_forward_vec[1]));
+          cJSON_AddItemToArray(forward,
+                               cJSON_CreateNumber(cd.accel_forward_vec[2]));
+        }
+      }
     }
-    oss << "},";
+
+    // EKF: динамическое состояние (vx, vy, r, slip angle)
+    if (snap.ekf_available) {
+      cJSON* ekf = cJSON_AddObjectToObject(root, "ekf");
+      if (ekf) {
+        cJSON_AddNumberToObject(ekf, "vx", snap.ekf_vx);
+        cJSON_AddNumberToObject(ekf, "vy", snap.ekf_vy);
+        cJSON_AddNumberToObject(ekf, "yaw_rate", snap.ekf_yaw_rate);
+        cJSON_AddNumberToObject(ekf, "slip_deg", snap.ekf_slip_deg);
+        cJSON_AddNumberToObject(ekf, "speed_ms", snap.ekf_speed_ms);
+      }
+    }
+
+    // Oversteer warning (Phase 4.2)
+    if (snap.oversteer_available) {
+      cJSON* warn = cJSON_AddObjectToObject(root, "warn");
+      if (warn) {
+        cJSON_AddBoolToObject(warn, "oversteer", snap.oversteer_active);
+      }
+    }
   }
 
   // Actuators
-  oss << "\"act\":{";
-  oss << "\"throttle\":" << applied_throttle_ << ",";
-  oss << "\"steering\":" << applied_steering_;
-  oss << "}";
+  cJSON* act = cJSON_AddObjectToObject(root, "act");
+  if (act) {
+    cJSON_AddNumberToObject(act, "throttle", snap.throttle);
+    cJSON_AddNumberToObject(act, "steering", snap.steering);
+  }
 
-  oss << "}";
-  return oss.str();
+  char* str = cJSON_PrintUnformatted(root);
+  cJSON_Delete(root);
+  if (!str) return "{}";
+  std::string result(str);
+  free(str);
+  return result;
 }
 
 }  // namespace rc_vehicle

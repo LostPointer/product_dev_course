@@ -89,6 +89,7 @@ class RunService:
         return await self._repository.update(project_id, run_id, updates)
 
     async def delete_run(self, project_id: UUID, run_id: UUID) -> None:
+        await self._ensure_no_active_capture_sessions(project_id, run_id)
         await self._repository.delete(project_id, run_id)
 
     async def batch_update_status(

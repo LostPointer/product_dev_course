@@ -12,10 +12,17 @@ static const char* TAG = "imu_nvs";
 static constexpr const char* kNvsNamespace = "imu_calib";
 static constexpr const char* kNvsKey = "data";
 
-/** Единственный формат blob: gyro_bias, accel_bias, accel_forward_vec, gravity_vec. */
+/** Текущая версия формата blob. Увеличивать при изменении структуры. */
+static constexpr uint8_t kCurrentCalibVersion = 1;
+
+/**
+ * Формат blob v1: gyro_bias, accel_bias, accel_forward_vec, gravity_vec.
+ * version=0 считается устаревшим (данные без версионного заголовка).
+ */
 struct __attribute__((packed)) CalibBlob {
   uint8_t flags;        // bit0: valid
-  uint8_t reserved[3];
+  uint8_t version;      // версия формата (был reserved[0])
+  uint8_t reserved[2];
   float gyro_bias[3];
   float accel_bias[3];
   float accel_forward_vec[3];
@@ -27,6 +34,7 @@ static constexpr size_t kBlobSize = sizeof(CalibBlob);
 esp_err_t imu_nvs::Save(const ImuCalibData& data) {
   CalibBlob blob{};
   blob.flags = data.valid ? 0x01 : 0x00;
+  blob.version = kCurrentCalibVersion;
   std::memcpy(blob.gyro_bias, data.gyro_bias, sizeof(blob.gyro_bias));
   std::memcpy(blob.accel_bias, data.accel_bias, sizeof(blob.accel_bias));
   std::memcpy(blob.accel_forward_vec, data.accel_forward_vec, sizeof(blob.accel_forward_vec));
@@ -71,6 +79,12 @@ esp_err_t imu_nvs::Load(ImuCalibData& data) {
   if (err != ESP_OK || len != kBlobSize) {
     ESP_LOGW(TAG, "NVS read failed or size mismatch (len=%u, expected=%u)",
              (unsigned)len, (unsigned)kBlobSize);
+    return ESP_ERR_NOT_FOUND;
+  }
+
+  if (blob.version != kCurrentCalibVersion) {
+    ESP_LOGW(TAG, "Calibration version mismatch (got=%u, expected=%u) — discarding",
+             blob.version, kCurrentCalibVersion);
     return ESP_ERR_NOT_FOUND;
   }
 

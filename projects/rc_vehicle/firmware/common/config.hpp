@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 namespace rc_vehicle::config {
@@ -52,6 +53,25 @@ struct TelemetryConfig {
 };
 
 /**
+ * @brief Конфигурация кольцевого буфера телеметрии
+ */
+struct TelemetryLogConfig {
+  static constexpr size_t kCapacityFrames = 5000;  ///< Ёмкость буфера (кадров)
+  static constexpr size_t kMaxExportFrames =
+      200;  ///< Макс. кадров для экспорта
+};
+
+/**
+ * @brief Конфигурация Low-Pass фильтра
+ */
+struct LpfConfig {
+  static constexpr float kDefaultCutoffHz =
+      30.0f;                                     ///< Частота среза по умолчанию
+  static constexpr float kMinCutoffHz = 5.0f;    ///< Минимальная частота среза
+  static constexpr float kMaxCutoffHz = 100.0f;  ///< Максимальная частота среза
+};
+
+/**
  * @brief Конфигурация failsafe
  */
 struct FailsafeConfig {
@@ -63,9 +83,17 @@ struct FailsafeConfig {
  */
 struct SlewRateConfig {
   static constexpr float kThrottleMaxPerSec =
-      2.0f;  ///< Макс. изменение газа в секунду
+      0.5f;  ///< Макс. изменение газа в секунду
   static constexpr float kSteeringMaxPerSec =
-      4.0f;  ///< Макс. изменение руля в секунду
+      1.0f;  ///< Макс. изменение руля в секунду
+};
+
+/**
+ * @brief Конфигурация диагностического вывода
+ */
+struct DiagnosticsConfig {
+  static constexpr uint32_t kIntervalMs =
+      5000;  ///< Интервал вывода диагностики
 };
 
 /**

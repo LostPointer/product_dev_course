@@ -6,9 +6,21 @@
 #include "nvs.h"
 #include "nvs_flash.h"
 
+using rc_vehicle::StabilizationConfig;
+
 static const char* TAG = "stab_cfg_nvs";
 static const char* NVS_NAMESPACE = "stab_cfg";
 static const char* NVS_KEY = "config";
+
+/** Текущая версия формата. Увеличивать при изменении StabilizationConfig. */
+static constexpr uint8_t kCurrentStabConfigVersion = 1;
+
+/** Обёртка с версионным заголовком для NVS-хранения. */
+struct __attribute__((packed)) StabConfigBlob {
+  uint8_t version;
+  uint8_t reserved[3];
+  StabilizationConfig config;
+};
 
 namespace stab_config_nvs {
 
@@ -22,23 +34,34 @@ esp_err_t Load(StabilizationConfig& config) {
     return err;
   }
 
-  size_t required_size = sizeof(StabilizationConfig);
-  err = nvs_get_blob(handle, NVS_KEY, &config, &required_size);
+  StabConfigBlob blob{};
+  size_t required_size = sizeof(StabConfigBlob);
+  err = nvs_get_blob(handle, NVS_KEY, &blob, &required_size);
   nvs_close(handle);
 
   if (err == ESP_OK) {
-    if (required_size == sizeof(StabilizationConfig) && config.IsValid()) {
-      ESP_LOGI(TAG,
-               "Loaded stabilization config: enabled=%d beta=%.3f "
-               "lpf_cutoff=%.1f Hz mode=%d",
-               config.enabled, config.madgwick_beta, config.lpf_cutoff_hz,
-               config.mode);
-      return ESP_OK;
-    } else {
-      ESP_LOGW(TAG, "Loaded config is invalid (size=%zu expected=%zu valid=%d)",
-               required_size, sizeof(StabilizationConfig), config.IsValid());
+    if (required_size != sizeof(StabConfigBlob)) {
+      ESP_LOGW(TAG, "Config size mismatch (got=%zu expected=%zu) — discarding",
+               required_size, sizeof(StabConfigBlob));
+      return ESP_ERR_NOT_FOUND;
+    }
+    if (blob.version != kCurrentStabConfigVersion) {
+      ESP_LOGW(TAG, "Config version mismatch (got=%u expected=%u) — discarding",
+               blob.version, kCurrentStabConfigVersion);
+      return ESP_ERR_NOT_FOUND;
+    }
+    if (!blob.config.IsValid()) {
+      ESP_LOGW(TAG, "Loaded config failed validation — discarding");
       return ESP_ERR_INVALID_STATE;
     }
+    config = blob.config;
+    config.Clamp();
+    ESP_LOGI(TAG,
+             "Loaded stabilization config: enabled=%d beta=%.3f "
+             "lpf_cutoff=%.1f Hz mode=%d",
+             config.enabled, config.madgwick_beta, config.lpf_cutoff_hz,
+             static_cast<int>(config.mode));
+    return ESP_OK;
   } else if (err != ESP_ERR_NVS_NOT_FOUND) {
     ESP_LOGW(TAG, "Failed to read config from NVS: %s", esp_err_to_name(err));
   }
@@ -60,7 +83,10 @@ esp_err_t Save(const StabilizationConfig& config) {
     return err;
   }
 
-  err = nvs_set_blob(handle, NVS_KEY, &config, sizeof(StabilizationConfig));
+  StabConfigBlob blob{};
+  blob.version = kCurrentStabConfigVersion;
+  blob.config = config;
+  err = nvs_set_blob(handle, NVS_KEY, &blob, sizeof(StabConfigBlob));
   if (err == ESP_OK) {
     err = nvs_commit(handle);
     if (err == ESP_OK) {
@@ -68,7 +94,7 @@ esp_err_t Save(const StabilizationConfig& config) {
                "Saved stabilization config: enabled=%d beta=%.3f "
                "lpf_cutoff=%.1f Hz mode=%d",
                config.enabled, config.madgwick_beta, config.lpf_cutoff_hz,
-               config.mode);
+               static_cast<int>(config.mode));
     } else {
       ESP_LOGE(TAG, "Failed to commit NVS: %s", esp_err_to_name(err));
     }

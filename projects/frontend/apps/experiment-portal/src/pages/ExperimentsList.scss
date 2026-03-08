@@ -1,69 +1,98 @@
-.page-header {
+.experiments-list {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.experiments-filter-actions {
+  display: flex;
   align-items: center;
-  margin-bottom: 24px;
-}
-
-.page-header h2 {
-  font-size: 32px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.filters-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 16px;
+  gap: 8px;
 }
 
 .experiments-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 20px;
 }
 
 .experiment-card {
-  text-decoration: none;
-  color: inherit;
-  display: block;
-  transition: transform 0.2s, box-shadow 0.2s;
+  display: flex;
+  flex-direction: column;
+  min-height: 300px;
+  gap: 16px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 .experiment-card:hover {
-  transform: translateY(-2px);
+  transform: translateY(-4px);
   box-shadow: var(--elevation-2);
+  border-color: rgba(15, 118, 110, 0.18);
+}
+
+.experiment-card__topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.experiment-card__title {
+  font-family: var(--font-display);
+  font-size: clamp(1.55rem, 2.3vw, 2rem);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  color: var(--text);
 }
 
 .experiment-description {
   color: var(--text-secondary);
-  margin-bottom: 12px;
-  line-height: 1.5;
+  line-height: 1.65;
+  font-size: 0.97rem;
 }
 
-.experiment-type {
-  margin-bottom: 12px;
-  color: var(--text-secondary);
-  font-size: 14px;
-}
-
-.experiment-meta {
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px solid var(--outline);
-  color: var(--text-secondary);
-}
-
-.empty-state {
-  text-align: center;
-  padding: 60px 20px;
-  color: var(--text-secondary);
-}
-
-.pagination {
+.experiment-card__footer {
   display: flex;
-  justify-content: center;
   align-items: center;
+  justify-content: space-between;
   gap: 16px;
-  margin-top: 32px;
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid rgba(91, 105, 118, 0.14);
+}
+
+.experiment-card__meta {
+  display: grid;
+  gap: 6px;
+}
+
+.experiment-card__meta span {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.experiment-card__meta strong {
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.experiment-card__cta {
+  color: var(--primary);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 720px) {
+  .filter-panel__header,
+  .experiments-filter-actions,
+  .experiment-card__topline,
+  .experiment-card__footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
