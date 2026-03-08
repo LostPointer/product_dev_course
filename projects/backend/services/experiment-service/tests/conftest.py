@@ -1,8 +1,14 @@
 import asyncio
+import os
 from pathlib import Path
 
+# IMPORTANT: Set POSTGRESQL_CONFIGS_DIR BEFORE importing testsuite plugins
+# This ensures testsuite uses our custom config with TimescaleDB enabled
+_PGSQL_CONFIG_DIR = Path(__file__).parent / "pgsql_config"
+os.environ["POSTGRESQL_CONFIGS_DIR"] = str(_PGSQL_CONFIG_DIR)
+
 import pytest
-from testsuite.databases.pgsql import discover, service as pgsql_service
+from testsuite.databases.pgsql import discover
 
 from experiment_service.main import create_app
 from experiment_service.settings import settings
@@ -11,23 +17,6 @@ pytest_plugins = (
     "testsuite.pytest_plugin",
     "testsuite.databases.pgsql.pytest_plugin",
 )
-
-# Кастомный конфиг PostgreSQL: добавляет shared_preload_libraries = 'timescaledb'
-_PGSQL_CONFIG_DIR = Path(__file__).parent / "pgsql_config"
-
-
-def pytest_service_register(register_service):
-    """Переопределяем фабрику postgresql-сервиса testsuite: указываем свой postgresql.conf,
-    в котором подключена TimescaleDB через shared_preload_libraries."""
-
-    def _create_pgsql_service_with_timescale(service_name, working_dir, settings=None, env=None):
-        env = dict(env or {})
-        env["POSTGRESQL_CONFIGS_DIR"] = str(_PGSQL_CONFIG_DIR)
-        return pgsql_service.create_pgsql_service(
-            service_name, working_dir, settings=settings, env=env
-        )
-
-    register_service("postgresql", _create_pgsql_service_with_timescale)
 
 PG_SCHEMAS_PATH = Path(__file__).parent / "schemas" / "postgresql"
 
