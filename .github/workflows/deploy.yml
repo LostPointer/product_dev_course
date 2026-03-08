@@ -308,9 +308,11 @@ jobs:
             # чтобы миграции применились с нуля без конфликтов чексумм
             which psql || sudo apt-get install -y --no-install-recommends postgresql-client
             source .env 2>/dev/null || true
+            export PGSSLROOTCERT=/opt/experiment-tracking/certs/yandex-ca.pem
             for DB_URL in "${AUTH_DATABASE_URL:-}" "${EXPERIMENT_DATABASE_URL:-}"; do
               if [ -n "$DB_URL" ]; then
-                psql "$DB_URL" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" || true
+                echo "Resetting schema for: $DB_URL"
+                psql "$DB_URL" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
               fi
             done
 
