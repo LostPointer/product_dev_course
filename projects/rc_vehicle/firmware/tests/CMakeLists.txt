@@ -96,8 +96,6 @@ if(ENABLE_COVERAGE)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         target_compile_options(unit_tests PRIVATE --coverage)
         target_link_options(unit_tests PRIVATE --coverage)
-        target_compile_options(integration_tests PRIVATE --coverage)
-        target_link_options(integration_tests PRIVATE --coverage)
     endif()
 endif()
 
