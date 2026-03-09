@@ -3,10 +3,8 @@ from __future__ import annotations
 
 from uuid import UUID
 
-import asyncpg  # type: ignore[import-untyped]
-
 from auth_service.core.exceptions import NotFoundError
-from auth_service.domain.models import Project, ProjectMember
+from auth_service.domain.models import Project
 from auth_service.repositories.base import BaseRepository
 
 
@@ -50,15 +48,26 @@ class ProjectRepository(BaseRepository):
         return project
 
     async def list_by_user(self, user_id: UUID) -> list[Project]:
-        """List all projects where user is a member."""
+        """List all projects where user has any active role."""
         query = """
             SELECT DISTINCT p.id, p.name, p.description, p.owner_id, p.created_at, p.updated_at
             FROM projects p
-            INNER JOIN project_members pm ON p.id = pm.project_id
-            WHERE pm.user_id = $1
+            INNER JOIN user_project_roles upr ON p.id = upr.project_id
+            WHERE upr.user_id = $1
+              AND (upr.expires_at IS NULL OR upr.expires_at > now())
             ORDER BY p.created_at DESC
         """
         rows = await self._fetch(query, user_id)
+        return [Project.from_row(dict(row)) for row in rows]
+
+    async def list_all(self) -> list[Project]:
+        """List all projects (for superadmin/admin views)."""
+        query = """
+            SELECT id, name, description, owner_id, created_at, updated_at
+            FROM projects
+            ORDER BY created_at DESC
+        """
+        rows = await self._fetch(query)
         return [Project.from_row(dict(row)) for row in rows]
 
     async def list_by_owner(self, owner_id: UUID) -> list[Project]:
@@ -114,62 +123,3 @@ class ProjectRepository(BaseRepository):
         result = await self._execute(query, project_id)
         if result == "DELETE 0":
             raise NotFoundError(f"Project {project_id} not found")
-
-    async def is_member(self, project_id: UUID, user_id: UUID) -> bool:
-        """Check if user is a member of project."""
-        query = """
-            SELECT EXISTS(
-                SELECT 1 FROM project_members
-                WHERE project_id = $1 AND user_id = $2
-            )
-        """
-        row = await self._fetchrow(query, project_id, user_id)
-        return bool(row["exists"]) if row else False
-
-    async def get_member_role(self, project_id: UUID, user_id: UUID) -> str | None:
-        """Get user's role in project."""
-        query = """
-            SELECT role FROM project_members
-            WHERE project_id = $1 AND user_id = $2
-        """
-        row = await self._fetchrow(query, project_id, user_id)
-        return row["role"] if row else None
-
-    async def add_member(
-        self,
-        project_id: UUID,
-        user_id: UUID,
-        role: str,
-    ) -> ProjectMember:
-        """Add member to project."""
-        query = """
-            INSERT INTO project_members (project_id, user_id, role)
-            VALUES ($1, $2, $3)
-            ON CONFLICT (project_id, user_id) DO UPDATE
-            SET role = EXCLUDED.role
-            RETURNING project_id, user_id, role, created_at
-        """
-        row = await self._fetchrow(query, project_id, user_id, role)
-        if not row:
-            raise RuntimeError("Failed to add project member")
-        return ProjectMember.from_row(dict(row))
-
-    async def remove_member(self, project_id: UUID, user_id: UUID) -> None:
-        """Remove member from project."""
-        query = "DELETE FROM project_members WHERE project_id = $1 AND user_id = $2"
-        result = await self._execute(query, project_id, user_id)
-        if result == "DELETE 0":
-            raise NotFoundError(f"Member {user_id} not found in project {project_id}")
-
-    async def list_members(self, project_id: UUID) -> list[dict]:
-        """List all members of project with usernames."""
-        query = """
-            SELECT pm.project_id, pm.user_id, pm.role, pm.created_at, u.username
-            FROM project_members pm
-            INNER JOIN users u ON pm.user_id = u.id
-            WHERE pm.project_id = $1
-            ORDER BY pm.created_at ASC
-        """
-        rows = await self._fetch(query, project_id)
-        return [dict(row) for row in rows]
-
