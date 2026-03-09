@@ -19,6 +19,7 @@ idf_component_register(
         "spi_esp32.cpp"
         "imu.cpp"
         "../../common/mpu6050_spi.cpp"
+        "../../common/lsm6ds3_spi.cpp"
         "../../common/failsafe.cpp"
         "../../common/control_components.cpp"
         "../../common/pid_controller.cpp"
