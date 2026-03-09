@@ -72,7 +72,11 @@
       "Bash(docker compose:*)",
       "Bash(docker-compose run:*)",
       "Bash(pip3 install:*)",
-      "Bash(TESTSUITE_PGSQL_BINDIR=/usr/bin poetry run:*)"
+      "Bash(TESTSUITE_PGSQL_BINDIR=/usr/bin poetry run:*)",
+      "Bash(git:*)",
+      "Bash(gh run:*)",
+      "Bash(gh release:*)",
+      "Bash(psql:*)"
     ]
   }
 }
