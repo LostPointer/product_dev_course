@@ -5,6 +5,7 @@ import cookie from '@fastify/cookie'
 import rateLimit from '@fastify/rate-limit'
 import httpProxy from '@fastify/http-proxy'
 import { randomUUID } from 'crypto'
+import { PassThrough } from 'stream'
 
 type Config = {
     port: number
@@ -264,9 +265,8 @@ export async function buildServer(config: Config) {
             'X-Request-Id',
             // CSRF (double-submit)
             'X-CSRF-Token',
-            // debug/project context headers (may be used by clients/tools)
+            // project context headers
             'X-Project-Id',
-            'X-Project-Role',
             'X-User-Id',
         ],
         // Expose some headers for debugging (optional).
@@ -496,6 +496,35 @@ export async function buildServer(config: Config) {
             error: error.message,
             stack: error.stack,
         }, 'Proxy error')
+    })
+
+    // Для /api/* маршрутов тело запроса проксируется как сырой поток (IncomingMessage),
+    // поэтому request.body в preHandler недоступен как JSON-объект.
+    // Перехватываем тело на этапе preParsing, буферизуем его целиком, сохраняем в
+    // rawBodyForProjectId и возвращаем новый Readable с теми же данными.
+    app.addHook('preParsing', async (request, _reply, payload) => {
+        const method = (request.method || '').toUpperCase()
+        if (!['POST', 'PUT', 'PATCH'].includes(method)) return payload
+        if (!request.url?.startsWith('/api/')) return payload
+        const contentType = String(request.headers['content-type'] || '').toLowerCase()
+        if (!contentType.includes('application/json')) return payload
+
+        const chunks: Buffer[] = []
+        await new Promise<void>((resolve, reject) => {
+            payload.on('data', (chunk: Buffer | string) => {
+                chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+            })
+            payload.once('end', resolve)
+            payload.once('error', reject)
+        })
+
+        const bodyBuf = Buffer.concat(chunks)
+        ;(request as any).rawBodyForProjectId = bodyBuf.toString('utf-8')
+
+        // Возвращаем новый поток с теми же данными для дальнейшей обработки
+        const newPayload = new PassThrough()
+        newPayload.end(bodyBuf)
+        return newPayload
     })
 
     // Auth routes (login/refresh/logout/me) — устанавливают куки
@@ -732,16 +761,27 @@ export async function buildServer(config: Config) {
     }
 
     /**
-     * Извлекает project_id из request.body, учитывая что при использовании @fastify/http-proxy
-     * body часто приходит как Buffer (сырой payload), а не распарсенный JSON-объект.
+     * Извлекает project_id из тела запроса.
+     * При использовании @fastify/http-proxy тело проксируется как сырой поток,
+     * поэтому request.body недоступен как JSON — вместо него используем rawBodyForProjectId,
+     * захваченный в preParsing hook.
      */
     function extractProjectIdFromBody(request: FastifyRequest): string | null {
-        const contentType = String(request.headers['content-type'] || '').toLowerCase()
+        // Сырое тело, захваченное в preParsing (для proxy-маршрутов)
+        const rawBody = (request as any).rawBodyForProjectId as string | undefined
+        if (rawBody) {
+            try {
+                const parsed = JSON.parse(rawBody)
+                const projectId = parsed?.project_id
+                return typeof projectId === 'string' ? projectId : null
+            } catch {
+                return null
+            }
+        }
+
+        // Fallback: request.body уже распарсен как объект (не proxy-маршруты)
         const body: unknown = request.body
-
         if (!body) return null
-
-        // Если body уже распарсили как объект (например, не через proxy или с кастомным парсером)
         if (
             typeof body === 'object' &&
             !Buffer.isBuffer(body) &&
@@ -752,9 +792,9 @@ export async function buildServer(config: Config) {
             return typeof projectId === 'string' ? projectId : null
         }
 
-        // В proxy-режиме body часто Buffer/string. Парсим JSON только если content-type JSON.
+        // Buffer-fallback
+        const contentType = String(request.headers['content-type'] || '').toLowerCase()
         if (!contentType.includes('application/json')) return null
-
         try {
             const raw = Buffer.isBuffer(body) ? body.toString('utf-8') : String(body)
             if (!raw) return null
@@ -766,55 +806,60 @@ export async function buildServer(config: Config) {
         }
     }
 
-    /**
-     * Проверяет членство пользователя в проекте через Auth Service
-     * и возвращает роль пользователя в проекте
-     */
-    async function checkProjectMembership(
-        projectId: string,
+    interface EffectivePermissions {
+        user_id: string
+        is_superadmin: boolean
+        system_permissions: string[]
+        project_permissions: string[]
+    }
+
+    async function getEffectivePermissions(
         userId: string,
-        accessToken: string
-    ): Promise<string | null> {
+        accessToken: string,
+        projectId?: string
+    ): Promise<EffectivePermissions | null> {
         try {
-            const response = await fetch(`${config.authUrl}/projects/${projectId}/members`, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                    'Content-Type': 'application/json',
-                },
+            const url = projectId
+                ? `${config.authUrl}/api/v1/users/${userId}/effective-permissions?project_id=${projectId}`
+                : `${config.authUrl}/api/v1/users/${userId}/effective-permissions`
+
+            const resp = await fetch(url, {
+                headers: { Authorization: `Bearer ${accessToken}` },
+                signal: AbortSignal.timeout(3000),
             })
-
-            if (!response.ok) {
-                if (response.status === 403 || response.status === 404) {
-                    return null // Пользователь не является членом проекта
-                }
-                app.log.warn({
-                    project_id: projectId,
-                    user_id: userId,
-                    status: response.status,
-                }, 'Failed to check project membership')
-                return null
-            }
-
-            const data = await response.json()
-            const members = data.members || []
-
-            // Ищем пользователя в списке членов проекта
-            const member = members.find((m: any) => m.user_id === userId)
-            return member?.role || null
+            if (!resp.ok) return null
+            return resp.json() as Promise<EffectivePermissions>
         } catch (error) {
             app.log.error({
-                project_id: projectId,
                 user_id: userId,
+                project_id: projectId,
                 error: error instanceof Error ? error.message : String(error),
-            }, 'Error checking project membership')
+            }, 'Error fetching effective permissions')
             return null
         }
     }
 
+    interface JwtRbacClaims {
+        user_id: string
+        is_superadmin: boolean
+        system_permissions: string[]
+    }
+
+    function getRbacClaimsFromJwt(token: string): JwtRbacClaims | null {
+        const payload = _decodeJwtPayload(token)
+        if (!payload) return null
+        const userId = (payload.sub ?? payload.user_id) as string | undefined
+        if (!userId) return null
+        return {
+            user_id: userId,
+            is_superadmin: (payload.sa as boolean) ?? false,
+            system_permissions: (payload.sys as string[]) ?? [],
+        }
+    }
+
     // Hook для извлечения project_id из body или query для POST/PUT/PATCH запросов
-    // и проверки членства пользователя в проекте
-    app.addHook('preHandler', async (request, reply) => {
+    // и получения эффективных прав пользователя через auth-service
+    app.addHook('preHandler', async (request, _reply) => {
         // Для запросов к /api/* пытаемся извлечь project_id из body или query
         if (request.url.startsWith('/api/')) {
             let projectId: string | null = null
@@ -831,39 +876,51 @@ export async function buildServer(config: Config) {
                 projectId = extractProjectId(request as FastifyRequest)
             }
 
-            // Проверяем членство пользователя в проекте, если есть project_id и токен
-            if (projectId) {
-                const cookies = parseCookies(request.headers.cookie as string | undefined)
-                const access = cookies[config.accessCookieName]
-                if (access) {
-                    const decoded = decodeJWT(access)
-                    if (decoded?.user_id) {
-                        const role = await checkProjectMembership(
-                            projectId,
-                            decoded.user_id,
-                            access
-                        )
-                        if (role) {
-                            // Сохраняем роль в request для использования в rewriteRequestHeaders
-                            ; (request as any).projectRole = role
-                        } else {
-                            // Если пользователь не является членом проекта, логируем предупреждение
+            const cookies = parseCookies(request.headers.cookie as string | undefined)
+            const access = cookies[config.accessCookieName]
+
+            if (access) {
+                const rbacClaims = getRbacClaimsFromJwt(access)
+
+                if (rbacClaims) {
+                    if (rbacClaims.is_superadmin) {
+                        // Суперадмин — не делаем HTTP-запрос, всё имплицитно
+                        ; (request as any).permissionsIsSuperadmin = true
+                        ; (request as any).permissionsSystemPerms = ''
+                        ; (request as any).permissionsProjectPerms = ''
+                    } else if (projectId) {
+                        // Есть project_id — запрашиваем эффективные права
+                        const perms = await getEffectivePermissions(rbacClaims.user_id, access, projectId)
+                        ; (request as any).permissionsIsSuperadmin = false
+                        ; (request as any).permissionsSystemPerms = perms
+                            ? perms.system_permissions.join(',')
+                            : rbacClaims.system_permissions.join(',')
+                        ; (request as any).permissionsProjectPerms = perms
+                            ? perms.project_permissions.join(',')
+                            : ''
+                        if (!perms) {
                             app.log.warn({
                                 project_id: projectId,
-                                user_id: decoded.user_id,
+                                user_id: rbacClaims.user_id,
                                 url: request.url,
-                            }, 'User is not a member of the project')
+                            }, 'Failed to fetch effective permissions for project')
                         }
+                    } else {
+                        // Нет project_id — только системные права из JWT
+                        ; (request as any).permissionsIsSuperadmin = false
+                        ; (request as any).permissionsSystemPerms = rbacClaims.system_permissions.join(',')
+                        ; (request as any).permissionsProjectPerms = ''
                     }
                 }
-            } else if (
+            }
+
+            // GET /api/v1/sensors без project_id: запрашиваем все проекты пользователя
+            // и передаём их в experiment-service через X-Project-Ids
+            if (
+                !projectId &&
                 (request.method === 'GET' || request.method === 'get') &&
                 request.url.startsWith('/api/v1/sensors')
             ) {
-                // GET /api/v1/sensors без project_id: запрашиваем все проекты пользователя
-                // и передаём их в experiment-service через X-Project-Ids
-                const cookies = parseCookies(request.headers.cookie as string | undefined)
-                const access = cookies[config.accessCookieName]
                 if (access) {
                     try {
                         const { traceId } = getTraceContext(request)
@@ -1082,6 +1139,14 @@ export async function buildServer(config: Config) {
                     }
                 }
 
+                // Инжектируем RBAC-заголовки из preHandler
+                const permIsSuperadmin = (req as any).permissionsIsSuperadmin
+                if (permIsSuperadmin !== undefined) {
+                    newHeaders['X-User-Is-Superadmin'] = permIsSuperadmin ? 'true' : 'false'
+                    newHeaders['X-User-System-Permissions'] = (req as any).permissionsSystemPerms ?? ''
+                    newHeaders['X-User-Permissions'] = (req as any).permissionsProjectPerms ?? ''
+                }
+
                 // Список всех проектов пользователя (для GET /api/v1/sensors без project_id)
                 const allProjectIds = (req as any).allProjectIds
                 if (Array.isArray(allProjectIds) && allProjectIds.length > 0) {
@@ -1089,28 +1154,8 @@ export async function buildServer(config: Config) {
                 }
 
                 // Добавляем project_id в заголовки только если он найден
-                // Если не найден, Experiment Service будет требовать его в query/body
                 if (projectId) {
                     newHeaders['X-Project-Id'] = projectId
-                    // Используем роль из preHandler hook, если она была проверена
-                    // Иначе используем роль из заголовка или по умолчанию 'owner'
-                    // Важно: если проверка членства была выполнена и пользователь не является членом,
-                    // projectRole будет null, и мы не установим заголовок X-Project-Role
-                    const checkedRole = (req as any).projectRole
-                    const headerRole = req.headers['x-project-role'] as string | undefined
-                    // Устанавливаем роль только если она была проверена и найдена, или если она была в заголовке
-                    // Если проверка не была выполнена (checkedRole === undefined), используем значение по умолчанию
-                    if (checkedRole !== undefined) {
-                        // Проверка была выполнена
-                        if (checkedRole) {
-                            newHeaders['X-Project-Role'] = checkedRole
-                        }
-                        // Если checkedRole === null, пользователь не является членом проекта,
-                        // не устанавливаем заголовок X-Project-Role
-                    } else {
-                        // Проверка не была выполнена, используем роль из заголовка или по умолчанию
-                        newHeaders['X-Project-Role'] = headerRole || 'owner'
-                    }
                 }
 
                 // Логируем заголовки, которые отправляются (без чувствительных данных)
@@ -1125,16 +1170,14 @@ export async function buildServer(config: Config) {
                     has_project_id: !!newHeaders['X-Project-Id'],
                 }, 'Request headers prepared for Experiment Service')
 
-                // Явное debug-логирование X-Project-* для удобной отладки RBAC
-                // (значения не считаются секретами, но логируем только их, без токена/кук)
+                // Явное debug-логирование RBAC-заголовков
                 app.log.debug({
                     method: req.method,
                     url: req.url,
                     x_project_id: newHeaders['X-Project-Id'] || undefined,
-                    x_project_role: newHeaders['X-Project-Role'] || undefined,
+                    x_user_is_superadmin: newHeaders['X-User-Is-Superadmin'] || undefined,
                     has_x_project_id: !!newHeaders['X-Project-Id'],
-                    has_x_project_role: !!newHeaders['X-Project-Role'],
-                }, 'Auth proxy X-Project-* headers')
+                }, 'Auth proxy RBAC headers')
 
                 return newHeaders
             },
