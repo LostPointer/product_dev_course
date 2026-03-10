@@ -4,6 +4,8 @@
 .PHONY: logs-stack logs-stack-up logs-stack-down logs-stack-restart
 .PHONY: dev dev-up dev-down dev-restart dev-rebuild dev-rebuild-changed dev-logs dev-status dev-fix dev-clean grafana-reset-password
 
+SHELL := /bin/bash
+
 BACKEND_SERVICES_DIR := projects/backend/services
 BACKEND_DIR := projects/backend/services/experiment-service
 FRONTEND_DIR := projects/frontend/apps/experiment-portal
@@ -140,10 +142,14 @@ test-backend: backend-install
 	fi; \
 	echo "🔌 Using PostgreSQL DSN for tests: $$(echo $$PG_TEST_DSN | sed -E 's#(postgresql://[^:]+:)[^@]+@#\\1***@#')"; \
 	failed=0; \
+	out_file="$$(mktemp -t backend-pytest.XXXXXX.log)"; \
+	trap 'rm -f "$$out_file"' EXIT; \
 	for service in $(BACKEND_SERVICES); do \
 		echo "🧪 Running tests for $$(basename $$service)..."; \
-		(cd $$service && poetry run pytest --postgresql "$$PG_TEST_DSN") || failed=1; \
+		set -o pipefail; \
+		(cd $$service && poetry run pytest --postgresql "$$PG_TEST_DSN") 2>&1 | tee -a "$$out_file" || failed=1; \
 	done; \
+	"$(PYTHON)" scripts/pytest_totals.py "$$out_file" || true; \
 	exit $$failed
 
 test-telemetry-cli:
