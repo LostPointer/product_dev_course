@@ -405,11 +405,24 @@ class TestGrantRoleToMember:
 
     @pytest.mark.asyncio
     async def test_grant_project_role_to_member(
-        self, service_client, superadmin_token, project_data
+        self, service_client, superadmin_token, project_data, database_url
     ):
         """Project owner can grant role to member."""
-        target_user_id = "550e8400-e29b-41d4-a716-446655440002"  # regularuser
+        import asyncpg
+        conn = await asyncpg.connect(database_url)
+        try:
+            # Ensure the user exists
+            await conn.execute("""
+                INSERT INTO users (id, username, email, hashed_password, password_change_required, is_active)
+                VALUES ('550e8400-e29b-41d4-a716-446655440002', 'regularuser', 'user@example.com',
+                        '$2b$12$0QfCvOcgNkygw/I79ieV5eOIwAjWXUjdFUr/QvRgDMewN1OfENrmG', false, true)
+                ON CONFLICT (id) DO NOTHING
+            """)
+        finally:
+            await conn.close()
         
+        target_user_id = "550e8400-e29b-41d4-a716-446655440002"  # regularuser
+
         response = await service_client.post(
             f"/api/v1/projects/{project_data}/members/{target_user_id}/roles",
             headers={"Authorization": f"Bearer {superadmin_token}"},
@@ -445,6 +458,13 @@ class TestRevokeRoleFromMember:
         import asyncpg
         conn = await asyncpg.connect(database_url)
         try:
+            # Ensure the user exists
+            await conn.execute("""
+                INSERT INTO users (id, username, email, hashed_password, password_change_required, is_active)
+                VALUES ('550e8400-e29b-41d4-a716-446655440002', 'regularuser', 'user@example.com',
+                        '$2b$12$0QfCvOcgNkygw/I79ieV5eOIwAjWXUjdFUr/QvRgDMewN1OfENrmG', false, true)
+                ON CONFLICT (id) DO NOTHING
+            """)
             # Grant role first
             await conn.execute("""
                 INSERT INTO user_project_roles (user_id, project_id, role_id, granted_by, granted_at)
@@ -453,6 +473,7 @@ class TestRevokeRoleFromMember:
                         '00000000-0000-0000-0000-000000000012',
                         '550e8400-e29b-41d4-a716-446655440001',
                         now())
+                ON CONFLICT (user_id, project_id, role_id) DO NOTHING
             """, project_data)
         finally:
             await conn.close()

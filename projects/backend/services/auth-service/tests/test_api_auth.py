@@ -39,14 +39,22 @@ _ADMIN_HASH = "$2b$12$0QfCvOcgNkygw/I79ieV5eOIwAjWXUjdFUr/QvRgDMewN1OfENrmG"
 
 @pytest.fixture
 async def admin_token(service_client):
-    """Insert admin user into test DB and return its access token."""
+    """Insert admin user with admin role into test DB and return its access token."""
     conn = await asyncpg.connect(str(settings.database_url))
     try:
-        await conn.execute(
-            "INSERT INTO users (username, email, hashed_password, password_change_required, is_admin) "
-            "VALUES ('admin', 'admin@example.com', $1, false, true) "
-            "ON CONFLICT (username) DO UPDATE SET is_admin = true",
+        result = await conn.fetchrow(
+            "INSERT INTO users (username, email, hashed_password, password_change_required) "
+            "VALUES ('admin', 'admin@example.com', $1, false) "
+            "ON CONFLICT (username) DO UPDATE SET is_active = true "
+            "RETURNING id",
             _ADMIN_HASH,
+        )
+        user_id = result["id"]
+        await conn.execute(
+            "INSERT INTO user_system_roles (user_id, role_id, granted_by, granted_at) "
+            "VALUES ($1, '00000000-0000-0000-0000-000000000002', $1, now()) "
+            "ON CONFLICT (user_id, role_id) DO UPDATE SET granted_at = now()",
+            user_id,
         )
     finally:
         await conn.close()
@@ -948,7 +956,6 @@ async def test_admin_list_users_success(service_client, admin_token):
         assert "username" in user
         assert "email" in user
         assert "is_active" in user
-        assert "is_admin" in user
 
 
 @pytest.mark.asyncio
@@ -1055,35 +1062,46 @@ async def test_admin_update_self_forbidden(service_client, admin_token):
 
 
 @pytest.mark.asyncio
-async def test_admin_grant_admin_success(service_client, admin_token):
-    """Admin повышает пользователя до admin → 200, is_admin=true."""
+async def test_admin_update_user_is_active(service_client, admin_token):
+    """Admin может деактивировать и реактивировать пользователя."""
     reg = await _register(service_client, "newadmin", "newadmin@example.com")
     assert reg.status == 201
     user_id = (await reg.json())["user"]["id"]
 
-    response = await _admin_update_user(service_client, admin_token, user_id, is_admin=True)
+    # Деактивируем
+    r_deact = await _admin_update_user(service_client, admin_token, user_id, is_active=False)
+    assert r_deact.status == 200
+    assert (await r_deact.json())["is_active"] is False
+
+    # Реактивируем
+    response = await _admin_update_user(service_client, admin_token, user_id, is_active=True)
     assert response.status == 200
     payload = await response.json()
-    assert payload["is_admin"] is True
+    assert payload["is_active"] is True
 
 
 @pytest.mark.asyncio
 async def test_admin_revoke_last_admin_forbidden(service_client, admin_token):
-    """Нельзя разжаловать единственного активного admin'а → 409."""
-    # Создаём второго пользователя и повышаем до admin
-    reg = await _register(service_client, "revoke409user", "revoke409user@example.com")
-    assert reg.status == 201
-    target_id = (await reg.json())["user"]["id"]
+    """Нельзя деактивировать единственного суперадмина → 409."""
+    conn = await asyncpg.connect(str(settings.database_url))
+    try:
+        result = await conn.fetchrow(
+            "INSERT INTO users (username, email, hashed_password, password_change_required) "
+            "VALUES ('revoke409user', 'revoke409user@example.com', $1, false) RETURNING id",
+            _ADMIN_HASH,
+        )
+        target_id = str(result["id"])
+        await conn.execute(
+            "INSERT INTO user_system_roles (user_id, role_id, granted_by, granted_at) "
+            "VALUES ($1, '00000000-0000-0000-0000-000000000001', $1, now()) "
+            "ON CONFLICT (user_id, role_id) DO NOTHING",
+            result["id"],
+        )
+    finally:
+        await conn.close()
 
-    grant = await _admin_update_user(service_client, admin_token, target_id, is_admin=True)
-    assert grant.status == 200
-
-    # Деактивируем target → count_admins() == 1 (только admin_token)
-    deact = await _admin_update_user(service_client, admin_token, target_id, is_active=False)
-    assert deact.status == 200
-
-    # Попытка разжаловать target (is_admin=True, но is_active=False) → 409
-    response = await _admin_update_user(service_client, admin_token, target_id, is_admin=False)
+    # Try to deactivate the only superadmin → 409
+    response = await _admin_update_user(service_client, admin_token, target_id, is_active=False)
     assert response.status == 409
     payload = await response.json()
     assert "error" in payload
@@ -1134,18 +1152,24 @@ async def test_admin_delete_self_forbidden(service_client, admin_token):
 
 @pytest.mark.asyncio
 async def test_admin_delete_last_admin_forbidden(service_client, admin_token):
-    """Нельзя удалить единственного активного admin'а → 409."""
-    # Создаём второго admin'а
-    reg = await _register(service_client, "del409admin", "del409admin@example.com")
-    assert reg.status == 201
-    target_id = (await reg.json())["user"]["id"]
+    """Нельзя удалить единственного суперадмина → 409."""
+    conn = await asyncpg.connect(str(settings.database_url))
+    try:
+        result = await conn.fetchrow(
+            "INSERT INTO users (username, email, hashed_password, password_change_required) "
+            "VALUES ('del409admin', 'del409admin@example.com', $1, false) RETURNING id",
+            _ADMIN_HASH,
+        )
+        target_id = str(result["id"])
+        await conn.execute(
+            "INSERT INTO user_system_roles (user_id, role_id, granted_by, granted_at) "
+            "VALUES ($1, '00000000-0000-0000-0000-000000000001', $1, now()) "
+            "ON CONFLICT (user_id, role_id) DO NOTHING",
+            result["id"],
+        )
+    finally:
+        await conn.close()
 
-    await _admin_update_user(service_client, admin_token, target_id, is_admin=True)
-
-    # Деактивируем → count_admins == 1 (только admin_token)
-    await _admin_update_user(service_client, admin_token, target_id, is_active=False)
-
-    # Попытка удалить target (admin, inactive) → 409
     response = await _admin_delete_user(service_client, admin_token, target_id)
     assert response.status == 409
     payload = await response.json()
@@ -1196,7 +1220,7 @@ async def test_bootstrap_admin_success(service_client, bootstrap_settings):
     assert response.status == 201
     payload = await response.json()
     assert payload["user"]["username"] == "superadmin"
-    assert payload["user"]["is_admin"] is True
+    assert "superadmin" in payload["user"].get("system_roles", [])
     assert "access_token" in payload
     assert "refresh_token" in payload
 
@@ -1227,9 +1251,12 @@ async def test_bootstrap_admin_disabled(service_client):
 
 
 @pytest.mark.asyncio
-async def test_bootstrap_admin_already_exists(service_client, admin_token, bootstrap_settings):
-    """Если admin уже есть — 409."""
-    response = await _bootstrap(service_client, _BOOTSTRAP_SECRET)
+async def test_bootstrap_admin_already_exists(service_client, bootstrap_settings):
+    """Если superadmin уже есть — 409."""
+    r1 = await _bootstrap(service_client, _BOOTSTRAP_SECRET)
+    assert r1.status == 201
+
+    response = await _bootstrap(service_client, _BOOTSTRAP_SECRET, username="other_admin", email="other_admin@example.com")
     assert response.status == 409
     payload = await response.json()
     assert "error" in payload

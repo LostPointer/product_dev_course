@@ -32,9 +32,7 @@ class ProjectService:
         description: str | None,
         owner_id: UUID,
     ) -> Project:
-        """Create a new project. Requires 'projects.create' permission."""
-        await self.perm_svc.ensure_permission(owner_id, "projects.create")
-        
+        """Create a new project. Any authenticated user can create a project."""
         # Check if user exists
         user = await self.user_repo.get_by_id(owner_id)
         if not user:

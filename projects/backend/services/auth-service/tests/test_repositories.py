@@ -421,42 +421,6 @@ class TestUserRepositoryUpdate:
         with pytest.raises(RuntimeError, match="User not found"):
             await repo.set_active(uuid4(), False)
 
-    @pytest.mark.asyncio
-    async def test_set_admin_success(self, mock_pool_with_conn):
-        """Test set_admin returns updated User."""
-        mock_pool, mock_conn = mock_pool_with_conn
-
-        user_id = uuid4()
-        mock_row = {
-            "id": user_id,
-            "username": "testuser",
-            "email": "test@example.com",
-            "hashed_password": "hashed123",
-            "password_change_required": False,
-            "is_admin": True,
-            "is_active": True,
-            "created_at": datetime.now(timezone.utc),
-            "updated_at": datetime.now(timezone.utc),
-        }
-        mock_conn.fetchrow = AsyncMock(return_value=mock_row)
-
-        repo = UserRepository(mock_pool)
-        user = await repo.set_admin(user_id, True)
-
-        assert user.is_admin is True
-
-    @pytest.mark.asyncio
-    async def test_set_admin_raises_on_not_found(self, mock_pool_with_conn):
-        """Test set_admin raises on user not found."""
-        mock_pool, mock_conn = mock_pool_with_conn
-        mock_conn.fetchrow = AsyncMock(return_value=None)
-
-        repo = UserRepository(mock_pool)
-
-        with pytest.raises(RuntimeError, match="User not found"):
-            await repo.set_admin(uuid4(), True)
-
-
 class TestUserRepositoryQueries:
     """Tests for UserRepository query methods."""
 
@@ -562,28 +526,6 @@ class TestUserRepositoryQueries:
         users = await repo.list_all()
 
         assert users == []
-
-    @pytest.mark.asyncio
-    async def test_count_admins(self, mock_pool_with_conn):
-        """Test count_admins returns count."""
-        mock_pool, mock_conn = mock_pool_with_conn
-        mock_conn.fetchrow = AsyncMock(return_value={"count": 3})
-
-        repo = UserRepository(mock_pool)
-        count = await repo.count_admins()
-
-        assert count == 3
-
-    @pytest.mark.asyncio
-    async def test_count_admins_zero(self, mock_pool_with_conn):
-        """Test count_admins returns 0."""
-        mock_pool, mock_conn = mock_pool_with_conn
-        mock_conn.fetchrow = AsyncMock(return_value={"count": 0})
-
-        repo = UserRepository(mock_pool)
-        count = await repo.count_admins()
-
-        assert count == 0
 
     @pytest.mark.asyncio
     async def test_delete_success(self, mock_pool_with_conn):

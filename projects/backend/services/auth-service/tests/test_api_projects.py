@@ -144,7 +144,8 @@ async def test_get_project_not_found(service_client):
         "/projects/00000000-0000-0000-0000-000000000000",
         headers={"Authorization": f"Bearer {token}"},
     )
-    assert response.status == 404
+    # RBAC returns 403 Forbidden for non-existent projects when user has no access
+    assert response.status == 403
 
 
 @pytest.mark.asyncio

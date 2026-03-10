@@ -309,6 +309,10 @@ class AuthService:
             raise UserNotFoundError()
 
         if is_active is not None:
+            if not is_active and await self._perm_svc.is_superadmin(target_user_id):
+                count = await self._perm_svc.count_superadmins()
+                if count <= 1:
+                    raise ConflictError("Cannot remove the last superadmin")
             target = await self._user_repo.set_active(target_user_id, is_active)
 
         return target

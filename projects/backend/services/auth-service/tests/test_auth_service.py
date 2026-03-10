@@ -32,30 +32,45 @@ def mock_repos():
     revoked_repo = AsyncMock()
     reset_repo = AsyncMock()
     invite_repo = AsyncMock()
-    return user_repo, revoked_repo, reset_repo, invite_repo
+    perm_repo = AsyncMock()
+    role_repo = AsyncMock()
+    user_role_repo = AsyncMock()
+    return user_repo, revoked_repo, reset_repo, invite_repo, perm_repo, role_repo, user_role_repo
 
 
 @pytest.fixture
-def auth_service_open(mock_repos):
+def mock_permission_service(mock_repos):
+    """Create mock permission service."""
+    perm_svc = AsyncMock()
+    perm_svc.ensure_permission = AsyncMock()
+    perm_svc.has_permission = AsyncMock(return_value=True)
+    perm_svc._user_role_repo = mock_repos[6]  # user_role_repo
+    return perm_svc
+
+
+@pytest.fixture
+def auth_service_open(mock_repos, mock_permission_service):
     """Create AuthService in open registration mode."""
-    user_repo, revoked_repo, reset_repo, invite_repo = mock_repos
+    user_repo, revoked_repo, reset_repo, invite_repo, _, _, _ = mock_repos
     return AuthService(
         user_repository=user_repo,
         revoked_repo=revoked_repo,
         reset_repo=reset_repo,
+        permission_service=mock_permission_service,
         invite_repo=invite_repo,
         registration_mode="open",
     )
 
 
 @pytest.fixture
-def auth_service_invite(mock_repos):
+def auth_service_invite(mock_repos, mock_permission_service):
     """Create AuthService in invite registration mode."""
-    user_repo, revoked_repo, reset_repo, invite_repo = mock_repos
+    user_repo, revoked_repo, reset_repo, invite_repo, _, _, _ = mock_repos
     return AuthService(
         user_repository=user_repo,
         revoked_repo=revoked_repo,
         reset_repo=reset_repo,
+        permission_service=mock_permission_service,
         invite_repo=invite_repo,
         registration_mode="invite",
     )
@@ -70,7 +85,6 @@ def sample_user():
         email="test@example.com",
         hashed_password="hashed123",
         password_change_required=False,
-        is_admin=False,
         is_active=True,
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
@@ -86,7 +100,6 @@ def sample_admin():
         email="admin@example.com",
         hashed_password="hashed123",
         password_change_required=False,
-        is_admin=True,
         is_active=True,
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
@@ -116,25 +129,32 @@ class TestBootstrapAdmin:
     """Tests for bootstrap_admin method."""
 
     @pytest.mark.asyncio
-    async def test_bootstrap_admin_success(self, auth_service_open, mock_repos):
+    async def test_bootstrap_admin_success(self, auth_service_open, mock_repos, mock_permission_service):
         """Test successful admin bootstrap."""
-        user_repo, *_ = mock_repos
+        user_repo, revoked_repo, reset_repo, invite_repo, perm_repo, role_repo, user_role_repo = mock_repos
 
         # Setup mocks
-        user_repo.count_admins = AsyncMock(return_value=0)
+        mock_permission_service.count_superadmins = AsyncMock(return_value=0)
         user_repo.user_exists = AsyncMock(return_value=False)
-        user_repo.create = AsyncMock(return_value=MagicMock(
+
+        mock_user = MagicMock(
             id=uuid4(),
             username="admin",
             email="admin@example.com",
             hashed_password="hashed",
             password_change_required=False,
-            is_admin=False,
             is_active=True,
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
-        ))
-        user_repo.set_admin = AsyncMock(side_effect=lambda uid, val: user_repo.create.return_value)
+        )
+        user_repo.create = AsyncMock(return_value=mock_user)
+        
+        # Mock _create_tokens to return AuthTokensResponse
+        mock_tokens = AuthTokensResponse(
+            access_token="access_token",
+            refresh_token="refresh_token",
+        )
+        auth_service_open._create_tokens = AsyncMock(return_value=mock_tokens)
 
         user, tokens = await auth_service_open.bootstrap_admin(
             bootstrap_secret="secret123",
@@ -146,10 +166,7 @@ class TestBootstrapAdmin:
 
         assert user is not None
         assert isinstance(tokens, AuthTokensResponse)
-        assert tokens.access_token is not None
-        assert tokens.refresh_token is not None
         user_repo.create.assert_called_once()
-        user_repo.set_admin.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_bootstrap_admin_wrong_secret(self, auth_service_open):
@@ -176,10 +193,10 @@ class TestBootstrapAdmin:
             )
 
     @pytest.mark.asyncio
-    async def test_bootstrap_admin_already_exists(self, auth_service_open, mock_repos):
+    async def test_bootstrap_admin_already_exists(self, auth_service_open, mock_repos, mock_permission_service):
         """Test bootstrap admin when admin already exists."""
-        user_repo, *_ = mock_repos
-        user_repo.count_admins = AsyncMock(return_value=1)
+        user_repo, revoked_repo, reset_repo, invite_repo, perm_repo, role_repo, user_role_repo = mock_repos
+        mock_permission_service.count_superadmins = AsyncMock(return_value=1)
 
         with pytest.raises(ConflictError, match="Admin user already exists"):
             await auth_service_open.bootstrap_admin(
@@ -191,10 +208,10 @@ class TestBootstrapAdmin:
             )
 
     @pytest.mark.asyncio
-    async def test_bootstrap_admin_user_exists(self, auth_service_open, mock_repos):
+    async def test_bootstrap_admin_user_exists(self, auth_service_open, mock_repos, mock_permission_service):
         """Test bootstrap admin when user already exists."""
-        user_repo, *_ = mock_repos
-        user_repo.count_admins = AsyncMock(return_value=0)
+        user_repo, revoked_repo, reset_repo, invite_repo, perm_repo, role_repo, user_role_repo = mock_repos
+        mock_permission_service.count_superadmins = AsyncMock(return_value=0)
         user_repo.user_exists = AsyncMock(return_value=True)
 
         with pytest.raises(UserAlreadyExistsError, match="User with this username or email already exists"):
@@ -217,20 +234,27 @@ class TestRegister:
     @pytest.mark.asyncio
     async def test_register_success_open_mode(self, auth_service_open, mock_repos):
         """Test successful registration in open mode."""
-        user_repo, *_ = mock_repos
+        user_repo, revoked_repo, reset_repo, invite_repo, perm_repo, role_repo, user_role_repo = mock_repos
 
         user_repo.user_exists = AsyncMock(return_value=False)
-        user_repo.create = AsyncMock(return_value=MagicMock(
+        mock_user = MagicMock(
             id=uuid4(),
             username="newuser",
             email="new@example.com",
             hashed_password="hashed",
             password_change_required=False,
-            is_admin=False,
             is_active=True,
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
-        ))
+        )
+        user_repo.create = AsyncMock(return_value=mock_user)
+
+        # Mock _create_tokens to return AuthTokensResponse
+        mock_tokens = AuthTokensResponse(
+            access_token="access_token",
+            refresh_token="refresh_token",
+        )
+        auth_service_open._create_tokens = AsyncMock(return_value=mock_tokens)
 
         user, tokens = await auth_service_open.register(
             username="newuser",
@@ -335,13 +359,14 @@ class TestRegister:
             )
 
     @pytest.mark.asyncio
-    async def test_register_invite_mode_no_invite_repo(self, mock_repos):
+    async def test_register_invite_mode_no_invite_repo(self, mock_repos, mock_permission_service):
         """Test registration in invite mode without invite repo."""
-        user_repo, revoked_repo, reset_repo, _ = mock_repos
+        user_repo, revoked_repo, reset_repo, invite_repo, perm_repo, role_repo, user_role_repo = mock_repos
         service = AuthService(
             user_repository=user_repo,
             revoked_repo=revoked_repo,
             reset_repo=reset_repo,
+            permission_service=mock_permission_service,
             invite_repo=None,
             registration_mode="invite",
         )
@@ -367,6 +392,13 @@ class TestLogin:
         """Test successful login."""
         user_repo, *_ = mock_repos
         user_repo.get_by_username = AsyncMock(return_value=sample_user)
+
+        # Mock _create_tokens to return AuthTokensResponse
+        mock_tokens = AuthTokensResponse(
+            access_token="access_token",
+            refresh_token="refresh_token",
+        )
+        auth_service_open._create_tokens = AsyncMock(return_value=mock_tokens)
 
         with patch("auth_service.services.auth.verify_password", return_value=True):
             user, tokens = await auth_service_open.login("testuser", "password123")
@@ -404,7 +436,6 @@ class TestLogin:
             email=sample_user.email,
             hashed_password=sample_user.hashed_password,
             password_change_required=sample_user.password_change_required,
-            is_admin=sample_user.is_admin,
             is_active=False,  # Inactive
             created_at=sample_user.created_at,
             updated_at=sample_user.updated_at,
@@ -551,7 +582,6 @@ class TestTokenOperations:
             email=sample_user.email,
             hashed_password=sample_user.hashed_password,
             password_change_required=sample_user.password_change_required,
-            is_admin=sample_user.is_admin,
             is_active=False,
             created_at=sample_user.created_at,
             updated_at=sample_user.updated_at,
@@ -687,12 +717,11 @@ class TestAdminUserManagement:
         user_repo.get_by_id = AsyncMock(side_effect=[sample_admin, sample_user])
         user_repo.update_password = AsyncMock(return_value=sample_user)
 
-        with patch("auth_service.services.auth.get_user_id_from_token", return_value=str(sample_admin.id)):
-            updated_user, pwd = await auth_service_open.admin_reset_user(
-                requester_token="admin_token",
-                target_user_id=sample_user.id,
-                new_password="newpass123",
-            )
+        updated_user, pwd = await auth_service_open.admin_reset_user(
+            requester_id=sample_admin.id,
+            target_user_id=sample_user.id,
+            new_password="newpass123",
+        )
 
         assert updated_user is not None
         assert pwd is not None
@@ -705,43 +734,43 @@ class TestAdminUserManagement:
         user_repo.get_by_id = AsyncMock(side_effect=[sample_admin, sample_user])
         user_repo.update_password = AsyncMock(return_value=sample_user)
 
-        with patch("auth_service.services.auth.get_user_id_from_token", return_value=str(sample_admin.id)):
-            updated_user, pwd = await auth_service_open.admin_reset_user(
-                requester_token="admin_token",
-                target_user_id=sample_user.id,
-                new_password=None,
-            )
+        updated_user, pwd = await auth_service_open.admin_reset_user(
+            requester_id=sample_admin.id,
+            target_user_id=sample_user.id,
+            new_password=None,
+        )
 
         assert pwd is not None
         assert pwd.startswith("Tmp1")
 
     @pytest.mark.asyncio
-    async def test_admin_reset_user_not_admin(self, auth_service_open, mock_repos, sample_user):
+    async def test_admin_reset_user_not_admin(self, auth_service_open, mock_repos, mock_permission_service, sample_user):
         """Test non-admin cannot reset user password."""
         user_repo, *_ = mock_repos
         user_repo.get_by_id = AsyncMock(return_value=sample_user)
+        
+        # Setup mock to raise ForbiddenError for users.reset_password permission
+        mock_permission_service.ensure_permission = AsyncMock(side_effect=ForbiddenError("Missing permission: users.reset_password"))
 
-        with patch("auth_service.services.auth.get_user_id_from_token", return_value=str(sample_user.id)):
-            with pytest.raises(ForbiddenError):
-                await auth_service_open.admin_reset_user(
-                    requester_token="user_token",
-                    target_user_id=sample_user.id,
-                    new_password="newpass",
-                )
+        with pytest.raises(ForbiddenError):
+            await auth_service_open.admin_reset_user(
+                requester_id=sample_user.id,
+                target_user_id=sample_user.id,
+                new_password="newpass",
+            )
 
     @pytest.mark.asyncio
-    async def test_admin_reset_user_not_found(self, auth_service_open, mock_repos, sample_admin):
+    async def test_admin_reset_user_not_found(self, auth_service_open, mock_repos, mock_permission_service, sample_admin):
         """Test admin reset for non-existent user."""
         user_repo, *_ = mock_repos
-        user_repo.get_by_id = AsyncMock(side_effect=[sample_admin, None])
+        user_repo.get_by_id = AsyncMock(return_value=None)
 
-        with patch("auth_service.services.auth.get_user_id_from_token", return_value=str(sample_admin.id)):
-            with pytest.raises(UserNotFoundError):
-                await auth_service_open.admin_reset_user(
-                    requester_token="admin_token",
-                    target_user_id=uuid4(),
-                    new_password="newpass",
-                )
+        with pytest.raises(UserNotFoundError):
+            await auth_service_open.admin_reset_user(
+                requester_id=sample_admin.id,
+                target_user_id=uuid4(),
+                new_password="newpass",
+            )
 
     @pytest.mark.asyncio
     async def test_list_users_success(self, auth_service_open, mock_repos, sample_admin):
@@ -750,21 +779,22 @@ class TestAdminUserManagement:
         user_repo.get_by_id = AsyncMock(return_value=sample_admin)
         user_repo.list_all = AsyncMock(return_value=[])
 
-        with patch("auth_service.services.auth.get_user_id_from_token", return_value=str(sample_admin.id)):
-            users = await auth_service_open.list_users("admin_token", search="test")
+        users = await auth_service_open.list_users(sample_admin.id, search="test")
 
         assert isinstance(users, list)
         user_repo.list_all.assert_called_once_with("test")
 
     @pytest.mark.asyncio
-    async def test_list_users_not_admin(self, auth_service_open, mock_repos, sample_user):
+    async def test_list_users_not_admin(self, auth_service_open, mock_repos, mock_permission_service, sample_user):
         """Test non-admin cannot list users."""
         user_repo, *_ = mock_repos
         user_repo.get_by_id = AsyncMock(return_value=sample_user)
+        
+        # Setup mock to raise ForbiddenError for users.list permission
+        mock_permission_service.ensure_permission = AsyncMock(side_effect=ForbiddenError("Missing permission: users.list"))
 
-        with patch("auth_service.services.auth.get_user_id_from_token", return_value=str(sample_user.id)):
-            with pytest.raises(ForbiddenError):
-                await auth_service_open.list_users("user_token")
+        with pytest.raises(ForbiddenError):
+            await auth_service_open.list_users(sample_user.id)
 
     @pytest.mark.asyncio
     async def test_update_user_success(self, auth_service_open, mock_repos, sample_admin, sample_user):
@@ -772,15 +802,12 @@ class TestAdminUserManagement:
         user_repo, *_ = mock_repos
         user_repo.get_by_id = AsyncMock(side_effect=[sample_admin, sample_user])
         user_repo.set_active = AsyncMock(return_value=sample_user)
-        user_repo.count_admins = AsyncMock(return_value=2)
 
-        with patch("auth_service.services.auth.get_user_id_from_token", return_value=str(sample_admin.id)):
-            updated = await auth_service_open.update_user(
-                requester_token="admin_token",
-                target_user_id=sample_user.id,
-                is_active=True,
-                is_admin=None,
-            )
+        updated = await auth_service_open.update_user(
+            requester_id=sample_admin.id,
+            target_user_id=sample_user.id,
+            is_active=True,
+        )
 
         assert updated is not None
         user_repo.set_active.assert_called_once()
@@ -791,58 +818,44 @@ class TestAdminUserManagement:
         user_repo, *_ = mock_repos
         user_repo.get_by_id = AsyncMock(return_value=sample_admin)
 
-        with patch("auth_service.services.auth.get_user_id_from_token", return_value=str(sample_admin.id)):
-            with pytest.raises(ForbiddenError, match="Cannot modify your own account"):
-                await auth_service_open.update_user(
-                    requester_token="admin_token",
-                    target_user_id=sample_admin.id,
-                    is_active=True,
-                    is_admin=None,
-                )
+        with pytest.raises(ForbiddenError, match="Cannot modify your own account"):
+            await auth_service_open.update_user(
+                requester_id=sample_admin.id,
+                target_user_id=sample_admin.id,
+                is_active=True,
+            )
 
     @pytest.mark.asyncio
-    async def test_update_user_last_admin(self, auth_service_open, mock_repos, sample_admin):
-        """Test cannot demote last admin."""
+    async def test_update_user_last_admin(self, auth_service_open, mock_repos, mock_permission_service, sample_admin, sample_user):
+        """Test cannot demote last superadmin."""
         user_repo, *_ = mock_repos
         
-        # Create another admin user that's the last admin
-        last_admin = User(
-            id=uuid4(),
-            username="lastadmin",
-            email="lastadmin@example.com",
-            hashed_password="hashed123",
-            password_change_required=False,
-            is_admin=True,  # This is an admin
-            is_active=True,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
-        )
-        
-        user_repo.get_by_id = AsyncMock(side_effect=[sample_admin, last_admin])
-        user_repo.count_admins = AsyncMock(return_value=1)
+        mock_permission_service.is_superadmin = AsyncMock(return_value=True)
+        mock_permission_service.count_superadmins = AsyncMock(return_value=1)
+        user_repo.get_by_id = AsyncMock(return_value=sample_user)
 
-        with patch("auth_service.services.auth.get_user_id_from_token", return_value=str(sample_admin.id)):
-            with pytest.raises(ConflictError, match="Cannot remove the last admin"):
-                await auth_service_open.update_user(
-                    requester_token="admin_token",
-                    target_user_id=last_admin.id,
-                    is_active=None,
-                    is_admin=False,
-                )
+        with pytest.raises(ConflictError, match="Cannot remove the last superadmin"):
+            await auth_service_open.update_user(
+                requester_id=sample_admin.id,
+                target_user_id=sample_user.id,
+                is_active=False,
+            )
 
     @pytest.mark.asyncio
-    async def test_delete_user_success(self, auth_service_open, mock_repos, sample_admin, sample_user):
+    async def test_delete_user_success(self, auth_service_open, mock_repos, mock_permission_service, sample_admin, sample_user):
         """Test admin successfully deletes user."""
         user_repo, *_ = mock_repos
         user_repo.get_by_id = AsyncMock(side_effect=[sample_admin, sample_user])
         user_repo.delete = AsyncMock(return_value=True)
-        user_repo.count_admins = AsyncMock(return_value=2)
+        
+        # Setup mock permission service
+        mock_permission_service.is_superadmin = AsyncMock(return_value=False)
+        mock_permission_service.count_superadmins = AsyncMock(return_value=2)
 
-        with patch("auth_service.services.auth.get_user_id_from_token", return_value=str(sample_admin.id)):
-            result = await auth_service_open.delete_user(
-                requester_token="admin_token",
-                target_user_id=sample_user.id,
-            )
+        result = await auth_service_open.delete_user(
+            requester_id=sample_admin.id,
+            target_user_id=sample_user.id,
+        )
 
         assert result is True
         user_repo.delete.assert_called_once()
@@ -853,53 +866,40 @@ class TestAdminUserManagement:
         user_repo, *_ = mock_repos
         user_repo.get_by_id = AsyncMock(return_value=sample_admin)
 
-        with patch("auth_service.services.auth.get_user_id_from_token", return_value=str(sample_admin.id)):
-            with pytest.raises(ForbiddenError, match="Cannot delete your own account"):
-                await auth_service_open.delete_user(
-                    requester_token="admin_token",
-                    target_user_id=sample_admin.id,
-                )
+        with pytest.raises(ForbiddenError, match="Cannot delete your own account"):
+            await auth_service_open.delete_user(
+                requester_id=sample_admin.id,
+                target_user_id=sample_admin.id,
+            )
 
     @pytest.mark.asyncio
-    async def test_delete_user_last_admin(self, auth_service_open, mock_repos, sample_admin):
-        """Test cannot delete last admin."""
+    async def test_delete_user_last_admin(self, auth_service_open, mock_repos, mock_permission_service, sample_admin, sample_user):
+        """Test cannot delete last superadmin."""
         user_repo, *_ = mock_repos
-        
-        # Create another admin user that's the last admin
-        last_admin = User(
-            id=uuid4(),
-            username="lastadmin",
-            email="lastadmin@example.com",
-            hashed_password="hashed123",
-            password_change_required=False,
-            is_admin=True,  # This is an admin
-            is_active=True,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
-        )
-        
-        user_repo.get_by_id = AsyncMock(side_effect=[sample_admin, last_admin])
-        user_repo.count_admins = AsyncMock(return_value=1)
 
-        with patch("auth_service.services.auth.get_user_id_from_token", return_value=str(sample_admin.id)):
-            with pytest.raises(ConflictError, match="Cannot delete the last admin"):
-                await auth_service_open.delete_user(
-                    requester_token="admin_token",
-                    target_user_id=last_admin.id,
-                )
+        # Setup: sample_user is the only superadmin
+        mock_permission_service.is_superadmin = AsyncMock(return_value=True)
+        mock_permission_service.count_superadmins = AsyncMock(return_value=1)
+        user_repo.get_by_id = AsyncMock(side_effect=[sample_admin, sample_user])
+
+        with pytest.raises(ConflictError, match="Cannot delete the last superadmin"):
+            await auth_service_open.delete_user(
+                requester_id=sample_admin.id,
+                target_user_id=sample_user.id,
+            )
 
     @pytest.mark.asyncio
-    async def test_delete_user_not_found(self, auth_service_open, mock_repos, sample_admin):
+    async def test_delete_user_not_found(self, auth_service_open, mock_repos, mock_permission_service, sample_admin):
         """Test delete non-existent user."""
         user_repo, *_ = mock_repos
-        user_repo.get_by_id = AsyncMock(side_effect=[sample_admin, None])
+        mock_permission_service.count_superadmins = AsyncMock(return_value=2)
+        user_repo.get_by_id = AsyncMock(return_value=None)
 
-        with patch("auth_service.services.auth.get_user_id_from_token", return_value=str(sample_admin.id)):
-            with pytest.raises(NotFoundError, match="User not found"):
-                await auth_service_open.delete_user(
-                    requester_token="admin_token",
-                    target_user_id=uuid4(),
-                )
+        with pytest.raises(NotFoundError, match="User not found"):
+            await auth_service_open.delete_user(
+                requester_id=sample_admin.id,
+                target_user_id=uuid4(),
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -912,7 +912,7 @@ class TestInviteManagement:
     @pytest.mark.asyncio
     async def test_create_invite_success(self, auth_service_open, mock_repos, sample_admin):
         """Test admin successfully creates invite."""
-        user_repo, _, _, invite_repo = mock_repos
+        user_repo, revoked_repo, reset_repo, invite_repo, perm_repo, role_repo, user_role_repo = mock_repos
         user_repo.get_by_id = AsyncMock(return_value=sample_admin)
         invite_repo.create = AsyncMock(return_value=MagicMock(
             id=uuid4(),
@@ -927,7 +927,7 @@ class TestInviteManagement:
 
         with patch("auth_service.services.auth.get_user_id_from_token", return_value=str(sample_admin.id)):
             invite = await auth_service_open.create_invite(
-                requester_token="admin_token",
+                requester_id=sample_admin.id,
                 email_hint="test@example.com",
                 expires_in_hours=24,
             )
@@ -936,23 +936,25 @@ class TestInviteManagement:
         invite_repo.create.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_create_invite_not_admin(self, auth_service_open, mock_repos, sample_user):
+    async def test_create_invite_not_admin(self, auth_service_open, mock_repos, mock_permission_service, sample_user):
         """Test non-admin cannot create invite."""
         user_repo, *_ = mock_repos
         user_repo.get_by_id = AsyncMock(return_value=sample_user)
+        
+        # Setup mock to raise ForbiddenError for users.create permission
+        mock_permission_service.ensure_permission = AsyncMock(side_effect=ForbiddenError("Missing permission: users.create"))
 
-        with patch("auth_service.services.auth.get_user_id_from_token", return_value=str(sample_user.id)):
-            with pytest.raises(ForbiddenError):
-                await auth_service_open.create_invite(
-                    requester_token="user_token",
-                    email_hint="test@example.com",
-                    expires_in_hours=24,
-                )
+        with pytest.raises(ForbiddenError):
+            await auth_service_open.create_invite(
+                requester_id=sample_user.id,
+                email_hint="test@example.com",
+                expires_in_hours=24,
+            )
 
     @pytest.mark.asyncio
     async def test_list_invites_success(self, auth_service_open, mock_repos, sample_admin):
         """Test admin successfully lists invites."""
-        user_repo, _, _, invite_repo = mock_repos
+        user_repo, revoked_repo, reset_repo, invite_repo, perm_repo, role_repo, user_role_repo = mock_repos
         user_repo.get_by_id = AsyncMock(return_value=sample_admin)
         invite_repo.list_all = AsyncMock(return_value=[])
 
@@ -965,7 +967,7 @@ class TestInviteManagement:
     @pytest.mark.asyncio
     async def test_revoke_invite_success(self, auth_service_open, mock_repos, sample_admin, sample_invite):
         """Test admin successfully revokes invite."""
-        user_repo, _, _, invite_repo = mock_repos
+        user_repo, revoked_repo, reset_repo, invite_repo, perm_repo, role_repo, user_role_repo = mock_repos
         user_repo.get_by_id = AsyncMock(return_value=sample_admin)
         invite_repo.get_by_token = AsyncMock(return_value=sample_invite)
         invite_repo.delete = AsyncMock(return_value=True)
@@ -979,7 +981,7 @@ class TestInviteManagement:
     @pytest.mark.asyncio
     async def test_revoke_invite_used(self, auth_service_open, mock_repos, sample_admin):
         """Test cannot revoke used invite."""
-        user_repo, _, _, invite_repo = mock_repos
+        user_repo, revoked_repo, reset_repo, invite_repo, perm_repo, role_repo, user_role_repo = mock_repos
         user_repo.get_by_id = AsyncMock(return_value=sample_admin)
 
         used_invite = InviteToken(
@@ -1001,7 +1003,7 @@ class TestInviteManagement:
     @pytest.mark.asyncio
     async def test_revoke_invite_not_found(self, auth_service_open, mock_repos, sample_admin):
         """Test revoke non-existent invite."""
-        user_repo, _, _, invite_repo = mock_repos
+        user_repo, revoked_repo, reset_repo, invite_repo, perm_repo, role_repo, user_role_repo = mock_repos
         user_repo.get_by_id = AsyncMock(return_value=sample_admin)
         invite_repo.get_by_token = AsyncMock(return_value=None)
 
