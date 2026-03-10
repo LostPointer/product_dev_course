@@ -253,7 +253,7 @@ async def list_members(request: web.Request) -> web.Response:
                         project_id=str(m["project_id"]),
                         user_id=str(m["user_id"]),
                         roles=m["roles"],
-                        granted_at=m["granted_at"],
+                        granted_at=m["granted_at"].isoformat() if m.get("granted_at") else None,
                         username=m.get("username"),
                     ).model_dump()
                     for m in members
