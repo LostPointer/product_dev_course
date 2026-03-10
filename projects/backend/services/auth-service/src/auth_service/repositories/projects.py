@@ -4,12 +4,46 @@ from __future__ import annotations
 from uuid import UUID
 
 from auth_service.core.exceptions import NotFoundError
-from auth_service.domain.models import Project
+from auth_service.domain.models import Project, UserProjectRole
 from auth_service.repositories.base import BaseRepository
 
 
 class ProjectRepository(BaseRepository):
     """Repository for project operations."""
+
+    async def is_member(self, project_id: UUID, user_id: UUID) -> bool:
+        """Check if user is a member of the project."""
+        row = await self._fetchrow(
+            "SELECT EXISTS("
+            "  SELECT 1 FROM user_project_roles "
+            "  WHERE project_id = $1 AND user_id = $2 "
+            "  AND (expires_at IS NULL OR expires_at > now())"
+            ") AS is_member",
+            project_id, user_id,
+        )
+        return bool(row["is_member"]) if row else False
+
+    async def get_member_roles(self, project_id: UUID, user_id: UUID) -> list[UserProjectRole]:
+        """Get all roles for a user in a project."""
+        rows = await self._fetch(
+            "SELECT user_id, project_id, role_id, granted_by, granted_at, expires_at "
+            "FROM user_project_roles "
+            "WHERE project_id = $1 AND user_id = $2 "
+            "AND (expires_at IS NULL OR expires_at > now())",
+            project_id, user_id,
+        )
+        return [UserProjectRole.from_row(dict(r)) for r in rows]
+
+    async def get_member_role_names(self, project_id: UUID, user_id: UUID) -> list[str]:
+        """Get role names for a user in a project."""
+        rows = await self._fetch(
+            "SELECT r.name FROM user_project_roles upr "
+            "JOIN roles r ON r.id = upr.role_id "
+            "WHERE upr.project_id = $1 AND upr.user_id = $2 "
+            "AND (upr.expires_at IS NULL OR upr.expires_at > now())",
+            project_id, user_id,
+        )
+        return [row["name"] for row in rows]
 
     async def create(
         self,
@@ -105,7 +139,7 @@ class ProjectRepository(BaseRepository):
         if not updates:
             return await self.get_by_id_or_raise(project_id)
 
-        params.append(str(project_id))
+        params.append(project_id)
         query = f"""
             UPDATE projects
             SET {', '.join(updates)}, updated_at = now()

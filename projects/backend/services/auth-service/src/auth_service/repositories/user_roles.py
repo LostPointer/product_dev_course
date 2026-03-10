@@ -148,6 +148,16 @@ class UserRoleRepository(BaseRepository):
 
         return sorted(perms)
 
+    async def count_project_role(self, project_id: UUID, role_id: UUID) -> int:
+        """Count users with an active specific role in a project."""
+        row = await self._fetchrow(
+            "SELECT count(*) FROM user_project_roles "
+            "WHERE project_id = $1 AND role_id = $2 "
+            "AND (expires_at IS NULL OR expires_at > now())",
+            project_id, role_id,
+        )
+        return int(row["count"]) if row else 0
+
     # ── Superadmin check ────────────────────────────────────────────────
 
     async def is_superadmin(self, user_id: UUID) -> bool:
