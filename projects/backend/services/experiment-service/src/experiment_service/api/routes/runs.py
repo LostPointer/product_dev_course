@@ -31,6 +31,7 @@ from experiment_service.services.dependencies import (
     get_run_service,
     get_run_event_service,
     get_webhook_service,
+    infer_project_role,
     require_current_user,
     resolve_project_id,
 )
@@ -192,7 +193,7 @@ async def update_run(request: web.Request):
                 run_id=run.id,
                 event_type=EVENT_RUN_STATUS_CHANGED,
                 actor_id=user.user_id,
-                actor_role="editor",
+                actor_role=infer_project_role(user),
                 payload={
                     "from": before.status.value,
                     "to": run.status.value,
@@ -259,7 +260,7 @@ async def batch_update_status(request: web.Request):
             run_id=run.id,
             event_type=EVENT_RUN_STATUS_CHANGED,
             actor_id=user.user_id,
-            actor_role="editor",
+            actor_role=infer_project_role(user),
             payload={"from": old, "to": run.status.value},
         )
     event_type: str | None = None
@@ -359,7 +360,7 @@ async def bulk_update_tags(request: web.Request):
             run_id=run.id,
             event_type=EVENT_RUN_TAGS_UPDATED,
             actor_id=user.user_id,
-            actor_role="editor",
+            actor_role=infer_project_role(user),
             payload={
                 "set_tags": _normalize_tags(set_tags_raw) if has_set else None,
                 "add_tags": _normalize_tags(add_tags_raw) if not has_set else None,

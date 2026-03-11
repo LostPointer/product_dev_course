@@ -14,11 +14,6 @@ _dto_module.PASSWORD_COMPLEXITY_ENABLED = False
 from auth_service.main import create_app
 from auth_service.settings import settings
 
-pytest_plugins = (
-    "testsuite.pytest_plugin",
-    "testsuite.databases.pgsql.pytest_plugin",
-)
-
 PG_SCHEMAS_PATH = Path(__file__).parent / "schemas" / "postgresql"
 
 

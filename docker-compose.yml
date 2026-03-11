@@ -37,7 +37,7 @@ services:
       retries: 5
       start_period: 10s
     networks:
-      - experiment-network
+      - experiment-tracking-network
     restart: unless-stopped
 
   # Redis — кэш для прав пользователей (auth-proxy) и брокер телеметрии
@@ -47,7 +47,7 @@ services:
     ports:
       - "${REDIS_PORT:-6379}:6379"
     networks:
-      - experiment-network
+      - experiment-tracking-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -82,7 +82,7 @@ services:
       postgres:
         condition: service_healthy
     networks:
-      - experiment-network
+      - experiment-tracking-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/health').read()\" || exit 1"]
@@ -118,7 +118,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - experiment-network
+      - experiment-tracking-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8002/health').read()\" || exit 1"]
@@ -150,7 +150,7 @@ services:
       postgres:
         condition: service_healthy
     networks:
-      - experiment-network
+      - experiment-tracking-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8003/health').read()\" || exit 1"]
@@ -196,7 +196,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - experiment-network
+      - experiment-tracking-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:8080/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)}).on('error', () => process.exit(1))\" || exit 1"]
@@ -219,7 +219,7 @@ services:
     depends_on:
       - auth-proxy
     networks:
-      - experiment-network
+      - experiment-tracking-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost/ || exit 1"]
@@ -243,7 +243,7 @@ services:
       telemetry-ingest-service:
         condition: service_healthy
     networks:
-      - experiment-network
+      - experiment-tracking-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1/ || exit 1"]
@@ -263,7 +263,7 @@ services:
       - loki_data:/loki
     command: -config.file=/etc/loki/local-config.yaml
     networks:
-      - experiment-network
+      - experiment-tracking-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1"]
@@ -285,7 +285,7 @@ services:
       loki:
         condition: service_healthy
     networks:
-      - experiment-network
+      - experiment-tracking-network
     restart: unless-stopped
     ports:
       - "12345:12345"  # HTTP сервер для метрик и UI
@@ -311,7 +311,7 @@ services:
       loki:
         condition: service_healthy
     networks:
-      - experiment-network
+      - experiment-tracking-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
@@ -330,8 +330,9 @@ volumes:
     name: ${GRAFANA_DATA_VOLUME:-experiment-grafana-data}
 
 # Docker network для взаимодействия сервисов
+# Ключ сети должен совпадать с name (или с меткой существующей сети), иначе compose не найдёт сеть
 networks:
-  experiment-network:
+  experiment-tracking-network:
     name: ${DOCKER_NETWORK_NAME:-experiment-tracking-network}
     driver: bridge
 

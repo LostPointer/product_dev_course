@@ -22,6 +22,7 @@ from experiment_service.services.dependencies import (
     get_idempotency_service,
     get_run_service,
     get_webhook_service,
+    infer_project_role,
     require_current_user,
     resolve_project_id,
 )
@@ -111,7 +112,7 @@ async def create_capture_session(request: web.Request):
         capture_session_id=session.id,
         event_type=EVENT_CREATED,
         actor_id=user.user_id,
-        actor_role="editor",
+        actor_role=infer_project_role(user),
         payload={
             "run_id": str(run_id),
             "ordinal_number": session.ordinal_number,
@@ -178,7 +179,7 @@ async def stop_capture_session(request: web.Request):
         capture_session_id=session.id,
         event_type=EVENT_STOPPED,
         actor_id=user.user_id,
-        actor_role="editor",
+        actor_role=infer_project_role(user),
         payload={
             "run_id": str(run_id),
             "status": session.status.value,
@@ -257,7 +258,7 @@ async def start_backfill(request: web.Request):
         capture_session_id=session.id,
         event_type=EVENT_BACKFILL_STARTED,
         actor_id=user.user_id,
-        actor_role="editor",
+        actor_role=infer_project_role(user),
         payload={
             "run_id": str(run_id),
             "status": session.status.value,
@@ -302,7 +303,7 @@ async def complete_backfill(request: web.Request):
         capture_session_id=session.id,
         event_type=EVENT_BACKFILL_COMPLETED,
         actor_id=user.user_id,
-        actor_role="editor",
+        actor_role=infer_project_role(user),
         payload={
             "run_id": str(run_id),
             "status": session.status.value,

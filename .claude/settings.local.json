@@ -77,7 +77,10 @@
       "Bash(gh run:*)",
       "Bash(gh release:*)",
       "Bash(psql:*)",
-      "Bash(wait:*)"
+      "Bash(wait:*)",
+      "Bash(npm test:*)",
+      "Bash(cp:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

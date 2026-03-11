@@ -121,6 +121,18 @@ def ensure_permission(user: UserContext, permission: str) -> None:
     raise web.HTTPForbidden(reason=f"Missing permission: {permission}")
 
 
+def infer_project_role(user: UserContext) -> str:
+    """Infer project role name from permissions for audit (owner/editor/viewer)."""
+    if user.is_superadmin:
+        return "owner"
+    perms = user.project_permissions | user.system_permissions
+    if "project.roles.manage" in perms:
+        return "owner"
+    if "runs.create" in perms or "experiments.create" in perms:
+        return "editor"
+    return "viewer"
+
+
 def ensure_project_context(user: UserContext) -> UUID:
     """Returns active_project_id or raises HTTPBadRequest."""
     if user.active_project_id is None:
