@@ -308,6 +308,54 @@ h2 {
     color: #555;
 }
 
+/* Детский режим */
+.btn-mode-kids {
+    background: #ff9800 !important;
+    color: white !important;
+}
+.btn-mode-kids.btn-mode-active {
+    background: #e65100 !important;
+    color: white !important;
+}
+
+.kids-mode-settings {
+    background: #fff3e0;
+    border: 1px solid #ffe0b2;
+    border-radius: 8px;
+    padding: 10px 15px;
+    margin-top: 10px;
+}
+.kids-mode-settings .param-row {
+    margin: 4px 0;
+}
+.kids-slider {
+    width: 120px !important;
+    height: 24px !important;
+}
+.kids-limit-value {
+    min-width: 30px;
+    text-align: center;
+    font-weight: 600;
+    color: #e65100;
+}
+
+.kids-mode-banner {
+    background: #ff9800;
+    color: white;
+    text-align: center;
+    padding: 8px;
+    border-radius: 8px;
+    font-weight: 600;
+    margin-bottom: 15px;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.control-panel.kids-active {
+    border: 2px solid #ff9800;
+    border-radius: 12px;
+    padding: 15px;
+}
+
 /* Oversteer индикатор */
 .status-value.oversteer-active {
     background: #f44336;
