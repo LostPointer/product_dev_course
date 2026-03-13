@@ -62,6 +62,8 @@ bool StabilizationManager::SetConfig(const StabilizationConfig& config,
 
   // Применить к фильтрам
   madgwick_.SetBeta(validated_config.filter.madgwick_beta);
+  madgwick_.SetAdaptiveBeta(validated_config.filter.adaptive_beta_enabled,
+                            validated_config.filter.adaptive_accel_threshold_g);
 
   // Применить к LPF (если IMU включен)
   if (imu_handler_) {
@@ -128,6 +130,8 @@ void StabilizationManager::ApplyConfig() {
 
   // Применить конфигурацию к фильтрам
   madgwick_.SetBeta(cfg.filter.madgwick_beta);
+  madgwick_.SetAdaptiveBeta(cfg.filter.adaptive_beta_enabled,
+                            cfg.filter.adaptive_accel_threshold_g);
 
   // Применить к LPF (если IMU включен)
   if (imu_handler_) {

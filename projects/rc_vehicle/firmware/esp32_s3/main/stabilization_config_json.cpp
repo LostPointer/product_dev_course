@@ -20,6 +20,10 @@ cJSON* StabilizationConfigToJson(const StabilizationConfig& cfg) {
     cJSON_AddNumberToObject(filter, "lpf_cutoff_hz", cfg.filter.lpf_cutoff_hz);
     cJSON_AddNumberToObject(filter, "imu_sample_rate_hz",
                             cfg.filter.imu_sample_rate_hz);
+    cJSON_AddBoolToObject(filter, "adaptive_beta_enabled",
+                          cfg.filter.adaptive_beta_enabled);
+    cJSON_AddNumberToObject(filter, "adaptive_accel_threshold_g",
+                            cfg.filter.adaptive_accel_threshold_g);
   }
 
   // Yaw rate config
@@ -145,6 +149,9 @@ void StabilizationConfigFromJson(StabilizationConfig& cfg, const cJSON* json) {
     get_float(filter, "madgwick_beta", cfg.filter.madgwick_beta);
     get_float(filter, "lpf_cutoff_hz", cfg.filter.lpf_cutoff_hz);
     get_float(filter, "imu_sample_rate_hz", cfg.filter.imu_sample_rate_hz);
+    get_bool(filter, "adaptive_beta_enabled", cfg.filter.adaptive_beta_enabled);
+    get_float(filter, "adaptive_accel_threshold_g",
+              cfg.filter.adaptive_accel_threshold_g);
   }
 
   // Yaw rate config

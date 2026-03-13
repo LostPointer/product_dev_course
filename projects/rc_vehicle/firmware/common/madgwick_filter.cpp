@@ -41,6 +41,18 @@ void MadgwickFilter::Update(float ax, float ay, float az, float gx, float gy,
   float ax_n = ax, ay_n = ay, az_n = az;
   const float norm2 = ax * ax + ay * ay + az * az;
   if (norm2 > 1e-12f) {
+    // Адаптивный beta: при линейном ускорении |a| отклоняется от 1g.
+    // Акселерометр перестаёт быть надёжным ориентиром гравитации → отключаем
+    // коррекцию (beta=0), чтобы не вносить ошибку в ориентацию при разгоне,
+    // торможении и поворотах.
+    float effective_beta = beta_;
+    if (adaptive_enabled_) {
+      const float accel_mag = std::sqrt(norm2);
+      if (std::fabs(accel_mag - 1.0f) > adaptive_threshold_g_) {
+        effective_beta = 0.0f;
+      }
+    }
+
     const float recipNorm = InvSqrt(norm2);
     ax_n *= recipNorm;
     ay_n *= recipNorm;
@@ -67,10 +79,10 @@ void MadgwickFilter::Update(float ax, float ay, float az, float gx, float gy,
     s2 *= sNorm;
     s3 *= sNorm;
 
-    qDot1 -= beta_ * s0;
-    qDot2 -= beta_ * s1;
-    qDot3 -= beta_ * s2;
-    qDot4 -= beta_ * s3;
+    qDot1 -= effective_beta * s0;
+    qDot2 -= effective_beta * s1;
+    qDot3 -= effective_beta * s2;
+    qDot4 -= effective_beta * s3;
   }
 
   // Интегрирование

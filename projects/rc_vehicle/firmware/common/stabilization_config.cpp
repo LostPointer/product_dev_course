@@ -25,6 +25,8 @@ void FilterConfig::Clamp() noexcept {
   madgwick_beta = std::clamp(madgwick_beta, 0.01f, 1.0f);
   lpf_cutoff_hz = std::clamp(lpf_cutoff_hz, 5.0f, 100.0f);
   if (imu_sample_rate_hz < 100.0f) imu_sample_rate_hz = 100.0f;
+  adaptive_accel_threshold_g =
+      std::clamp(adaptive_accel_threshold_g, 0.05f, 0.5f);
 }
 
 // ============================================================================
@@ -147,6 +149,8 @@ void StabilizationConfig::Reset() noexcept {
   filter.madgwick_beta = 0.1f;
   filter.lpf_cutoff_hz = 30.0f;
   filter.imu_sample_rate_hz = 500.0f;
+  filter.adaptive_beta_enabled = true;
+  filter.adaptive_accel_threshold_g = 0.2f;
 
   // Yaw rate defaults
   yaw_rate.pid.kp = 0.1f;

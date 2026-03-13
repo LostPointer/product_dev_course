@@ -101,12 +101,29 @@ struct FilterConfig {
   float imu_sample_rate_hz{500.0f};
 
   /**
+   * Адаптивный beta: отключить коррекцию акселерометра при линейном ускорении.
+   * При включении: если |a| - 1g| > adaptive_accel_threshold_g, beta=0.
+   * Предотвращает ошибки ориентации при разгоне/торможении/поворотах.
+   * По умолчанию включено.
+   */
+  bool adaptive_beta_enabled{true};
+
+  /**
+   * Порог линейного ускорения для адаптивного beta [g].
+   * При |a| - 1g| > threshold коррекция акселерометра отключается.
+   * Диапазон: 0.05–0.5 g, по умолчанию 0.2 g.
+   */
+  float adaptive_accel_threshold_g{0.2f};
+
+  /**
    * @brief Проверить валидность конфигурации фильтров
    */
   [[nodiscard]] bool IsValid() const noexcept {
     return madgwick_beta > 0.0f && madgwick_beta <= 1.0f &&
            lpf_cutoff_hz >= 5.0f && lpf_cutoff_hz <= 100.0f &&
-           imu_sample_rate_hz > 0.0f;
+           imu_sample_rate_hz > 0.0f &&
+           adaptive_accel_threshold_g >= 0.05f &&
+           adaptive_accel_threshold_g <= 0.5f;
   }
 
   /**
