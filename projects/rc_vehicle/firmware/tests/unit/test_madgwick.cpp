@@ -707,6 +707,125 @@ TEST(MadgwickTest, VeryHighBeta) {
       << "Filter should remain stable with very high beta";
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Adaptive Beta Tests
+// ═══════════════════════════════════════════════════════════════════════════
+
+TEST(MadgwickTest, AdaptiveBetaDefaultOff) {
+  MadgwickFilter filter;
+  EXPECT_FALSE(filter.GetAdaptiveBetaEnabled())
+      << "Adaptive beta should be disabled by default";
+}
+
+TEST(MadgwickTest, AdaptiveBetaGetSet) {
+  MadgwickFilter filter;
+  filter.SetAdaptiveBeta(true, 0.3f);
+  EXPECT_TRUE(filter.GetAdaptiveBetaEnabled());
+  EXPECT_FLOAT_EQ(filter.GetAdaptiveThresholdG(), 0.3f);
+
+  filter.SetAdaptiveBeta(false);
+  EXPECT_FALSE(filter.GetAdaptiveBetaEnabled());
+}
+
+TEST(MadgwickTest, AdaptiveBetaNoSuppressAtRest) {
+  // При покое |a| ≈ 1g: коррекция акселерометра НЕ подавляется.
+  // Ожидаем, что filter с adaptive converges так же быстро, как без него.
+  MadgwickFilter filter_normal, filter_adaptive;
+  filter_normal.SetBeta(0.5f);
+  filter_adaptive.SetBeta(0.5f);
+  filter_adaptive.SetAdaptiveBeta(true, 0.2f);
+
+  // Машина на месте, отклонена на 45° вокруг X (roll)
+  for (int i = 0; i < 200; ++i) {
+    filter_normal.Update(0.0f, 0.707f, 0.707f, 0.0f, 0.0f, 0.0f, 0.01f);
+    filter_adaptive.Update(0.0f, 0.707f, 0.707f, 0.0f, 0.0f, 0.0f, 0.01f);
+  }
+
+  float p1, r1, y1, p2, r2, y2;
+  filter_normal.GetEulerRad(p1, r1, y1);
+  filter_adaptive.GetEulerRad(p2, r2, y2);
+
+  // Оба должны сойтись к ~45°, разница незначительная
+  EXPECT_NEAR(r1, r2, 0.01f)
+      << "Adaptive beta at rest should converge same as normal";
+  EXPECT_NEAR(std::fabs(r1), M_PI / 4.0f, 0.1f)
+      << "Both filters should detect 45 degree tilt";
+}
+
+TEST(MadgwickTest, AdaptiveBetaSuppressesDuringLinearAccel) {
+  // При сильном линейном ускорении |a| >> 1g: коррекция подавляется.
+  // Имитируем боковое ускорение при крутом повороте (≈1.5g поперёк).
+  // |a| = sqrt(1.5² + 1.0²) ≈ 1.80, deviation=0.80 > threshold=0.2 → сработает.
+  MadgwickFilter filter_normal, filter_adaptive;
+  filter_normal.SetBeta(0.5f);
+  filter_adaptive.SetBeta(0.5f);
+  filter_adaptive.SetAdaptiveBeta(true, 0.2f);
+
+  for (int i = 0; i < 100; ++i) {
+    // ay=1.5g (боковое), az=1.0g (гравитация), нет вращения
+    filter_normal.Update(0.0f, 1.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.01f);
+    filter_adaptive.Update(0.0f, 1.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.01f);
+  }
+
+  float p1, r1, y1, p2, r2, y2;
+  filter_normal.GetEulerDeg(p1, r1, y1);
+  filter_adaptive.GetEulerDeg(p2, r2, y2);
+
+  // filter_normal тянется к ложному крену (ay >> gravity → воспринимает как
+  // наклон). filter_adaptive игнорирует этот шум → меньше крен.
+  float roll_diff = std::fabs(r1 - r2);
+  EXPECT_GT(roll_diff, 1.0f)
+      << "Adaptive beta should significantly reduce roll error during "
+         "lateral acceleration (diff="
+      << roll_diff << " deg)";
+}
+
+TEST(MadgwickTest, AdaptiveBetaThresholdEffect) {
+  // Маленький threshold → подавляет при небольшом ускорении
+  // Большой threshold → не подавляет при том же ускорении
+  MadgwickFilter filter_tight, filter_loose;
+  filter_tight.SetBeta(0.5f);
+  filter_tight.SetAdaptiveBeta(true, 0.05f);  // очень чувствительный
+  filter_loose.SetBeta(0.5f);
+  filter_loose.SetAdaptiveBeta(true, 0.5f);  // менее чувствительный
+
+  // Небольшое линейное ускорение: |a| ≈ 1.1g, deviation=0.1
+  // tight: 0.1 > 0.05 → подавляет
+  // loose: 0.1 < 0.5  → не подавляет
+  for (int i = 0; i < 100; ++i) {
+    filter_tight.Update(0.0f, 0.35f, 1.0f, 0.0f, 0.0f, 0.0f, 0.01f);
+    filter_loose.Update(0.0f, 0.35f, 1.0f, 0.0f, 0.0f, 0.0f, 0.01f);
+  }
+
+  float p1, r1, y1, p2, r2, y2;
+  filter_tight.GetEulerRad(p1, r1, y1);
+  filter_loose.GetEulerRad(p2, r2, y2);
+
+  // loose должен сильнее отклониться в сторону ложного крена (следит за accel)
+  // tight держится на месте (гироскоп без вращения → минимальный крен)
+  EXPECT_GT(std::fabs(r2), std::fabs(r1))
+      << "Loose threshold should allow more roll correction than tight "
+         "threshold";
+}
+
+TEST(MadgwickTest, AdaptiveBetaQuaternionStaysNormalized) {
+  MadgwickFilter filter;
+  filter.SetBeta(0.3f);
+  filter.SetAdaptiveBeta(true, 0.15f);
+
+  // Чередуем покой и резкие ускорения
+  for (int i = 0; i < 200; ++i) {
+    float ax = (i % 10 < 5) ? 0.0f : 0.8f;  // каждые 5 шагов — "разгон"
+    filter.Update(ax, 0.0f, 1.0f, 10.0f, 5.0f, 3.0f, 0.01f);
+  }
+
+  float qw, qx, qy, qz;
+  filter.GetQuaternion(qw, qx, qy, qz);
+  float norm = std::sqrt(qw * qw + qx * qx + qy * qy + qz * qz);
+  EXPECT_NEAR(norm, 1.0f, 1e-5f)
+      << "Quaternion should stay normalized with adaptive beta";
+}
+
 TEST(MadgwickTest, NegativeBeta) {
   MadgwickFilter filter;
 
