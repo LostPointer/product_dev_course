@@ -98,6 +98,8 @@ void VehicleControlUnified::ControlTaskLoop() {
 
     stab_mgr_->UpdateWeights(dt_ms);
 
+    const DriveMode drive_mode = stab_mgr_ ? stab_mgr_->GetConfig().mode : DriveMode::Normal;
+
     // ─────────────────────────────────────────────────────────────────────
     // Стабилизационный pipeline (стратегии, Phase 1 refactoring)
     // ─────────────────────────────────────────────────────────────────────
@@ -105,10 +107,12 @@ void VehicleControlUnified::ControlTaskLoop() {
     const float stab_weight = stab_mgr_->GetStabilizationWeight();
     const float mode_weight = stab_mgr_->GetModeTransitionWeight();
 
-    yaw_ctrl_.Process(commanded_steering, stab_weight, mode_weight, dt_ms);
-    pitch_ctrl_.Process(commanded_throttle, stab_weight);
-    slip_ctrl_.Process(commanded_throttle, stab_weight, mode_weight, dt_ms);
-    oversteer_guard_.Process(commanded_throttle, dt_ms);
+    if (drive_mode != DriveMode::DirectLaw) {
+      yaw_ctrl_.Process(commanded_steering, stab_weight, mode_weight, dt_ms);
+      pitch_ctrl_.Process(commanded_throttle, stab_weight);
+      slip_ctrl_.Process(commanded_throttle, stab_weight, mode_weight, dt_ms);
+      oversteer_guard_.Process(commanded_throttle, dt_ms);
+    }
 
     // ─────────────────────────────────────────────────────────────────────
     // Failsafe
@@ -136,8 +140,15 @@ void VehicleControlUnified::ControlTaskLoop() {
     // Обновление PWM с slew rate
     // ─────────────────────────────────────────────────────────────────────
 
-    UpdatePwmWithSlewRate(now, commanded_throttle, commanded_steering,
-                          applied_throttle, applied_steering, last_pwm_update);
+    // Direct Law: команды идут напрямую в PWM, без slew rate
+    if (drive_mode == DriveMode::DirectLaw) {
+      applied_throttle = commanded_throttle;
+      applied_steering = commanded_steering;
+      platform_->SetPwm(applied_throttle, applied_steering);
+    } else {
+      UpdatePwmWithSlewRate(now, commanded_throttle, commanded_steering,
+                            applied_throttle, applied_steering, last_pwm_update);
+    }
 
     // ─────────────────────────────────────────────────────────────────────
     // Телеметрия

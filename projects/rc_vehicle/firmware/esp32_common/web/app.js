@@ -138,7 +138,7 @@ function sendCommand() {
     let steering = parseFloat(steeringSlider.value);
 
     // Детский режим: ограничить газ и руль
-    if (currentMode === 3) {
+    if (kidsMode) {
         throttle = Math.max(-kidsThrottleLimit, Math.min(kidsThrottleLimit, throttle));
         steering = Math.max(-kidsSteeringLimit, Math.min(kidsSteeringLimit, steering));
     }
@@ -453,9 +453,10 @@ function updateTelem(data) {
 // Стабилизация (Phase 4.1/4.2/4.4)
 // ═══════════════════════════════════════════════════════════════════
 
-let currentMode = 0;  // 0=normal, 1=sport, 2=drift, 3=kids
+let currentMode = 0;  // 0=normal, 1=sport, 2=drift, 3=direct
 let kidsThrottleLimit = 0.50;  // 50%
 let kidsSteeringLimit = 0.70;  // 70%
+let kidsMode = false;
 
 function applyStabConfig(cfg) {
     const set = (id, val) => {
@@ -487,7 +488,7 @@ function applyStabConfig(cfg) {
 }
 
 function updateModeButtons(mode) {
-    const ids = ['btn-mode-normal', 'btn-mode-sport', 'btn-mode-drift', 'btn-mode-kids'];
+    const ids = ['btn-mode-normal', 'btn-mode-sport', 'btn-mode-drift', 'btn-mode-direct'];
     ids.forEach((id, idx) => {
         const el = document.getElementById(id);
         if (!el) return;
@@ -498,19 +499,40 @@ function updateModeButtons(mode) {
         }
     });
 
-    // Показать/скрыть настройки детского режима
-    const kidsSettings = document.getElementById('kids-mode-settings');
-    const kidsBanner = document.getElementById('kids-mode-banner');
+    // Direct Law banner
+    const directBanner = document.getElementById('direct-law-banner');
     const controlPanel = document.getElementById('control-panel');
 
     if (mode === 3) {
+        if (directBanner) directBanner.style.display = 'block';
+        if (controlPanel) controlPanel.classList.add('direct-active');
+    } else {
+        if (directBanner) directBanner.style.display = 'none';
+        if (controlPanel) controlPanel.classList.remove('direct-active');
+    }
+
+    // Kids mode settings visibility (independent of drive mode)
+    updateKidsModeUI();
+}
+
+function updateKidsModeUI() {
+    const kidsSettings = document.getElementById('kids-mode-settings');
+    const kidsBanner = document.getElementById('kids-mode-banner');
+    const controlPanel = document.getElementById('control-panel');
+    const toggleBtn = document.getElementById('btn-kids-toggle');
+
+    if (kidsMode) {
         if (kidsSettings) kidsSettings.style.display = 'block';
         if (kidsBanner) kidsBanner.style.display = 'block';
-        if (controlPanel) controlPanel.classList.add('kids-active');
+        if (controlPanel && currentMode !== 3) controlPanel.classList.add('kids-active');
+        if (toggleBtn) toggleBtn.textContent = 'Детский режим: ВКЛ';
+        if (toggleBtn) toggleBtn.classList.add('btn-kids-active');
     } else {
         if (kidsSettings) kidsSettings.style.display = 'none';
         if (kidsBanner) kidsBanner.style.display = 'none';
         if (controlPanel) controlPanel.classList.remove('kids-active');
+        if (toggleBtn) toggleBtn.textContent = 'Детский режим: ВЫКЛ';
+        if (toggleBtn) toggleBtn.classList.remove('btn-kids-active');
     }
 }
 
@@ -761,13 +783,14 @@ const btnSaveStab = document.getElementById('btn-save-stab');
 const btnModeNormal = document.getElementById('btn-mode-normal');
 const btnModeSport = document.getElementById('btn-mode-sport');
 const btnModeDrift = document.getElementById('btn-mode-drift');
+const btnModeDirect = document.getElementById('btn-mode-direct');
+const btnKidsToggle = document.getElementById('btn-kids-toggle');
 const btnLogInfo = document.getElementById('btn-log-info');
 const btnLogClear = document.getElementById('btn-log-clear');
 const btnLogCsv = document.getElementById('btn-log-csv');
 
 if (btnLoadStab) btnLoadStab.addEventListener('click', loadStabConfig);
 if (btnSaveStab) btnSaveStab.addEventListener('click', saveStabConfig);
-const btnModeKids = document.getElementById('btn-mode-kids');
 const kidsThrottleSlider = document.getElementById('kids-throttle-limit');
 const kidsSteeringSlider = document.getElementById('kids-steering-limit');
 const kidsThrottleValueEl = document.getElementById('kids-throttle-value');
@@ -776,7 +799,11 @@ const kidsSteeringValueEl = document.getElementById('kids-steering-value');
 if (btnModeNormal) btnModeNormal.addEventListener('click', () => { currentMode = 0; updateModeButtons(0); });
 if (btnModeSport) btnModeSport.addEventListener('click', () => { currentMode = 1; updateModeButtons(1); });
 if (btnModeDrift) btnModeDrift.addEventListener('click', () => { currentMode = 2; updateModeButtons(2); });
-if (btnModeKids) btnModeKids.addEventListener('click', () => { currentMode = 3; updateModeButtons(3); });
+if (btnModeDirect) btnModeDirect.addEventListener('click', () => { currentMode = 3; updateModeButtons(3); });
+if (btnKidsToggle) btnKidsToggle.addEventListener('click', () => {
+    kidsMode = !kidsMode;
+    updateKidsModeUI();
+});
 
 if (kidsThrottleSlider) {
     kidsThrottleSlider.addEventListener('input', (e) => {

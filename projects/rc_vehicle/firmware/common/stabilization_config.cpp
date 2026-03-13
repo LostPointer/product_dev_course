@@ -84,7 +84,7 @@ bool StabilizationConfig::IsValid() const noexcept {
   return magic == kStabilizationConfigMagic && filter.IsValid() &&
          yaw_rate.IsValid() && slip_angle.IsValid() && adaptive.IsValid() &&
          oversteer.IsValid() && pitch_comp.IsValid() &&
-         static_cast<uint8_t>(mode) <= 2;
+         static_cast<uint8_t>(mode) <= 3;
 }
 
 void StabilizationConfig::Reset() noexcept {
@@ -174,6 +174,21 @@ void StabilizationConfig::ApplyModeDefaults() noexcept {
       slip_angle.pid.max_correction = 0.25f;
       break;
 
+    case DriveMode::DirectLaw:  // прямое управление: стабилизация не используется
+      enabled = false;
+      yaw_rate.pid.kp = 0.0f;
+      yaw_rate.pid.ki = 0.0f;
+      yaw_rate.pid.kd = 0.0f;
+      yaw_rate.pid.max_correction = 0.0f;
+      pitch_comp.enabled = false;
+      pitch_comp.gain = 0.0f;
+      slip_angle.target_deg = 0.0f;
+      slip_angle.pid.kp = 0.0f;
+      slip_angle.pid.ki = 0.0f;
+      slip_angle.pid.kd = 0.0f;
+      slip_angle.pid.max_correction = 0.0f;
+      break;
+
     default:  // Normal: базовые параметры, slip PID выключен
       yaw_rate.pid.kp = 0.10f;
       yaw_rate.pid.ki = 0.00f;
@@ -197,7 +212,7 @@ void StabilizationConfig::ApplyModeDefaults() noexcept {
 
 void StabilizationConfig::Clamp() noexcept {
   if (fade_ms > 5000) fade_ms = 5000;
-  if (static_cast<uint8_t>(mode) > 2) mode = DriveMode::Normal;
+  if (static_cast<uint8_t>(mode) > 3) mode = DriveMode::Normal;
 
   filter.Clamp();
   yaw_rate.Clamp();

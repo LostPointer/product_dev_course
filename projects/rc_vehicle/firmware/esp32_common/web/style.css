@@ -356,6 +356,44 @@ h2 {
     padding: 15px;
 }
 
+/* Direct Law режим */
+.btn-mode-direct {
+    background: #f44336 !important;
+    color: white !important;
+}
+.btn-mode-direct.btn-mode-active {
+    background: #b71c1c !important;
+    color: white !important;
+    box-shadow: 0 0 0 3px rgba(183, 28, 28, 0.3);
+}
+
+.direct-law-banner {
+    background: #f44336;
+    color: white;
+    text-align: center;
+    padding: 8px;
+    border-radius: 8px;
+    font-weight: 600;
+    margin-bottom: 15px;
+    animation: pulse 1s ease-in-out infinite;
+}
+
+.control-panel.direct-active {
+    border: 2px solid #f44336;
+    border-radius: 12px;
+    padding: 15px;
+}
+
+/* Kids toggle button */
+.btn-kids-toggle {
+    background: #9e9e9e;
+    color: white;
+}
+.btn-kids-toggle.btn-kids-active {
+    background: #e65100 !important;
+    color: white !important;
+}
+
 /* Oversteer индикатор */
 .status-value.oversteer-active {
     background: #f44336;

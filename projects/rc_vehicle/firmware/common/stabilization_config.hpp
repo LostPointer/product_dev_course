@@ -9,11 +9,12 @@ static constexpr uint32_t kStabilizationConfigMagic = 0x53544232;
 
 /**
  * @brief Режим стабилизации
- * 0 = Normal  — базовый контроль рыскания
- * 1 = Sport   — агрессивные параметры, высокая отзывчивость
- * 2 = Drift   — мягкий контроль, управление заносом
+ * 0 = Normal    — базовый контроль рыскания
+ * 1 = Sport     — агрессивные параметры, высокая отзывчивость
+ * 2 = Drift     — мягкий контроль, управление заносом
+ * 3 = DirectLaw — прямое управление без стабилизации и ограничения скорости изменения
  */
-enum class DriveMode : uint8_t { Normal = 0, Sport = 1, Drift = 2 };
+enum class DriveMode : uint8_t { Normal = 0, Sport = 1, Drift = 2, DirectLaw = 3 };
 
 /**
  * @brief Конфигурация ПИД-регулятора
