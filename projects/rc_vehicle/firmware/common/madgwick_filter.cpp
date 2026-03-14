@@ -1,5 +1,6 @@
 #include "madgwick_filter.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 
@@ -73,16 +74,21 @@ void MadgwickFilter::Update(float ax, float ay, float az, float gx, float gy,
                _4q2 + _8q2 * q1q1 + _8q2 * q2q2 + _4q2 * az_n;
     float s3 = 4.f * q1q1 * q3_ - _2q1 * ax_n + 4.f * q2q2 * q3_ - _2q2 * ay_n;
 
-    const float sNorm = InvSqrt(s0 * s0 + s1 * s1 + s2 * s2 + s3 * s3);
-    s0 *= sNorm;
-    s1 *= sNorm;
-    s2 *= sNorm;
-    s3 *= sNorm;
+    const float sSqNorm = s0 * s0 + s1 * s1 + s2 * s2 + s3 * s3;
+    // Пропускаем коррекцию если градиент вырожден (кватернион точно выровнен с g)
+    // или subnormal float — умножение на InvSqrt(~0) даст NaN/Inf в кватернионе
+    if (sSqNorm >= 1e-20f) {
+      const float sNorm = InvSqrt(sSqNorm);
+      s0 *= sNorm;
+      s1 *= sNorm;
+      s2 *= sNorm;
+      s3 *= sNorm;
 
-    qDot1 -= effective_beta * s0;
-    qDot2 -= effective_beta * s1;
-    qDot3 -= effective_beta * s2;
-    qDot4 -= effective_beta * s3;
+      qDot1 -= effective_beta * s0;
+      qDot2 -= effective_beta * s1;
+      qDot3 -= effective_beta * s2;
+      qDot4 -= effective_beta * s3;
+    }
   }
 
   // Интегрирование
@@ -211,7 +217,7 @@ void MadgwickFilter::GetEulerRad(float& pitch_rad, float& roll_rad,
   GetQuaternion(qw, qx, qy, qz);
   roll_rad =
       std::atan2(2.f * (qw * qx + qy * qz), 1.f - 2.f * (qx * qx + qy * qy));
-  pitch_rad = std::asin(2.f * (qw * qy - qz * qx));
+  pitch_rad = std::asin(std::clamp(2.f * (qw * qy - qz * qx), -1.f, 1.f));
   yaw_rad =
       std::atan2(2.f * (qw * qz + qx * qy), 1.f - 2.f * (qy * qy + qz * qz));
 }

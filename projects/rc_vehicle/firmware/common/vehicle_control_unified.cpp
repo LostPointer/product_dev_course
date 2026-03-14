@@ -470,6 +470,7 @@ void VehicleControlUnified::PrintDiagnostics(uint32_t now_ms,
   if (elapsed >= config::DiagnosticsConfig::kIntervalMs) {
     const uint32_t loop_hz =
         (elapsed > 0) ? (diag_loop_count * 1000u / elapsed) : 0u;
+    last_loop_hz_.store(loop_hz, std::memory_order_relaxed);
 
     const auto& cfg = stab_mgr_->GetConfig();
     const float stab_weight = stab_mgr_->GetStabilizationWeight();
@@ -512,6 +513,59 @@ void VehicleControlUnified::OnWifiCommand(float throttle, float steering) {
   if (platform_) {
     platform_->SendWifiCommand(throttle, steering);
   }
+}
+
+std::vector<SelfTestItem> VehicleControlUnified::RunSelfTest() const {
+  SelfTestInput input;
+
+  // Control loop frequency
+  input.loop_hz = last_loop_hz_.load(std::memory_order_relaxed);
+
+  // IMU
+  if (imu_handler_) {
+    input.imu_enabled = imu_handler_->IsEnabled();
+    const auto& imu = imu_handler_->GetData();
+    input.gyro_x_dps = imu.gx;
+    input.gyro_y_dps = imu.gy;
+    input.gyro_z_dps = imu.gz;
+    input.accel_x_g = imu.ax;
+    input.accel_y_g = imu.ay;
+    input.accel_z_g = imu.az;
+  }
+
+  // Madgwick
+  {
+    float pitch = 0, roll = 0, yaw = 0;
+    madgwick_.GetEulerDeg(pitch, roll, yaw);
+    input.pitch_deg = pitch;
+    input.roll_deg = roll;
+  }
+
+  // EKF
+  input.ekf_vx = ekf_.GetVx();
+  input.ekf_vy = ekf_.GetVy();
+
+  // Failsafe — check via telemetry snapshot (failsafe is private in platform)
+  // We check if RC or WiFi are active; if neither, failsafe would be active
+  bool rc_ok = rc_handler_ && rc_handler_->IsActive();
+  bool wifi_ok = wifi_handler_ && wifi_handler_->IsActive();
+  // Self-test is called from WS handler, so WiFi should be active
+  input.failsafe_active = !rc_ok && !wifi_ok;
+
+  // Calibration
+  input.calib_valid = imu_calib_.IsValid();
+
+  // TelemetryLog
+  if (telem_mgr_) {
+    size_t count = 0, cap = 0;
+    telem_mgr_->GetLogInfo(count, cap);
+    input.log_capacity = cap;
+  }
+
+  // PWM — assume ok if platform exists and is initialized
+  input.pwm_status = (platform_ && inited_) ? 0 : -1;
+
+  return SelfTest::Run(input);
 }
 
 }  // namespace rc_vehicle

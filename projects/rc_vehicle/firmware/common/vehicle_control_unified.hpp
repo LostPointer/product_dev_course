@@ -6,6 +6,7 @@
 #include "calibration_manager.hpp"
 #include "control_components.hpp"
 #include "imu_calibration.hpp"
+#include "self_test.hpp"
 #include "kids_mode_processor.hpp"
 #include "madgwick_filter.hpp"
 #include "stabilization_config.hpp"
@@ -144,6 +145,12 @@ class VehicleControlUnified {
    */
   void ClearLog() { telem_mgr_->Clear(); }
 
+  /**
+   * @brief Запустить self-test (проверка подсистем)
+   * @return Вектор результатов проверок
+   */
+  [[nodiscard]] std::vector<SelfTestItem> RunSelfTest() const;
+
   VehicleControlUnified(const VehicleControlUnified&) = delete;
   VehicleControlUnified& operator=(const VehicleControlUnified&) = delete;
 
@@ -233,6 +240,9 @@ class VehicleControlUnified {
   bool rc_enabled_{false};
   bool imu_enabled_{false};
   bool inited_{false};
+
+  // Последнее измерение частоты loop (обновляется в PrintDiagnostics)
+  std::atomic<uint32_t> last_loop_hz_{0};
 
   // Менеджеры (управление отдельными аспектами системы)
   std::unique_ptr<CalibrationManager> calib_mgr_;

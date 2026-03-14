@@ -3,6 +3,7 @@
 #include <cstring>
 
 #include "esp_log.h"
+#include "self_test.hpp"
 #include "stabilization_config.hpp"
 #include "stabilization_config_json.hpp"
 #include "telemetry_log.hpp"
@@ -187,7 +188,7 @@ void HandleGetLogData(cJSON* json, httpd_req_t* req) {
             cJSON_AddNumberToObject(f, "roll_deg", frame.roll_deg);
             cJSON_AddNumberToObject(f, "yaw_deg", frame.yaw_deg);
             cJSON_AddNumberToObject(f, "yaw_rate_dps", frame.yaw_rate_dps);
-            cJSON_AddNumberToObject(f, "oversteer_active", frame.oversteer_active);
+            cJSON_AddBoolToObject(f, "oversteer_active", frame.oversteer_active);
             cJSON_AddItemToArray(frames_arr, f);
           }
         }
@@ -314,6 +315,39 @@ void HandleGetKidsPresets(cJSON* json, httpd_req_t* req) {
     WsSendJsonReply(req, reply);
     cJSON_Delete(reply);
   }
+}
+
+void HandleRunSelfTest(cJSON* json, httpd_req_t* req) {
+  (void)json;
+
+  auto results = VehicleControlRunSelfTest();
+  bool all_passed = rc_vehicle::SelfTest::AllPassed(results);
+
+  cJSON* reply = cJSON_CreateObject();
+  if (reply) {
+    cJSON_AddStringToObject(reply, "type", "self_test_result");
+    cJSON_AddBoolToObject(reply, "passed", all_passed);
+
+    cJSON* tests_arr = cJSON_CreateArray();
+    if (tests_arr) {
+      for (const auto& item : results) {
+        cJSON* t = cJSON_CreateObject();
+        if (t) {
+          cJSON_AddStringToObject(t, "name", item.name);
+          cJSON_AddBoolToObject(t, "passed", item.passed);
+          cJSON_AddStringToObject(t, "value", item.value);
+          cJSON_AddItemToArray(tests_arr, t);
+        }
+      }
+      cJSON_AddItemToObject(reply, "tests", tests_arr);
+    }
+
+    WsSendJsonReply(req, reply);
+    cJSON_Delete(reply);
+  }
+
+  ESP_LOGI(TAG, "run_self_test -> %s (%zu checks)",
+           all_passed ? "ALL PASS" : "FAIL", results.size());
 }
 
 }  // namespace rc_vehicle

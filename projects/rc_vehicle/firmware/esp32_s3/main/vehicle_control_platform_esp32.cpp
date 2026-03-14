@@ -217,6 +217,10 @@ unsigned VehicleControlPlatformEsp32::GetWebSocketClientCount() const noexcept {
 void VehicleControlPlatformEsp32::SendTelem(std::string_view json) {
   // WebSocketSendTelem ожидает null-terminated строку
   char buffer[1024];
+  if (json.size() >= sizeof(buffer)) {
+    ESP_LOGW(TAG, "Telem JSON truncated: %zu > %zu bytes — увеличьте буфер",
+             json.size(), sizeof(buffer) - 1);
+  }
   size_t len = std::min(json.size(), sizeof(buffer) - 1);
   std::memcpy(buffer, json.data(), len);
   buffer[len] = '\0';

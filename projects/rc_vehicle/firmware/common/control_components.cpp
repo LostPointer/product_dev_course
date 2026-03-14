@@ -74,12 +74,7 @@ void ImuHandler::Update(uint32_t now_ms, [[maybe_unused]] uint32_t dt_ms) {
   // Применить компенсацию bias (если калибровка валидна)
   calib_.Apply(data_);
 
-  // LPF Butterworth 2-го порядка для gyro Z (подготовка к yaw rate PID)
-  // Инициализация с дефолтными параметрами, если ещё не настроен
-  if (!lpf_gyro_z_.IsConfigured()) {
-    const float fs_hz = 1000.f / static_cast<float>(read_interval_ms_);
-    lpf_gyro_z_.SetParams(config::LpfConfig::kDefaultCutoffHz, fs_hz);
-  }
+  // LPF инициализирован в конструкторе — горячий путь без проверок
   filtered_gz_ = lpf_gyro_z_.Step(data_.gz);
 
   // Настроить опорную СК фильтра
@@ -92,9 +87,12 @@ void ImuHandler::Update(uint32_t now_ms, [[maybe_unused]] uint32_t dt_ms) {
   }
 
   // Обновить фильтр Madgwick
-  const float dt_sec = (prev_read_ms == 0)
+  // При первом вызове prev_read_ms == 0 (может совпасть с now_ms в тестах),
+  // поэтому используем отдельный флаг вместо проверки на ноль.
+  const float dt_sec = first_read_
                            ? (read_interval_ms_ / 1000.0f)
-                           : ((now_ms - prev_read_ms) / 1000.0f);
+                           : (static_cast<float>(now_ms - prev_read_ms) / 1000.0f);
+  first_read_ = false;
   filter_.Update(data_, dt_sec);
 }
 

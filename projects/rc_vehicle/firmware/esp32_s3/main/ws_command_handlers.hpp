@@ -102,4 +102,15 @@ void HandleSetKidsPreset(cJSON* json, httpd_req_t* req);
  */
 void HandleGetKidsPresets(cJSON* json, httpd_req_t* req);
 
+/**
+ * @brief Run self-test (hardware diagnostics)
+ *
+ * Checks 10 subsystems: control loop, IMU, gyro, accel, Madgwick,
+ * EKF ZUPT, failsafe, calibration, telemetry log, PWM.
+ *
+ * Request: {"type":"run_self_test"}
+ * Response: {"type":"self_test_result","passed":bool,"tests":[...]}
+ */
+void HandleRunSelfTest(cJSON* json, httpd_req_t* req);
+
 }  // namespace rc_vehicle

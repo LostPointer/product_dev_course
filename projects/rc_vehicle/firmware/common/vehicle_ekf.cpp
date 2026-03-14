@@ -7,7 +7,7 @@ namespace rc_vehicle {
 namespace {
 constexpr float kPi = 3.14159265358979f;
 constexpr float kRadToDeg = 180.0f / kPi;
-constexpr float kMinSpeedThreshold = 0.05f;  // м/с: ниже этого atan2 нестабилен
+constexpr float kMinSpeedThreshold = 0.3f;  // м/с: ниже этого EKF без датчиков колёс ненадёжен
 }  // namespace
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -104,10 +104,13 @@ void VehicleEkf::UpdateGyroZ(float gz) noexcept {
   // Инновация: y = gz - r
   const float innov = gz - x_[2];
 
-  // S = H * P * H^T + R = P[2][2] + R_gz
+  // S = H * P * H^T + R = P[2][2] + R_gz.
+  // ClampP() гарантирует P[2][2] >= kPDiagMin = 1e-6f, r_gz >= 0 →
+  // S >= kPDiagMin > 0 всегда. Порог по kPDiagMin защищает только от
+  // r_gz < 0 (ошибка конфигурации), штатный 1e-9f никогда не срабатывал.
   const float S = P_[8] + params_.r_gz;
-  if (S < 1e-9f) {
-    return;  // Защита от деления на ноль
+  if (S < kPDiagMin) {
+    return;
   }
 
   // K = P * H^T / S = P-столбец 2, делённый на S
@@ -145,47 +148,43 @@ void VehicleEkf::UpdateGyroZ(float gz) noexcept {
 // Zero Velocity Update (ZUPT)
 // ═════════════════════════════════════════════════════════════════════════
 
+void VehicleEkf::ScalarZeroUpdate(int col, float r) noexcept {
+  // Скалярное Kalman-обновление: z = 0, H = e_col^T.
+  //
+  // Joseph form P_new[i][j] = P[i][j] − K[i]·Pcol[j] − K[j]·Pcol[i] + K[i]·K[j]·S
+  // получена аналитически для H = e_col^T, где K[i] = P[i][col] / S.
+  // Обходим верхний треугольник и зеркалируем — снапшот только столбца Pcol.
+
+  const float S = P_[col * 3 + col] + r;
+  if (S < kPDiagMin) return;
+
+  // Снапшот столбца col (P симметрична, поэтому P[i][col] = P[col][i])
+  const float Pcol[3] = {P_[col], P_[3 + col], P_[6 + col]};
+  const float K[3] = {Pcol[0] / S, Pcol[1] / S, Pcol[2] / S};
+
+  // Состояние: x += K * (-x[col])
+  const float innov = -x_[col];
+  x_[0] += K[0] * innov;
+  x_[1] += K[1] * innov;
+  x_[2] += K[2] * innov;
+
+  // P: обходим верхний треугольник, зеркалируем нижний
+  for (int i = 0; i < 3; ++i) {
+    for (int j = i; j < 3; ++j) {
+      const float val =
+          P_[i * 3 + j] - K[i] * Pcol[j] - K[j] * Pcol[i] + K[i] * K[j] * S;
+      P_[i * 3 + j] = val;
+      P_[j * 3 + i] = val;
+    }
+  }
+}
+
 void VehicleEkf::UpdateZeroVelocity(float r_zupt) noexcept {
-  // Два последовательных скалярных обновления: vx=0, vy=0.
-  // Каждое — стандартный Kalman scalar update с H = единичный вектор.
-
-  // Обновление 1: H = [1, 0, 0], z = 0 → vx → 0
-  const float S_vx = P_[0] + r_zupt;
-  if (S_vx >= 1e-9f) {
-    const float innov_vx = -x_[0];
-    const float K0 = P_[0] / S_vx;
-    const float K1 = P_[3] / S_vx;
-    const float K2 = P_[6] / S_vx;
-    x_[0] += K0 * innov_vx;
-    x_[1] += K1 * innov_vx;
-    x_[2] += K2 * innov_vx;
-    for (int j = 0; j < 3; ++j) {
-      const float p0j = P_[0 + j];
-      P_[0 + j] -= K0 * p0j;
-      P_[3 + j] -= K1 * p0j;
-      P_[6 + j] -= K2 * p0j;
-    }
-  }
-
-  // Обновление 2: H = [0, 1, 0], z = 0 → vy → 0
-  const float S_vy = P_[4] + r_zupt;
-  if (S_vy >= 1e-9f) {
-    const float innov_vy = -x_[1];
-    const float K0 = P_[1] / S_vy;
-    const float K1 = P_[4] / S_vy;
-    const float K2 = P_[7] / S_vy;
-    x_[0] += K0 * innov_vy;
-    x_[1] += K1 * innov_vy;
-    x_[2] += K2 * innov_vy;
-    for (int j = 0; j < 3; ++j) {
-      const float p1j = P_[3 + j];
-      P_[0 + j] -= K0 * p1j;
-      P_[3 + j] -= K1 * p1j;
-      P_[6 + j] -= K2 * p1j;
-    }
-  }
-
-  SymmetrizeP(P_);
+  // Два последовательных скалярных обновления Kalman с нулевым измерением.
+  // Joseph form гарантирует сохранение положительной полуопределённости P
+  // при частых вызовах (в отличие от упрощённой P_new = (I−KH)·P).
+  ScalarZeroUpdate(0, r_zupt);  // H = [1,0,0], z = 0 → vx → 0
+  ScalarZeroUpdate(1, r_zupt);  // H = [0,1,0], z = 0 → vy → 0
   ClampP();
 }
 
@@ -195,6 +194,14 @@ void VehicleEkf::UpdateZeroVelocity(float r_zupt) noexcept {
 
 float VehicleEkf::GetSlipAngleRad() const noexcept {
   if (GetSpeedMs() < kMinSpeedThreshold) {
+    return 0.0f;
+  }
+  // При сильном отрицательном vx (< -kMinSpeedThreshold) EKF без датчиков
+  // колёс не может надёжно оценить угол заноса: вектор скорости инвертирован,
+  // что даёт atan2 ≈ 120–180°. При vx ∈ (-kMinSpeedThreshold, 0] значение
+  // может быть артефактом float-точности, но atan2 всё ещё даёт корректный
+  // угол (±90° при vx≈0, vy≠0), поэтому guard только для явного заднего хода.
+  if (x_[0] < -kMinSpeedThreshold) {
     return 0.0f;
   }
   return std::atan2(x_[1], x_[0]);

@@ -81,3 +81,7 @@ inline bool VehicleControlGetLogFrame(size_t idx, TelemetryLogFrame* out) {
 inline void VehicleControlClearLog() {
   rc_vehicle::VehicleControlUnified::Instance().ClearLog();
 }
+
+inline std::vector<rc_vehicle::SelfTestItem> VehicleControlRunSelfTest() {
+  return rc_vehicle::VehicleControlUnified::Instance().RunSelfTest();
+}

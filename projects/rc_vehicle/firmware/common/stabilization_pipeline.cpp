@@ -1,6 +1,7 @@
 #include "stabilization_pipeline.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 
 namespace rc_vehicle {
@@ -11,6 +12,7 @@ namespace rc_vehicle {
 
 void YawRateController::Init(const StabilizationConfig& cfg,
                              const VehicleEkf& ekf, const ImuHandler* imu) {
+  assert(imu != nullptr && "YawRateController::Init() requires non-null imu");
   cfg_ = &cfg;
   ekf_ = &ekf;
   imu_ = imu;
@@ -55,6 +57,7 @@ void YawRateController::SetGains(const StabilizationConfig& cfg) noexcept {
 void PitchCompensator::Init(const StabilizationConfig& cfg,
                             const MadgwickFilter& madgwick,
                             const ImuHandler* imu) {
+  assert(imu != nullptr && "PitchCompensator::Init() requires non-null imu");
   cfg_ = &cfg;
   madgwick_ = &madgwick;
   imu_ = imu;
@@ -83,6 +86,7 @@ void PitchCompensator::Process(float& throttle, float stab_w) noexcept {
 
 void SlipAngleController::Init(const StabilizationConfig& cfg,
                                const VehicleEkf& ekf, const ImuHandler* imu) {
+  assert(imu != nullptr && "SlipAngleController::Init() requires non-null imu");
   cfg_ = &cfg;
   ekf_ = &ekf;
   imu_ = imu;
@@ -117,6 +121,7 @@ void SlipAngleController::SetGains(const StabilizationConfig& cfg) noexcept {
 
 void OversteerGuard::Init(const StabilizationConfig& cfg, const VehicleEkf& ekf,
                           const ImuHandler* imu) {
+  assert(imu != nullptr && "OversteerGuard::Init() requires non-null imu");
   cfg_ = &cfg;
   ekf_ = &ekf;
   imu_ = imu;

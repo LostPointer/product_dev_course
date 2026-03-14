@@ -176,6 +176,14 @@ class VehicleEkf {
    */
   void ClampP() noexcept;
 
+  /**
+   * Скалярное Kalman-обновление с нулевым измерением: z = 0, H = e_col^T.
+   * Обновляет состояние x_ и матрицу P_ по Joseph form:
+   *   P_new[i][j] = P[i][j] − K[i]·P[j][col] − K[j]·P[i][col] + K[i]·K[j]·S
+   * Симметрия P_new гарантируется аналитически.
+   */
+  void ScalarZeroUpdate(int col, float r) noexcept;
+
   static void MatMul3x3(const float A[9], const float B[9],
                         float C[9]) noexcept;
   static void MatTranspose3x3(const float A[9], float At[9]) noexcept;

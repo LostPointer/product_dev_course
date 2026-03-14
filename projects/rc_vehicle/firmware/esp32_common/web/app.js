@@ -106,6 +106,8 @@ function connectWebSocket() {
                     handleLogData(data.frames || []);
                 } else if (data.type === 'clear_log_ack') {
                     wsSend({ type: 'get_log_info' });
+                } else if (data.type === 'self_test_result') {
+                    showSelfTestResult(data);
                 }
             } catch (e) {
                 console.error('Failed to parse message:', e);
@@ -900,6 +902,63 @@ window.addEventListener('load', () => {
     if (wifiStatusInterval) clearInterval(wifiStatusInterval);
     wifiStatusInterval = setInterval(fetchWifiStatus, 1000);
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Self-Test
+// ═══════════════════════════════════════════════════════════════════════════
+
+const btnSelfTest = document.getElementById('btn-self-test');
+const selfTestResultDiv = document.getElementById('self-test-result');
+const selfTestOverall = document.getElementById('self-test-overall');
+const selfTestTableBody = document.querySelector('#self-test-table tbody');
+
+if (btnSelfTest) {
+    btnSelfTest.addEventListener('click', () => {
+        btnSelfTest.disabled = true;
+        btnSelfTest.textContent = 'Выполняется...';
+        selfTestResultDiv.style.display = 'none';
+        wsSend({ type: 'run_self_test' });
+        // Timeout: re-enable button after 5 sec if no response
+        setTimeout(() => {
+            btnSelfTest.disabled = false;
+            btnSelfTest.textContent = 'Запустить Self-Test';
+        }, 5000);
+    });
+}
+
+function showSelfTestResult(data) {
+    if (btnSelfTest) {
+        btnSelfTest.disabled = false;
+        btnSelfTest.textContent = 'Запустить Self-Test';
+    }
+    selfTestResultDiv.style.display = 'block';
+
+    if (data.passed) {
+        selfTestOverall.textContent = 'ALL PASS';
+        selfTestOverall.className = 'status-value connected';
+    } else {
+        selfTestOverall.textContent = 'FAIL';
+        selfTestOverall.className = 'status-value disconnected';
+    }
+
+    selfTestTableBody.innerHTML = '';
+    if (data.tests) {
+        for (const t of data.tests) {
+            const row = document.createElement('tr');
+            const nameCell = document.createElement('td');
+            nameCell.textContent = t.name;
+            const statusCell = document.createElement('td');
+            statusCell.textContent = t.passed ? 'PASS' : 'FAIL';
+            statusCell.className = t.passed ? 'self-test-pass' : 'self-test-fail';
+            const valueCell = document.createElement('td');
+            valueCell.textContent = t.value || '';
+            row.appendChild(nameCell);
+            row.appendChild(statusCell);
+            row.appendChild(valueCell);
+            selfTestTableBody.appendChild(row);
+        }
+    }
+}
 
 // Отключение при закрытии страницы
 window.addEventListener('beforeunload', () => {

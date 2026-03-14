@@ -48,6 +48,8 @@ set(COMMON_SOURCES
     ${COMMON_DIR}/telemetry_log.cpp
     ${COMMON_DIR}/stabilization_config.cpp
     ${COMMON_DIR}/stabilization_pipeline.cpp
+    ${COMMON_DIR}/kids_mode_processor.cpp
+    ${COMMON_DIR}/self_test.cpp
 )
 
 # Include directories
@@ -79,6 +81,8 @@ add_executable(unit_tests
     unit/test_vehicle_ekf.cpp
     unit/test_telemetry_log.cpp
     unit/test_oversteer_guard.cpp
+    unit/test_kids_mode.cpp
+    unit/test_self_test.cpp
 )
 
 target_link_libraries(unit_tests

@@ -24,6 +24,23 @@
         </div>
 
         <div class="control-panel">
+            <h2>Self-Test</h2>
+            <div class="button-group">
+                <button id="btn-self-test">Запустить Self-Test</button>
+            </div>
+            <div id="self-test-result" style="display:none">
+                <div class="status-item">
+                    <span class="status-label">Результат:</span>
+                    <span id="self-test-overall" class="status-value unknown">—</span>
+                </div>
+                <table id="self-test-table" class="self-test-table">
+                    <thead><tr><th>Проверка</th><th>Статус</th><th>Значение</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="control-panel">
             <h2>Wi‑Fi клиент (STA)</h2>
 
             <div class="status-panel">

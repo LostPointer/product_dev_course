@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <optional>
 
+#include "config.hpp"
 #include "imu_calibration.hpp"
 #include "lpf_butterworth.hpp"
 #include "madgwick_filter.hpp"
@@ -148,7 +149,10 @@ class ImuHandler : public ControlComponent {
       : platform_(platform),
         calib_(calib),
         filter_(filter),
-        read_interval_ms_(read_interval_ms) {}
+        read_interval_ms_(read_interval_ms) {
+    const float fs_hz = 1000.f / static_cast<float>(read_interval_ms_);
+    lpf_gyro_z_.SetParams(config::LpfConfig::kDefaultCutoffHz, fs_hz);
+  }
 
   void Update(uint32_t now_ms, uint32_t dt_ms) override;
 
@@ -190,6 +194,7 @@ class ImuHandler : public ControlComponent {
   MadgwickFilter& filter_;
   uint32_t read_interval_ms_;
   uint32_t last_read_ms_{0};
+  bool first_read_{true};
   ImuData data_{};
   bool enabled_{false};
   LpfButterworth2 lpf_gyro_z_{};

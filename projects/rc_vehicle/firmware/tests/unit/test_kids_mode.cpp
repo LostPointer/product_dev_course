@@ -131,8 +131,8 @@ TEST(KidsModeConfigTest, ApplyPresetToddlerSetsCorrectValues) {
   KidsModeConfig cfg;
   cfg.ApplyPreset(KidsPreset::Toddler);
 
-  EXPECT_FLOAT_EQ(cfg.throttle_limit, 0.2f);
-  EXPECT_FLOAT_EQ(cfg.reverse_limit, 0.15f);
+  EXPECT_FLOAT_EQ(cfg.throttle_limit, 0.15f);
+  EXPECT_FLOAT_EQ(cfg.reverse_limit, 0.10f);
   EXPECT_FLOAT_EQ(cfg.steering_limit, 0.5f);
   EXPECT_FLOAT_EQ(cfg.slew_throttle, 0.2f);
   EXPECT_FLOAT_EQ(cfg.slew_steering, 0.3f);

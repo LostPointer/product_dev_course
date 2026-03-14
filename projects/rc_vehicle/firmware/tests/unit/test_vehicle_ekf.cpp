@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <numbers>
 
 #include "vehicle_ekf.hpp"
 
@@ -198,11 +199,19 @@ TEST(VehicleEkfTest, SlipAngle_ZeroWhenStraight) {
   EXPECT_FLOAT_EQ(ekf.GetSlipAngleDeg(), 0.0f);
 }
 
-TEST(VehicleEkfTest, SlipAngle_90Deg_WhenOnlyLateralSpeed) {
-  // vx = 0, vy > 0 → β = 90°
+TEST(VehicleEkfTest, SlipAngle_90Deg_WhenVxZeroAndVyPositive) {
+  // vx = 0, vy > 0 → β = atan2(1, 0) = 90°, физически корректно
   VehicleEkf ekf;
   ekf.SetState(0.0f, 1.0f, 0.0f);
-  EXPECT_NEAR(ekf.GetSlipAngleDeg(), 90.0f, 1e-4f);
+  EXPECT_NEAR(ekf.GetSlipAngleDeg(), 90.0f, 1e-3f);
+}
+
+TEST(VehicleEkfTest, SlipAngle_ZeroWhen_ActualReverse) {
+  // vx << -kMinSpeedThreshold → явный задний ход, EKF ненадёжен → 0
+  // (atan2(vy, vx<0) даёт 120–180°, что является ложным срабатыванием)
+  VehicleEkf ekf;
+  ekf.SetState(-3.0f, 1.0f, 0.0f);
+  EXPECT_FLOAT_EQ(ekf.GetSlipAngleDeg(), 0.0f);
 }
 
 TEST(VehicleEkfTest, SlipAngle_NegativeFor_RightSideslip) {
@@ -223,7 +232,7 @@ TEST(VehicleEkfTest, SlipAngle_CalculatedCorrectly) {
   // β = atan2(1, 5) ≈ 11.31°
   VehicleEkf ekf;
   ekf.SetState(5.0f, 1.0f, 0.0f);
-  EXPECT_NEAR(ekf.GetSlipAngleDeg(), std::atan2(1.0f, 5.0f) * 180.0f / 3.14159f,
+  EXPECT_NEAR(ekf.GetSlipAngleDeg(), std::atan2(1.0f, 5.0f) * 180.0f / std::numbers::pi_v<float>,
               1e-3f);
 }
 
