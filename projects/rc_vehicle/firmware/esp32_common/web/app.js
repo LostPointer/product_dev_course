@@ -435,6 +435,23 @@ function updateTelem(data) {
         </div>`;
     }
 
+    // Orientation блок (pitch, roll, yaw) — данные в imu.orientation
+    if (data.imu?.orientation) {
+        const orient = data.imu.orientation;
+        html += `<div class="telem-item">
+            <span class="telem-label">Pitch:</span>
+            <span class="telem-value">${orient.pitch?.toFixed(1) || 'N/A'} °</span>
+        </div>`;
+        html += `<div class="telem-item">
+            <span class="telem-label">Roll:</span>
+            <span class="telem-value">${orient.roll?.toFixed(1) || 'N/A'} °</span>
+        </div>`;
+        html += `<div class="telem-item">
+            <span class="telem-label">Yaw:</span>
+            <span class="telem-value">${orient.yaw?.toFixed(1) || 'N/A'} °</span>
+        </div>`;
+    }
+
     telemDataEl.innerHTML = html || '<p>Нет данных</p>';
 
     // Обновление панели калибровки из телеметрии
