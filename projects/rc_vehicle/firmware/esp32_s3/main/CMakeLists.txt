@@ -12,6 +12,7 @@ idf_component_register(
         "../../common/stabilization_pipeline.cpp"
         "../../common/kids_mode_processor.cpp"
         "../../common/vehicle_control_unified.cpp"
+        "../../common/self_test.cpp"
         "../../common/calibration_manager.cpp"
         "../../common/stabilization_manager.cpp"
         "../../common/telemetry_manager.cpp"

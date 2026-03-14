@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdio>
 #include <initializer_list>
+#include <string>
 
 namespace rc_vehicle {
 
@@ -15,9 +16,9 @@ std::vector<SelfTestItem> SelfTest::Run(const SelfTestInput& input) {
 
   // 1. Control loop frequency: 490..510 Hz
   {
-    std::snprintf(buf, sizeof(buf), "%u Hz", input.loop_hz);
+    std::string loop_str = std::to_string(input.loop_hz) + " Hz";
     bool ok = input.loop_hz >= 490 && input.loop_hz <= 510;
-    results.emplace_back("control_loop", ok, buf);
+    results.emplace_back("control_loop", ok, loop_str.c_str());
   }
 
   // 2. IMU available
