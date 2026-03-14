@@ -30,7 +30,7 @@ EXPECTED_COLUMNS = [
 # Stationary detection: |throttle| < 0.05 for at least this many consecutive samples.
 # At ~20 Hz this is 1 second.
 STATIONARY_THROTTLE_THRESH = 0.05
-STATIONARY_MIN_SAMPLES = 50
+STATIONARY_MIN_SAMPLES = 20
 
 # Check thresholds
 GYRO_STD_LIMIT_DPS = 2.0        # gz std at rest
@@ -119,6 +119,28 @@ def abs_max(values: list[float]) -> float:
     if not values:
         return 0.0
     return max(abs(v) for v in values)
+
+
+def wrap_180(deg: float) -> float:
+    """Wrap angle to [-180, 180] range."""
+    deg = deg % 360.0
+    if deg > 180.0:
+        deg -= 360.0
+    return deg
+
+
+def angular_std(values: list[float]) -> float:
+    """Compute std of angles handling ±180° wrapping via circular statistics."""
+    if len(values) < 2:
+        return 0.0
+    rads = [math.radians(v) for v in values]
+    s = sum(math.sin(r) for r in rads) / len(rads)
+    c = sum(math.cos(r) for r in rads) / len(rads)
+    r_len = math.sqrt(s**2 + c**2)
+    # Circular variance = 1 - R, convert to approximate std in degrees
+    if r_len >= 1.0:
+        return 0.0
+    return math.degrees(math.sqrt(-2.0 * math.log(r_len)))
 
 
 # ---------------------------------------------------------------------------
@@ -211,8 +233,8 @@ def check_madgwick_stable(rows: list[Row], mask: list[bool]) -> CheckResult:
     roll_static = filter_by_mask(col(rows, "roll_deg"), mask)
     if not pitch_static:
         return name, False, "NO STATIONARY DATA"
-    sp = std(pitch_static)
-    sr = std(roll_static)
+    sp = angular_std(pitch_static)
+    sr = angular_std(roll_static)
     passed = sp < MADGWICK_PITCH_STD_LIMIT and sr < MADGWICK_ROLL_STD_LIMIT
     return (
         name,
@@ -233,12 +255,19 @@ def check_no_false_oversteer(rows: list[Row], mask: list[bool]) -> CheckResult:
 
 
 def check_slip_at_rest(rows: list[Row]) -> CheckResult:
-    name = "Slip angle ~0 when speed < 0.1 m/s"
+    name = "Slip angle ~0 when nearly stopped"
     speed = col(rows, "speed_ms")
     slip = col(rows, "slip_deg")
-    slow_slip = [s for s, sp in zip(slip, speed) if sp < 0.1]
+    # Check slip at stationary segments only (throttle ≈ 0, speed ≈ 0).
+    # At very low speeds slip angle is numerically unstable (atan2(vy,vx) with both ≈ 0).
+    throttle = col(rows, "throttle")
+    slow_slip = [
+        wrap_180(s)
+        for s, sp, t in zip(slip, speed, throttle)
+        if sp < 0.1 and abs(t) < STATIONARY_THROTTLE_THRESH
+    ]
     if not slow_slip:
-        return name, False, "NO SLOW-SPEED DATA"
+        return name, False, "NO STATIONARY LOW-SPEED DATA"
     m = abs_max(slow_slip)
     passed = m < SLIP_AT_REST_LIMIT
     return name, passed, f"max(|slip_deg|)={m:.4f}°  (limit < {SLIP_AT_REST_LIMIT}°)"
@@ -450,6 +479,35 @@ def generate_plots(rows: list[Row], csv_path: str) -> None:
 
     fig.tight_layout()
     out = output_dir / "05_slip_analysis.png"
+    fig.savefig(out, dpi=150)
+    plt.close(fig)
+    print(f"  [plots] saved {out}")
+
+    # ------------------------------------------------------------------
+    # 6. Throttle → Speed correlation
+    # ------------------------------------------------------------------
+    fig, ax1 = plt.subplots(figsize=(12, 5))
+    fig.suptitle("Throttle → Speed Correlation", fontsize=14)
+
+    color_thr = "steelblue"
+    ax1.set_ylabel("throttle", color=color_thr)
+    ax1.plot(ts_s, col(rows, "throttle"), label="throttle", color=color_thr, linewidth=0.8)
+    ax1.tick_params(axis="y", labelcolor=color_thr)
+    ax1.set_xlabel("Time (s)")
+    ax1.grid(True, alpha=0.3)
+
+    ax2 = ax1.twinx()
+    color_spd = "darkorange"
+    ax2.set_ylabel("speed (m/s)", color=color_spd)
+    ax2.plot(ts_s, col(rows, "speed_ms"), label="speed_ms", color=color_spd, linewidth=1.0)
+    ax2.tick_params(axis="y", labelcolor=color_spd)
+
+    lines1, labels1 = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper right")
+
+    fig.tight_layout()
+    out = output_dir / "06_throttle_speed.png"
     fig.savefig(out, dpi=150)
     plt.close(fig)
     print(f"  [plots] saved {out}")
