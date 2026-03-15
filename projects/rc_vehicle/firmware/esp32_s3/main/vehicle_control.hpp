@@ -78,6 +78,14 @@ inline bool VehicleControlGetLogFrame(size_t idx, TelemetryLogFrame* out) {
   return rc_vehicle::VehicleControlUnified::Instance().GetLogFrame(idx, *out);
 }
 
+inline void VehicleControlSetKidsModeActive(bool active) {
+  rc_vehicle::VehicleControlUnified::Instance().SetKidsModeActive(active);
+}
+
+inline bool VehicleControlIsKidsModeActive(void) {
+  return rc_vehicle::VehicleControlUnified::Instance().IsKidsModeActive();
+}
+
 inline void VehicleControlClearLog() {
   rc_vehicle::VehicleControlUnified::Instance().ClearLog();
 }

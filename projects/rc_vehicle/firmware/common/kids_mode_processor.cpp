@@ -69,7 +69,7 @@ void KidsModeProcessor::Process(float& throttle, float& steering,
 }
 
 bool KidsModeProcessor::IsActive() const noexcept {
-  return cfg_ && cfg_->mode == DriveMode::Kids;
+  return cfg_ && current_mode_ == DriveMode::Kids;
 }
 
 void KidsModeProcessor::Reset() noexcept {

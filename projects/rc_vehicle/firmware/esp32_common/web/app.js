@@ -108,6 +108,11 @@ function connectWebSocket() {
                     wsSend({ type: 'get_log_info' });
                 } else if (data.type === 'self_test_result') {
                     showSelfTestResult(data);
+                } else if (data.type === 'toggle_kids_mode_ack') {
+                    // Синхронизировать UI с подтверждением от ESP32
+                    kidsMode = data.active;
+                    updateKidsModeUI();
+                    console.log('Kids Mode:', kidsMode ? 'ВКЛ' : 'ВЫКЛ');
                 }
             } catch (e) {
                 console.error('Failed to parse message:', e);
@@ -558,6 +563,9 @@ function updateModeButtons(mode) {
 
     // Kids mode settings visibility (independent of drive mode)
     updateKidsModeUI();
+    
+    // Отправить команду на ESP32 для переключения режима
+    wsSend({ type: 'set_stab_config', mode: mode });
 }
 
 function updateKidsModeUI() {
@@ -887,6 +895,7 @@ if (btnModeDirect) btnModeDirect.addEventListener('click', () => { currentMode =
 if (btnKidsToggle) btnKidsToggle.addEventListener('click', () => {
     kidsMode = !kidsMode;
     updateKidsModeUI();
+    wsSend({ type: 'toggle_kids_mode', active: kidsMode });
 });
 
 if (kidsThrottleSlider) {

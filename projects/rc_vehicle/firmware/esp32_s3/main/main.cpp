@@ -91,6 +91,8 @@ extern "C" void app_main(void) {
                               rc_vehicle::HandleSetKidsPreset);
   g_command_registry.Register("get_kids_presets",
                               rc_vehicle::HandleGetKidsPresets);
+  g_command_registry.Register("toggle_kids_mode",
+                              rc_vehicle::HandleToggleKidsMode);
   g_command_registry.Register("run_self_test", rc_vehicle::HandleRunSelfTest);
   ESP_LOGI(TAG, "Registered %zu command handlers",
            g_command_registry.GetHandlerCount());

@@ -107,8 +107,18 @@ void HandleGetStabConfig(cJSON* json, httpd_req_t* req) {
 }
 
 void HandleSetStabConfig(cJSON* json, httpd_req_t* req) {
+  // Получаем текущую конфигурацию
   StabilizationConfig cfg = VehicleControlGetStabilizationConfig();
+  
+  // Обновляем только переданные поля
+  cJSON* mode_item = cJSON_GetObjectItem(json, "mode");
+  if (mode_item && cJSON_IsNumber(mode_item)) {
+    cfg.mode = static_cast<DriveMode>(static_cast<int>(mode_item->valuedouble));
+  }
+  
+  // Остальные поля обновляем только если они есть в JSON
   StabilizationConfigFromJson(cfg, json);
+  
   bool ok = VehicleControlSetStabilizationConfig(cfg, true);
 
   // Get applied configuration (mode defaults may be applied)
@@ -257,6 +267,25 @@ void HandleSetKidsPreset(cJSON* json, httpd_req_t* req) {
 
   ESP_LOGI(TAG, "set_kids_preset preset=%d -> %s", preset_val,
            ok ? "OK" : "FAILED");
+}
+
+void HandleToggleKidsMode(cJSON* json, httpd_req_t* req) {
+  cJSON* active_item = cJSON_GetObjectItem(json, "active");
+  bool active = (active_item && cJSON_IsBool(active_item))
+                    ? cJSON_IsTrue(active_item)
+                    : false;
+
+  VehicleControlSetKidsModeActive(active);
+
+  cJSON* reply = cJSON_CreateObject();
+  if (reply) {
+    cJSON_AddStringToObject(reply, "type", "toggle_kids_mode_ack");
+    cJSON_AddBoolToObject(reply, "active", active);
+    WsSendJsonReply(req, reply);
+    cJSON_Delete(reply);
+  }
+
+  ESP_LOGI(TAG, "toggle_kids_mode active=%s -> OK", active ? "true" : "false");
 }
 
 void HandleGetKidsPresets(cJSON* json, httpd_req_t* req) {

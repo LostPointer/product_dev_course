@@ -103,6 +103,14 @@ void HandleSetKidsPreset(cJSON* json, httpd_req_t* req);
 void HandleGetKidsPresets(cJSON* json, httpd_req_t* req);
 
 /**
+ * @brief Toggle Kids Mode on/off
+ *
+ * Request: {"type":"toggle_kids_mode","active":true|false}
+ * Response: {"type":"toggle_kids_mode_ack","active":true|false}
+ */
+void HandleToggleKidsMode(cJSON* json, httpd_req_t* req);
+
+/**
  * @brief Run self-test (hardware diagnostics)
  *
  * Checks 10 subsystems: control loop, IMU, gyro, accel, Madgwick,

@@ -103,6 +103,22 @@ class VehicleControlUnified {
   }
 
   /**
+   * @brief Включить/выключить детский режим
+   * @param active true — включить, false — выключить
+   */
+  void SetKidsModeActive(bool active) {
+    kids_processor_.SetMode(active ? DriveMode::Kids : DriveMode::Normal);
+  }
+
+  /**
+   * @brief Проверить, активен ли детский режим
+   * @return true если детский режим активен
+   */
+  [[nodiscard]] bool IsKidsModeActive() const {
+    return kids_processor_.IsActive();
+  }
+
+  /**
    * @brief Получить текущую конфигурацию стабилизации
    * @return Конфигурация стабилизации
    */

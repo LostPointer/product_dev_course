@@ -43,6 +43,14 @@ class KidsModeProcessor {
   [[nodiscard]] bool IsActive() const noexcept;
 
   /**
+   * @brief Установить режим вождения
+   * @param mode Режим вождения
+   */
+  void SetMode(DriveMode mode) noexcept {
+    current_mode_ = mode;
+  }
+
+  /**
    * @brief Проверить, сработала ли защита anti-spin
    * @return true если anti-spin активен
    */
@@ -63,6 +71,7 @@ class KidsModeProcessor {
   float smoothed_throttle_{0.0f};
   float smoothed_steering_{0.0f};
   bool anti_spin_active_{false};
+  DriveMode current_mode_{DriveMode::Normal};
 };
 
 }  // namespace rc_vehicle
