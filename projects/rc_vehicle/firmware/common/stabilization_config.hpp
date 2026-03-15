@@ -63,7 +63,7 @@ struct PidConfig {
    */
   [[nodiscard]] bool IsValid() const noexcept {
     return kp >= 0.0f && ki >= 0.0f && kd >= 0.0f && max_integral >= 0.0f &&
-           max_correction > 0.0f;
+           max_correction >= 0.0f;
   }
 
   /**
