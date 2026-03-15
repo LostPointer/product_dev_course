@@ -32,12 +32,24 @@ static constexpr int MAX_SEND_FAILURES = 3;
 
 static void telem_sender_task(void* arg) {
   (void)arg;
+  uint32_t frames_sent = 0;
+  TickType_t last_diag = xTaskGetTickCount();
   for (;;) {
     uint8_t idx;
     if (xQueueReceive(s_telem_queue, &idx, portMAX_DELAY) != pdTRUE) {
       continue;
     }
     WebSocketSendTelem(s_telem_buf[idx]);
+    frames_sent++;
+
+    // Диагностический лог каждые 10 секунд
+    TickType_t now = xTaskGetTickCount();
+    if ((now - last_diag) >= pdMS_TO_TICKS(10000)) {
+      ESP_LOGI(TAG, "telem_sender: %lu frames sent in 10s, clients=%u",
+               (unsigned long)frames_sent, (unsigned)s_cached_client_count);
+      frames_sent = 0;
+      last_diag = now;
+    }
   }
 }
 static WebSocketCommandHandler s_cmd_handler = nullptr;
@@ -178,9 +190,15 @@ esp_err_t WebSocketSendTelem(const char* telem_json) {
   // loop). Заодно обновляем кеш для GetWebSocketClientCount().
   int client_fds[WEBSOCKET_MAX_CLIENTS];
   size_t client_count = WEBSOCKET_MAX_CLIENTS;
-  if (httpd_get_client_list(ws_server_handle, &client_count, client_fds) !=
-          ESP_OK ||
-      client_count == 0) {
+  esp_err_t list_err =
+      httpd_get_client_list(ws_server_handle, &client_count, client_fds);
+  if (list_err != ESP_OK) {
+    ESP_LOGW(TAG, "httpd_get_client_list failed: %s",
+             esp_err_to_name(list_err));
+    s_cached_client_count = 0;
+    return ESP_OK;
+  }
+  if (client_count == 0) {
     s_cached_client_count = 0;
     return ESP_OK;
   }
@@ -196,27 +214,76 @@ esp_err_t WebSocketSendTelem(const char* telem_json) {
   ws_pkt.payload = reinterpret_cast<uint8_t*>(const_cast<char*>(telem_json));
   ws_pkt.len = len;
 
-  // Счётчик последовательных ошибок по fd (static: живёт между вызовами)
-  static int fail_count[WEBSOCKET_MAX_CLIENTS] = {};
+  // Счётчик последовательных ошибок: ключ — fd (не позиция в списке).
+  // Позиция fd в массиве client_fds меняется между вызовами, поэтому
+  // индексирование по i было бы некорректным.
+  static int s_fd_fail_count[WEBSOCKET_MAX_CLIENTS] = {};
+  static int s_fd_keys[WEBSOCKET_MAX_CLIENTS] = {};
 
   for (size_t i = 0; i < client_count; i++) {
     int fd = client_fds[i];
     if (httpd_ws_get_fd_info(ws_server_handle, fd) !=
         HTTPD_WS_CLIENT_WEBSOCKET) {
+      ESP_LOGD(TAG, "fd %d is not a WS client, skipping", fd);
       continue;
     }
-    if (httpd_ws_send_data(ws_server_handle, fd, &ws_pkt) != ESP_OK) {
-      fail_count[i]++;
-      if (fail_count[i] >= MAX_SEND_FAILURES) {
+
+    // Найти или выделить слот для этого fd
+    int slot = -1;
+    for (int s = 0; s < WEBSOCKET_MAX_CLIENTS; s++) {
+      if (s_fd_keys[s] == fd) {
+        slot = s;
+        break;
+      }
+    }
+    if (slot == -1) {
+      // Новый fd — занять свободный слот
+      for (int s = 0; s < WEBSOCKET_MAX_CLIENTS; s++) {
+        if (s_fd_keys[s] == 0) {
+          s_fd_keys[s] = fd;
+          s_fd_fail_count[s] = 0;
+          slot = s;
+          break;
+        }
+      }
+    }
+
+    esp_err_t send_err =
+        httpd_ws_send_data(ws_server_handle, fd, &ws_pkt);
+    if (send_err != ESP_OK) {
+      if (slot >= 0) s_fd_fail_count[slot]++;
+      int fails = (slot >= 0) ? s_fd_fail_count[slot] : -1;
+      ESP_LOGW(TAG, "WS send failed fd=%d err=%s consecutive=%d",
+               fd, esp_err_to_name(send_err), fails);
+      if (slot >= 0 && s_fd_fail_count[slot] >= MAX_SEND_FAILURES) {
         ESP_LOGW(TAG, "Closing stale WS client fd %d after %d failures", fd,
-                 fail_count[i]);
+                 s_fd_fail_count[slot]);
         httpd_sess_trigger_close(ws_server_handle, fd);
-        fail_count[i] = 0;
+        s_fd_keys[slot] = 0;
+        s_fd_fail_count[slot] = 0;
       }
     } else {
-      fail_count[i] = 0;
+      if (slot >= 0) s_fd_fail_count[slot] = 0;
     }
   }
+
+  // Очистить слоты для fd, которых больше нет в списке клиентов
+  for (int s = 0; s < WEBSOCKET_MAX_CLIENTS; s++) {
+    if (s_fd_keys[s] == 0) continue;
+    bool found = false;
+    for (size_t i = 0; i < client_count; i++) {
+      if (client_fds[i] == s_fd_keys[s]) {
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      ESP_LOGD(TAG, "fd %d left, clearing fail slot", s_fd_keys[s]);
+      s_fd_keys[s] = 0;
+      s_fd_fail_count[s] = 0;
+    }
+  }
+
   return ESP_OK;
 }
 
