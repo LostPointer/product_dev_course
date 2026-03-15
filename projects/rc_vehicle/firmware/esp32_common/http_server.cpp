@@ -1,7 +1,7 @@
 #include "http_server.hpp"
 
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "cJSON.h"
@@ -715,10 +715,13 @@ esp_err_t HttpServerInit(void) {
   config.server_port = HTTP_SERVER_PORT;
   config.max_uri_handlers = 16;
   config.stack_size = 8192;
-  config.max_open_sockets = 7;   // LWIP_MAX_SOCKETS лимит (3 занято httpd внутри)
-  config.recv_wait_timeout = 15;  // Секунды — мобильный клиент может отвечать медленнее
+  config.max_open_sockets =
+      7;  // LWIP_MAX_SOCKETS лимит (3 занято httpd внутри)
+  config.recv_wait_timeout =
+      15;  // Секунды — мобильный клиент может отвечать медленнее
   config.send_wait_timeout = 15;
-  config.lru_purge_enable = true;  // Автозакрытие старых соединений при нехватке
+  config.lru_purge_enable =
+      true;  // Автозакрытие старых соединений при нехватке
   config.uri_match_fn = httpd_uri_match_wildcard;
 
   ESP_LOGI(TAG, "Starting HTTP server on port %d", config.server_port);
