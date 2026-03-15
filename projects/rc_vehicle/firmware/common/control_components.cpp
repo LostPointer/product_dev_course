@@ -71,6 +71,13 @@ void ImuHandler::Update(uint32_t now_ms, [[maybe_unused]] uint32_t dt_ms) {
   // Подача семпла в калибровку (если идёт сбор)
   calib_.FeedSample(data_);
 
+  // Сохранить сырые данные акселерометра ДО коррекции bias.
+  // Madgwick-фильтр должен видеть истинное направление гравитации в СК датчика,
+  // совпадающее с gravity_vec из калибровки. Accel bias включает компоненты
+  // наклона (ax,ay mean), из-за чего bias-corrected данные = [0,0,±1]
+  // не соответствуют реальному gravity_vec при наклонном монтаже.
+  const float raw_ax = data_.ax, raw_ay = data_.ay, raw_az = data_.az;
+
   // Применить компенсацию bias (если калибровка валидна)
   calib_.Apply(data_);
 
@@ -90,14 +97,13 @@ void ImuHandler::Update(uint32_t now_ms, [[maybe_unused]] uint32_t dt_ms) {
     veh_frame_set_ = false;
   }
 
-  // Обновить фильтр Madgwick
-  // При первом вызове prev_read_ms == 0 (может совпасть с now_ms в тестах),
-  // поэтому используем отдельный флаг вместо проверки на ноль.
+  // Обновить фильтр Madgwick: сырой акселерометр + калиброванный гироскоп.
+  // Gyro bias уже вычтен в Apply(), но accel нужен сырой (см. выше).
   const float dt_sec = first_read_
                            ? (read_interval_ms_ / 1000.0f)
                            : (static_cast<float>(now_ms - prev_read_ms) / 1000.0f);
   first_read_ = false;
-  filter_.Update(data_, dt_sec);
+  filter_.Update(raw_ax, raw_ay, raw_az, data_.gx, data_.gy, data_.gz, dt_sec);
 }
 
 void ImuHandler::SetLpfCutoff(float cutoff_hz) {
