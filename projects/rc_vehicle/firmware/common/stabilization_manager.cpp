@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <mutex>
 
+#include "esp_log.h"
 #include "log_format.hpp"
 #include "slew_rate.hpp"
 
@@ -33,6 +34,18 @@ bool StabilizationManager::SetConfig(const StabilizationConfig& config,
 
   if (!validated_config.IsValid()) {
     platform_.Log(LogLevel::Error, "Invalid stabilization config");
+    // Detailed validation logging
+    ESP_LOGE("stab_mgr", "magic=0x%08X (expected 0x%08X)", validated_config.magic, 0x53544232);
+    ESP_LOGE("stab_mgr", "filter.valid=%d yaw.valid=%d slip.valid=%d", 
+             validated_config.filter.IsValid(), 
+             validated_config.yaw_rate.IsValid(),
+             validated_config.slip_angle.IsValid());
+    ESP_LOGE("stab_mgr", "yaw.kp=%.3f ki=%.3f kd=%.4f max_corr=%.3f max_int=%.3f",
+             validated_config.yaw_rate.pid.kp,
+             validated_config.yaw_rate.pid.ki,
+             validated_config.yaw_rate.pid.kd,
+             validated_config.yaw_rate.pid.max_correction,
+             validated_config.yaw_rate.pid.max_integral);
     return false;
   }
 
