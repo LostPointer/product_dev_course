@@ -119,7 +119,12 @@ void VehicleControlUnified::ControlTaskLoop() {
 
     const bool rc_active_now = rc_handler_ && rc_handler_->IsActive();
     if (calib_mgr_->IsAutoForwardActive() && !rc_active_now) {
-      commanded_throttle = calib_mgr_->GetAutoForwardThrottle();
+      const float dt_sec = static_cast<float>(dt_ms) * 0.001f;
+      float fwd_accel = 0.0f;
+      if (imu_handler_ && imu_handler_->IsEnabled()) {
+        fwd_accel = imu_calib_.GetForwardAccel(imu_handler_->GetData());
+      }
+      commanded_throttle = calib_mgr_->UpdateAutoForward(fwd_accel, dt_sec);
       commanded_steering = 0.0f;
     }
 

@@ -27,18 +27,25 @@ void HandleCalibrateImu(cJSON* json, httpd_req_t* req) {
   if (reply) {
     cJSON_AddStringToObject(reply, "type", "calibrate_imu_ack");
     if (is_auto_forward) {
+      // Поддержка target_accel (новый) и throttle (обратная совместимость)
+      cJSON* accel_item = cJSON_GetObjectItem(json, "target_accel");
       cJSON* thr_item = cJSON_GetObjectItem(json, "throttle");
-      float throttle = (thr_item && cJSON_IsNumber(thr_item))
-                           ? (float)thr_item->valuedouble
-                           : 0.25f;
-      bool ok = VehicleControlStartAutoForwardCalibration(throttle);
+      float target_accel = 0.1f;  // default 0.1g
+      if (accel_item && cJSON_IsNumber(accel_item)) {
+        target_accel = (float)accel_item->valuedouble;
+      } else if (thr_item && cJSON_IsNumber(thr_item)) {
+        // Обратная совместимость: throttle 0.25 ≈ 0.1g
+        target_accel = (float)thr_item->valuedouble * 0.4f;
+      }
+      bool ok = VehicleControlStartAutoForwardCalibration(target_accel);
       cJSON_AddStringToObject(reply, "status", ok ? "collecting" : "failed");
       cJSON_AddNumberToObject(reply, "stage", 2);
       cJSON_AddBoolToObject(reply, "ok", ok);
       cJSON_AddBoolToObject(reply, "auto_drive", ok);
-      cJSON_AddNumberToObject(reply, "throttle", throttle);
-      ESP_LOGI(TAG, "calibrate_imu mode=auto_forward throttle=%.2f -> %s",
-               throttle, ok ? "started" : "failed (need stage 1 full)");
+      cJSON_AddNumberToObject(reply, "target_accel", target_accel);
+      ESP_LOGI(TAG,
+               "calibrate_imu mode=auto_forward target_accel=%.3fg -> %s",
+               target_accel, ok ? "started" : "failed (need stage 1 full)");
     } else if (is_forward) {
       bool ok = VehicleControlStartForwardCalibration();
       cJSON_AddStringToObject(reply, "status", ok ? "collecting" : "failed");

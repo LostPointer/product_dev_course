@@ -5,6 +5,7 @@
 
 #include "imu_calibration.hpp"
 #include "madgwick_filter.hpp"
+#include "pid_controller.hpp"
 #include "vehicle_control_platform.hpp"
 
 namespace rc_vehicle {
@@ -53,14 +54,17 @@ class CalibrationManager {
   /**
    * @brief Запуск этапа 2 с автоматическим движением вперёд.
    *
-   * Прошивка сама подаёт газ `throttle` при прямых колёсах до завершения
-   * сбора данных. RC-пульт перекрывает авто-движение (безопасность).
+   * Прошивка управляет газом через PID-регулятор по продольному ускорению
+   * (forward_accel). Это компенсирует разный заряд батареи — throttle
+   * подбирается автоматически для поддержания целевого ускорения.
+   *
+   * RC-пульт перекрывает авто-движение (безопасность).
    * При срабатывании failsafe авто-движение прерывается.
    *
-   * @param throttle Газ вперёд [0.1..0.5], по умолчанию 0.25
+   * @param target_accel_g Целевое ускорение в g [0.02..0.3], по умолчанию 0.1
    * @return true при успешном запуске
    */
-  bool StartAutoForwardCalibration(float throttle = 0.25f);
+  bool StartAutoForwardCalibration(float target_accel_g = 0.1f);
 
   /** Прервать авто-движение (вызывается из failsafe). */
   void StopAutoForward();
@@ -70,10 +74,17 @@ class CalibrationManager {
     return auto_forward_active_;
   }
 
-  /** Команда газа для авто-движения. */
-  [[nodiscard]] float GetAutoForwardThrottle() const {
-    return auto_forward_throttle_;
-  }
+  /**
+   * @brief Шаг PID-регулятора авто-движения.
+   *
+   * Вызывается из control loop каждый тик. Возвращает throttle,
+   * подобранный PID для поддержания целевого ускорения.
+   *
+   * @param current_accel_g Текущее продольное ускорение (g)
+   * @param dt_sec Шаг времени (с)
+   * @return throttle [0..0.5]
+   */
+  float UpdateAutoForward(float current_accel_g, float dt_sec);
 
   /**
    * @brief Задать направление «вперёд» единичным вектором в СК датчика
@@ -129,9 +140,10 @@ class CalibrationManager {
   // Предыдущий статус калибровки (для логирования только при переходах)
   CalibStatus prev_calib_status_{CalibStatus::Idle};
 
-  // Авто-движение вперёд для Forward-калибровки
+  // Авто-движение вперёд для Forward-калибровки (PID по ускорению)
   bool auto_forward_active_{false};
-  float auto_forward_throttle_{0.25f};
+  float target_accel_g_{0.1f};
+  PidController accel_pid_;
 };
 
 }  // namespace rc_vehicle

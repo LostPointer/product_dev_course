@@ -24,6 +24,9 @@ const telemCounterEl = document.getElementById('telem-counter');
 let telemRxCount = 0;
 const btnCalibAutoForward = document.getElementById('btn-calib-auto-forward');
 const btnCalibForward = document.getElementById('btn-calib-forward');
+const calibFwdAccelSlider = document.getElementById('calib-fwd-accel');
+const calibFwdAccelValueEl = document.getElementById('calib-fwd-accel-value');
+// Обратная совместимость: если старый HTML с throttle-слайдером
 const calibFwdThrottleSlider = document.getElementById('calib-fwd-throttle');
 const calibFwdThrottleValueEl = document.getElementById('calib-fwd-throttle-value');
 
@@ -765,9 +768,19 @@ if (btnCalibForward) {
 }
 if (btnCalibAutoForward) {
     btnCalibAutoForward.addEventListener('click', () => {
-        const pct = calibFwdThrottleSlider ? parseInt(calibFwdThrottleSlider.value) : 25;
-        const throttle = pct / 100;
-        wsSend({ type: 'calibrate_imu', mode: 'auto_forward', throttle });
+        let target_accel = 0.1;
+        if (calibFwdAccelSlider) {
+            target_accel = parseInt(calibFwdAccelSlider.value) / 1000;  // milli-g → g
+        } else if (calibFwdThrottleSlider) {
+            // Обратная совместимость
+            target_accel = parseInt(calibFwdThrottleSlider.value) / 100 * 0.4;
+        }
+        wsSend({ type: 'calibrate_imu', mode: 'auto_forward', target_accel });
+    });
+}
+if (calibFwdAccelSlider) {
+    calibFwdAccelSlider.addEventListener('input', (e) => {
+        if (calibFwdAccelValueEl) calibFwdAccelValueEl.textContent = e.target.value;
     });
 }
 if (calibFwdThrottleSlider) {

@@ -1,5 +1,8 @@
 #include "calibration_manager.hpp"
 
+#include <algorithm>
+#include <cstdio>
+
 #include "vehicle_ekf.hpp"
 
 namespace rc_vehicle {
@@ -21,22 +24,47 @@ bool CalibrationManager::StartForwardCalibration() {
   return imu_calib_.StartForwardCalibration(2000);
 }
 
-bool CalibrationManager::StartAutoForwardCalibration(float throttle) {
+bool CalibrationManager::StartAutoForwardCalibration(float target_accel_g) {
   if (!imu_calib_.StartForwardCalibration(2000)) {
     platform_.Log(LogLevel::Warning,
                   "Auto-forward calib failed to start (need stage 1 full)");
     return false;
   }
-  auto_forward_throttle_ =
-      (throttle < 0.1f) ? 0.1f : (throttle > 0.5f ? 0.5f : throttle);
+  target_accel_g_ = std::clamp(target_accel_g, 0.02f, 0.3f);
+
+  // PID gains для управления throttle по ускорению (g → throttle [0..0.5])
+  PidController::Gains gains;
+  gains.kp = 1.0f;           // 0.1g ошибки → +0.1 throttle
+  gains.ki = 0.5f;           // интеграл компенсирует постоянную ошибку (батарея)
+  gains.kd = 0.05f;          // демпфирование
+  gains.max_integral = 0.4f; // anti-windup
+  gains.max_output = 0.5f;   // макс throttle
+  accel_pid_.SetGains(gains);
+  accel_pid_.Reset();
+
   auto_forward_active_ = true;
-  platform_.Log(LogLevel::Info, "Auto-forward calibration started");
+  char msg[80];
+  snprintf(msg, sizeof(msg),
+           "Auto-forward calib started (PID, target=%.3f g)", target_accel_g_);
+  platform_.Log(LogLevel::Info, msg);
   return true;
+}
+
+float CalibrationManager::UpdateAutoForward(float current_accel_g,
+                                            float dt_sec) {
+  if (!auto_forward_active_ || dt_sec <= 0.0f) {
+    return 0.0f;
+  }
+  float error = target_accel_g_ - current_accel_g;
+  float throttle = accel_pid_.Step(error, dt_sec);
+  // Только положительный throttle (едем вперёд)
+  return std::clamp(throttle, 0.0f, 0.5f);
 }
 
 void CalibrationManager::StopAutoForward() {
   if (auto_forward_active_) {
     auto_forward_active_ = false;
+    accel_pid_.Reset();
     platform_.Log(LogLevel::Info, "Auto-forward calibration stopped");
   }
 }

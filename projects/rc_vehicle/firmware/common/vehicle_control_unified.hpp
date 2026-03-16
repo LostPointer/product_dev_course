@@ -72,11 +72,11 @@ class VehicleControlUnified {
 
   /**
    * @brief Запуск этапа 2 с автоматическим движением вперёд.
-   * @param throttle Газ вперёд [0.1..0.5], по умолчанию 0.25
+   * @param target_accel_g Целевое ускорение в g [0.02..0.3], по умолчанию 0.1
    * @return true при успешном запуске
    */
-  bool StartAutoForwardCalibration(float throttle = 0.25f) {
-    return calib_mgr_->StartAutoForwardCalibration(throttle);
+  bool StartAutoForwardCalibration(float target_accel_g = 0.1f) {
+    return calib_mgr_->StartAutoForwardCalibration(target_accel_g);
   }
 
   /**
