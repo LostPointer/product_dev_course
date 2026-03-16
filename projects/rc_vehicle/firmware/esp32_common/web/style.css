@@ -370,6 +370,27 @@ body {
     color: #000 !important;
 }
 
+/* ── Trim controls ── */
+.trim-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 0;
+}
+.trim-row label { color: var(--txt2); font-size: 0.82rem; min-width: 40px; }
+.trim-val {
+    font-variant-numeric: tabular-nums; font-weight: 700;
+    color: var(--accent); min-width: 44px; text-align: center; font-size: 0.9rem;
+}
+.btn-trim {
+    width: 36px; height: 36px;
+    border: 1px solid var(--bord); border-radius: 8px;
+    background: var(--card2); color: var(--txt);
+    font-size: 1.1rem; font-weight: 700;
+    cursor: pointer; transition: background 0.15s;
+    display: flex; align-items: center; justify-content: center;
+}
+.btn-trim:hover { background: var(--bord); }
+.btn-trim:active { background: var(--accent); color: #fff; }
+
 /* ── Responsive ── */
 @media (min-width: 768px) {
     .panels { max-width: 600px; }

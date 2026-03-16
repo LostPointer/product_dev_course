@@ -133,6 +133,24 @@
                     </div>
                 </div>
 
+                <fieldset class="param-set">
+                    <legend>Trim (нейтраль)</legend>
+                    <div class="trim-row">
+                        <label>Руль</label>
+                        <button class="btn-trim" data-target="steering-trim" data-step="-0.01">−</button>
+                        <span id="steering-trim-value" class="trim-val">0.00</span>
+                        <button class="btn-trim" data-target="steering-trim" data-step="0.01">+</button>
+                        <input type="hidden" id="steering-trim" value="0">
+                    </div>
+                    <div class="trim-row">
+                        <label>Газ</label>
+                        <button class="btn-trim" data-target="throttle-trim" data-step="-0.01">−</button>
+                        <span id="throttle-trim-value" class="trim-val">0.00</span>
+                        <button class="btn-trim" data-target="throttle-trim" data-step="0.01">+</button>
+                        <input type="hidden" id="throttle-trim" value="0">
+                    </div>
+                </fieldset>
+
                 <div class="btn-row">
                     <button id="btn-load-stab" class="btn btn-outline">Загрузить</button>
                     <button id="btn-save-stab" class="btn btn-accent">Сохранить</button>

@@ -446,6 +446,10 @@ function applyStabConfig(cfg) {
     set('ow-rate-thresh', cfg.oversteer?.rate_thresh_deg_s ?? '');
     set('ow-throttle-red', cfg.oversteer?.throttle_reduction ?? '');
 
+    // Trim
+    setTrimValue('steering-trim', cfg.steering_trim ?? 0);
+    setTrimValue('throttle-trim', cfg.throttle_trim ?? 0);
+
     const km = cfg.kids_mode;
     if (km) {
         const tPct = Math.round((km.throttle_limit ?? 0.5) * 100);
@@ -529,6 +533,8 @@ function saveStabConfig() {
             reverse_limit: kidsThrottleLimit,
             steering_limit: kidsSteeringLimit,
         },
+        steering_trim: getF('steering-trim'),
+        throttle_trim: getF('throttle-trim'),
     });
 }
 
@@ -610,6 +616,29 @@ function showSelfTestResult(data) {
         }
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// Trim controls
+// ═══════════════════════════════════════════════════════════════════
+
+function setTrimValue(id, val) {
+    val = Math.max(-0.1, Math.min(0.1, parseFloat(val) || 0));
+    const hidden = $(id);
+    const display = $(id + '-value');
+    if (hidden) hidden.value = val;
+    if (display) display.textContent = val.toFixed(2);
+}
+
+document.querySelectorAll('.btn-trim').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const targetId = btn.dataset.target;
+        const step = parseFloat(btn.dataset.step);
+        const hidden = $(targetId);
+        if (!hidden) return;
+        const cur = parseFloat(hidden.value) || 0;
+        setTrimValue(targetId, cur + step);
+    });
+});
 
 // ═══════════════════════════════════════════════════════════════════
 // Event listeners
