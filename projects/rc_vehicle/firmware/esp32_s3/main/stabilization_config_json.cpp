@@ -121,6 +121,10 @@ cJSON* StabilizationConfigToJson(const StabilizationConfig& cfg) {
                             cfg.kids_mode.accel_max_reduction);
   }
 
+  // Trim
+  cJSON_AddNumberToObject(obj, "steering_trim", cfg.steering_trim);
+  cJSON_AddNumberToObject(obj, "throttle_trim", cfg.throttle_trim);
+
   return obj;
 }
 
@@ -238,4 +242,8 @@ void StabilizationConfigFromJson(StabilizationConfig& cfg, const cJSON* json) {
     get_float(kids_mode, "accel_max_reduction",
               cfg.kids_mode.accel_max_reduction);
   }
+
+  // Trim
+  get_float(json, "steering_trim", cfg.steering_trim);
+  get_float(json, "throttle_trim", cfg.throttle_trim);
 }

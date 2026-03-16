@@ -431,6 +431,12 @@ struct StabilizationConfig {
   /** Конфигурация детского режима */
   KidsModeConfig kids_mode;
 
+  /** Трим руля [-0.1..0.1] — смещение нейтрали (компенсация механического сдвига) */
+  float steering_trim{0.0f};
+
+  /** Трим газа [-0.1..0.1] — смещение нейтрали */
+  float throttle_trim{0.0f};
+
   /** Версия структуры для NVS-миграции */
   uint8_t version{3};
 

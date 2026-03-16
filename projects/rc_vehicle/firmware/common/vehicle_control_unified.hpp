@@ -233,7 +233,9 @@ class VehicleControlUnified {
   void UpdatePwmWithSlewRate(uint32_t now_ms, float commanded_throttle,
                              float commanded_steering, float& applied_throttle,
                              float& applied_steering,
-                             uint32_t& last_pwm_update);
+                             uint32_t& last_pwm_update,
+                             float throttle_trim = 0.0f,
+                             float steering_trim = 0.0f);
 
   /**
    * @brief Вывод диагностической информации

@@ -208,12 +208,17 @@ void VehicleControlUnified::ControlTaskLoop() {
     // Обновление PWM с slew rate
     // ─────────────────────────────────────────────────────────────────────
 
+    // Применить trim (компенсация механического смещения нейтрали)
+    const float steer_trim = stab_mgr_ ? stab_mgr_->GetConfig().steering_trim : 0.0f;
+    const float thr_trim = stab_mgr_ ? stab_mgr_->GetConfig().throttle_trim : 0.0f;
+
     if (traits.use_slew_rate) {
       UpdatePwmWithSlewRate(now, commanded_throttle, commanded_steering,
-                            applied_throttle, applied_steering, last_pwm_update);
+                            applied_throttle, applied_steering, last_pwm_update,
+                            thr_trim, steer_trim);
     } else {
-      applied_throttle = commanded_throttle;
-      applied_steering = commanded_steering;
+      applied_throttle = commanded_throttle + thr_trim;
+      applied_steering = commanded_steering + steer_trim;
       platform_->SetPwm(applied_throttle, applied_steering);
     }
 
@@ -485,7 +490,9 @@ void VehicleControlUnified::UpdatePwmWithSlewRate(uint32_t now_ms,
                                                   float commanded_steering,
                                                   float& applied_throttle,
                                                   float& applied_steering,
-                                                  uint32_t& last_pwm_update) {
+                                                  uint32_t& last_pwm_update,
+                                                  float throttle_trim,
+                                                  float steering_trim) {
   if (now_ms - last_pwm_update >= config::PwmConfig::kUpdateIntervalMs) {
     const uint32_t pwm_dt_ms = now_ms - last_pwm_update;
     last_pwm_update = now_ms;
@@ -497,7 +504,8 @@ void VehicleControlUnified::UpdatePwmWithSlewRate(uint32_t now_ms,
         ApplySlewRate(commanded_steering, applied_steering,
                       config::SlewRateConfig::kSteeringMaxPerSec, pwm_dt_ms);
 
-    platform_->SetPwm(applied_throttle, applied_steering);
+    platform_->SetPwm(applied_throttle + throttle_trim,
+                      applied_steering + steering_trim);
   }
 }
 
