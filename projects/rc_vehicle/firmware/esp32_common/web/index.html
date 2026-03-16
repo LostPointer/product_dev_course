@@ -3,306 +3,306 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>RC Vehicle Control</title>
     <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
-    <div class="container">
-        <h1>🚗 RC Vehicle Control</h1>
-
-        <div class="status-panel">
-            <div class="status-item">
-                <span class="status-label">WebSocket:</span>
-                <span id="ws-status" class="status-value disconnected">Отключено</span>
-            </div>
-            <div class="status-item">
-                <span class="status-label">Controller:</span>
-                <span id="mcu-status" class="status-value unknown">—</span>
-            </div>
+    <header class="top-bar">
+        <div class="top-bar-title">RC Vehicle</div>
+        <div class="top-bar-status">
+            <span id="ws-status" class="badge badge-off">WS</span>
+            <span id="mcu-status" class="badge badge-unknown">MCU</span>
         </div>
+    </header>
 
-        <div class="control-panel">
-            <h2>Self-Test</h2>
-            <div class="button-group">
-                <button id="btn-self-test">Запустить Self-Test</button>
-            </div>
-            <div id="self-test-result" style="display:none">
-                <div class="status-item">
-                    <span class="status-label">Результат:</span>
-                    <span id="self-test-overall" class="status-value unknown">—</span>
+    <main class="panels">
+
+        <!-- Управление -->
+        <section class="panel panel-control open" id="panel-control">
+            <button class="panel-header" aria-expanded="true">
+                <span class="panel-icon">&#9670;</span>
+                <span>Управление</span>
+            </button>
+            <div class="panel-body">
+                <div id="kids-mode-banner" class="banner banner-warn" style="display:none">
+                    Детский режим активен
                 </div>
-                <table id="self-test-table" class="self-test-table">
-                    <thead><tr><th>Проверка</th><th>Статус</th><th>Значение</th></tr></thead>
-                    <tbody></tbody>
-                </table>
-            </div>
-        </div>
-
-        <div class="control-panel">
-            <h2>Wi‑Fi клиент (STA)</h2>
-
-            <div class="status-panel">
-                <div class="status-item">
-                    <span class="status-label">Статус:</span>
-                    <span id="sta-status" class="status-value unknown">—</span>
+                <div id="direct-law-banner" class="banner banner-danger" style="display:none">
+                    DIRECT LAW — стабилизация отключена
                 </div>
-                <div class="status-item">
-                    <span class="status-label">Сеть:</span>
-                    <span id="sta-ssid" class="status-value unknown">—</span>
+
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Газ / Тормоз</span>
+                        <span id="throttle-value" class="slider-val">0.00</span>
+                    </div>
+                    <input type="range" id="throttle" class="rc-slider" min="-1" max="1" step="0.01" value="0">
                 </div>
-                <div class="status-item">
-                    <span class="status-label">IP:</span>
-                    <span id="sta-ip" class="status-value unknown">—</span>
+
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Руль</span>
+                        <span id="steering-value" class="slider-val">0.00</span>
+                    </div>
+                    <input type="range" id="steering" class="rc-slider" min="-1" max="1" step="0.01" value="0">
                 </div>
-            </div>
 
-            <div class="button-group">
-                <button id="btn-sta-scan">Сканировать сети</button>
-            </div>
-
-            <div class="control-group">
-                <label for="sta-scan-list">Найденные сети:</label>
-                <select id="sta-scan-list">
-                    <option value="">— нажмите «Сканировать сети» —</option>
-                </select>
-            </div>
-
-            <div class="control-group">
-                <label for="sta-ssid-input">SSID:</label>
-                <input type="text" id="sta-ssid-input" placeholder="Имя сети">
-            </div>
-
-            <div class="control-group">
-                <label for="sta-pass-input">Пароль:</label>
-                <input type="password" id="sta-pass-input" placeholder="Пароль (если есть)">
-            </div>
-
-            <div class="button-group">
-                <button id="btn-sta-connect">Подключить</button>
-                <button id="btn-sta-disconnect">Отключить</button>
-                <button id="btn-sta-forget">Забыть</button>
-            </div>
-        </div>
-
-        <div class="control-panel" id="control-panel">
-            <h2>Управление</h2>
-            <div id="kids-mode-banner" class="kids-mode-banner" style="display:none">
-                Детский режим активен
-            </div>
-            <div id="direct-law-banner" class="direct-law-banner" style="display:none">
-                ⚠ DIRECT LAW — Стабилизация отключена, управление прямое
-            </div>
-
-            <div class="control-group">
-                <label for="throttle">Газ/Тормоз:</label>
-                <input type="range" id="throttle" min="-1" max="1" step="0.01" value="0">
-                <span id="throttle-value">0.00</span>
-            </div>
-
-            <div class="control-group">
-                <label for="steering">Руль:</label>
-                <input type="range" id="steering" min="-1" max="1" step="0.01" value="0">
-                <span id="steering-value">0.00</span>
-            </div>
-
-            <div class="button-group">
-                <button id="btn-center">Центр</button>
-                <button id="btn-stop">Стоп</button>
-            </div>
-        </div>
-
-        <div class="control-panel">
-            <h2>Калибровка IMU</h2>
-
-            <div class="status-panel">
-                <div class="status-item">
-                    <span class="status-label">Статус:</span>
-                    <span id="calib-status" class="status-value unknown">—</span>
-                </div>
-                <div class="status-item">
-                    <span class="status-label">Данные:</span>
-                    <span id="calib-valid" class="status-value unknown">—</span>
+                <div class="btn-row">
+                    <button id="btn-center" class="btn btn-ok">Центр</button>
+                    <button id="btn-stop" class="btn btn-danger">Стоп</button>
                 </div>
             </div>
+        </section>
 
-            <div id="calib-bias" class="calib-bias" style="display:none">
-                <div class="telem-item"><span class="telem-label">Gyro bias X:</span><span id="calib-gx" class="telem-value">—</span></div>
-                <div class="telem-item"><span class="telem-label">Gyro bias Y:</span><span id="calib-gy" class="telem-value">—</span></div>
-                <div class="telem-item"><span class="telem-label">Gyro bias Z:</span><span id="calib-gz" class="telem-value">—</span></div>
-                <div class="telem-item"><span class="telem-label">Accel bias X:</span><span id="calib-ax" class="telem-value">—</span></div>
-                <div class="telem-item"><span class="telem-label">Accel bias Y:</span><span id="calib-ay" class="telem-value">—</span></div>
-                <div class="telem-item"><span class="telem-label">Accel bias Z:</span><span id="calib-az" class="telem-value">—</span></div>
-            </div>
+        <!-- Стабилизация -->
+        <section class="panel" id="panel-stab">
+            <button class="panel-header" aria-expanded="false">
+                <span class="panel-icon">&#9654;</span>
+                <span>Стабилизация</span>
+            </button>
+            <div class="panel-body" hidden>
+                <div class="mode-row">
+                    <button id="btn-mode-normal" class="btn-pill active">Normal</button>
+                    <button id="btn-mode-sport" class="btn-pill">Sport</button>
+                    <button id="btn-mode-drift" class="btn-pill">Drift</button>
+                    <button id="btn-mode-kids" class="btn-pill pill-kids">Kids</button>
+                    <button id="btn-mode-direct" class="btn-pill pill-danger">Direct</button>
+                </div>
 
-            <p class="calib-hint">Поставьте машину на ровную поверхность и не трогайте во время калибровки.</p>
+                <div class="field-row">
+                    <button id="btn-kids-toggle" class="btn btn-sm btn-muted">Детский режим: ВЫКЛ</button>
+                </div>
 
-            <div class="button-group">
-                <button id="btn-calib-gyro" class="btn-calib">Гироскоп</button>
-                <button id="btn-calib-full" class="btn-calib">Полная</button>
-            </div>
+                <div id="kids-mode-settings" class="sub-card sub-card-warn" style="display:none">
+                    <div class="mini-slider-row">
+                        <label for="kids-throttle-limit">Макс. газ %</label>
+                        <input type="range" id="kids-throttle-limit" min="10" max="100" step="5" value="50" class="mini-slider">
+                        <span id="kids-throttle-value" class="mini-val">50</span>
+                    </div>
+                    <div class="mini-slider-row">
+                        <label for="kids-steering-limit">Макс. руль %</label>
+                        <input type="range" id="kids-steering-limit" min="10" max="100" step="5" value="70" class="mini-slider">
+                        <span id="kids-steering-value" class="mini-val">70</span>
+                    </div>
+                </div>
 
-            <p class="calib-hint">После полной калибровки: поставьте машину на прямую, нажмите кнопку — машина проедет вперёд и запомнит направление.</p>
+                <div class="field-row">
+                    <label class="chk"><input type="checkbox" id="stab-enabled"> Стабилизация включена</label>
+                </div>
 
-            <div class="control-group">
-                <label for="calib-fwd-accel">Целевое ускорение (mg):</label>
-                <input type="range" id="calib-fwd-accel" min="20" max="300" step="10" value="100">
-                <span id="calib-fwd-accel-value">100</span>
-            </div>
+                <fieldset class="param-set">
+                    <legend>Yaw PID</legend>
+                    <div class="param-grid">
+                        <label>Kp <input type="text" id="stab-kp" size="6"></label>
+                        <label>Ki <input type="text" id="stab-ki" size="6"></label>
+                        <label>Kd <input type="text" id="stab-kd" size="6"></label>
+                        <label>MaxCorr <input type="text" id="stab-max-corr" size="6"></label>
+                    </div>
+                </fieldset>
 
-            <div class="button-group">
-                <button id="btn-calib-auto-forward" class="btn-calib">Авто-калибровка направления</button>
-                <button id="btn-calib-forward" class="btn-calib">Вперёд (вручную)</button>
-            </div>
-        </div>
+                <div class="field-row">
+                    <label class="chk"><input type="checkbox" id="adapt-pid-enabled"> Адаптивный ПИД</label>
+                    <div class="inline-param">
+                        <label>SpeedRef (m/s) <input type="text" id="adapt-speed-ref" size="6"></label>
+                    </div>
+                </div>
 
-        <div class="control-panel">
-            <h2>Стабилизация</h2>
+                <div class="field-row">
+                    <label class="chk"><input type="checkbox" id="pitch-comp-enabled"> Pitch compensation</label>
+                    <div class="inline-param">
+                        <label>Gain <input type="text" id="pitch-gain" size="6"></label>
+                        <label>MaxCorr <input type="text" id="pitch-max-corr" size="6"></label>
+                    </div>
+                </div>
 
-            <div class="control-group">
-                <label>Режим:</label>
-                <div class="button-group">
-                    <button id="btn-mode-normal" class="btn-mode btn-mode-active">Normal</button>
-                    <button id="btn-mode-sport" class="btn-mode">Sport</button>
-                    <button id="btn-mode-drift" class="btn-mode">Drift</button>
-                    <button id="btn-mode-kids" class="btn-mode btn-mode-kids">Kids</button>
-                    <button id="btn-mode-direct" class="btn-mode btn-mode-direct">Direct Law</button>
+                <div class="field-row">
+                    <label class="chk"><input type="checkbox" id="adaptive-beta-enabled"> Адаптивный Madgwick</label>
+                    <div class="inline-param">
+                        <label>Порог |a| (g) <input type="text" id="adaptive-accel-thresh" size="6"></label>
+                    </div>
+                </div>
+
+                <div class="field-row">
+                    <label class="chk"><input type="checkbox" id="oversteer-enabled"> Oversteer warn</label>
+                    <div class="inline-param">
+                        <label>Slip (°) <input type="text" id="ow-slip-thresh" size="6"></label>
+                        <label>Rate (°/s) <input type="text" id="ow-rate-thresh" size="6"></label>
+                        <label>ThrottleRed <input type="text" id="ow-throttle-red" size="6"></label>
+                    </div>
+                </div>
+
+                <div class="btn-row">
+                    <button id="btn-load-stab" class="btn btn-outline">Загрузить</button>
+                    <button id="btn-save-stab" class="btn btn-accent">Сохранить</button>
+                </div>
+
+                <div id="stab-save-status" class="toast" style="display:none">
+                    <span id="stab-save-msg">—</span>
                 </div>
             </div>
+        </section>
 
-            <div class="control-group">
-                <label>Безопасность:</label>
-                <div class="button-group">
-                    <button id="btn-kids-toggle" class="btn-kids-toggle">Детский режим: ВЫКЛ</button>
+        <!-- Калибровка IMU -->
+        <section class="panel" id="panel-calib">
+            <button class="panel-header" aria-expanded="false">
+                <span class="panel-icon">&#9654;</span>
+                <span>Калибровка IMU</span>
+                <span id="calib-status" class="badge badge-unknown" style="margin-left:auto">—</span>
+            </button>
+            <div class="panel-body" hidden>
+                <div class="kv-row">
+                    <span class="kv-k">Данные:</span>
+                    <span id="calib-valid" class="badge badge-unknown">—</span>
+                </div>
+
+                <div id="calib-bias" class="sub-card" style="display:none">
+                    <div class="kv-row"><span class="kv-k">Gyro X</span><span id="calib-gx" class="kv-v">—</span></div>
+                    <div class="kv-row"><span class="kv-k">Gyro Y</span><span id="calib-gy" class="kv-v">—</span></div>
+                    <div class="kv-row"><span class="kv-k">Gyro Z</span><span id="calib-gz" class="kv-v">—</span></div>
+                    <div class="kv-row"><span class="kv-k">Accel X</span><span id="calib-ax" class="kv-v">—</span></div>
+                    <div class="kv-row"><span class="kv-k">Accel Y</span><span id="calib-ay" class="kv-v">—</span></div>
+                    <div class="kv-row"><span class="kv-k">Accel Z</span><span id="calib-az" class="kv-v">—</span></div>
+                </div>
+
+                <p class="hint">Машина на ровной поверхности, не трогать.</p>
+
+                <div class="btn-row">
+                    <button id="btn-calib-gyro" class="btn btn-accent btn-calib">Гироскоп</button>
+                    <button id="btn-calib-full" class="btn btn-accent btn-calib">Полная</button>
+                </div>
+
+                <p class="hint">После полной калибровки: прямая, кнопка — машина едет и запоминает направление.</p>
+
+                <div class="slider-group compact">
+                    <div class="slider-label">
+                        <span>Целевое ускорение (mg)</span>
+                        <span id="calib-fwd-accel-value" class="slider-val">100</span>
+                    </div>
+                    <input type="range" id="calib-fwd-accel" class="rc-slider" min="20" max="300" step="10" value="100">
+                </div>
+
+                <div class="btn-row">
+                    <button id="btn-calib-auto-forward" class="btn btn-accent btn-calib">Авто-калибровка</button>
+                    <button id="btn-calib-forward" class="btn btn-outline btn-calib">Вручную</button>
                 </div>
             </div>
+        </section>
 
-            <div id="kids-mode-settings" class="kids-mode-settings" style="display:none">
-                <div class="param-row">
-                    <label for="kids-throttle-limit">Макс. газ (%):</label>
-                    <input type="range" id="kids-throttle-limit" min="10" max="100" step="5" value="50" class="kids-slider">
-                    <span id="kids-throttle-value" class="kids-limit-value">50</span>
+        <!-- Self-Test -->
+        <section class="panel" id="panel-selftest">
+            <button class="panel-header" aria-expanded="false">
+                <span class="panel-icon">&#9654;</span>
+                <span>Self-Test</span>
+            </button>
+            <div class="panel-body" hidden>
+                <div class="btn-row">
+                    <button id="btn-self-test" class="btn btn-accent">Запустить</button>
                 </div>
-                <div class="param-row">
-                    <label for="kids-steering-limit">Макс. руль (%):</label>
-                    <input type="range" id="kids-steering-limit" min="10" max="100" step="5" value="70" class="kids-slider">
-                    <span id="kids-steering-value" class="kids-limit-value">70</span>
-                </div>
-            </div>
-
-            <div class="control-group">
-                <label>
-                    <input type="checkbox" id="stab-enabled"> Стабилизация включена
-                </label>
-            </div>
-
-            <div class="control-group">
-                <span class="section-label">Yaw PID:</span>
-                <div class="param-row">
-                    <label for="stab-kp">Kp:</label>
-                    <input type="text" id="stab-kp" size="6">
-                    <label for="stab-ki">Ki:</label>
-                    <input type="text" id="stab-ki" size="6">
-                    <label for="stab-kd">Kd:</label>
-                    <input type="text" id="stab-kd" size="6">
-                    <label for="stab-max-corr">MaxCorr:</label>
-                    <input type="text" id="stab-max-corr" size="6">
+                <div id="self-test-result" style="display:none">
+                    <div class="kv-row">
+                        <span class="kv-k">Результат:</span>
+                        <span id="self-test-overall" class="badge badge-unknown">—</span>
+                    </div>
+                    <table id="self-test-table" class="data-table">
+                        <thead><tr><th>Проверка</th><th>Статус</th><th>Значение</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
                 </div>
             </div>
+        </section>
 
-            <div class="control-group">
-                <label>
-                    <input type="checkbox" id="adapt-pid-enabled"> Адаптивный ПИД
-                </label>
-                <div class="param-row">
-                    <label for="adapt-speed-ref">SpeedRef (m/s):</label>
-                    <input type="text" id="adapt-speed-ref" size="6">
+        <!-- Wi-Fi STA -->
+        <section class="panel" id="panel-wifi">
+            <button class="panel-header" aria-expanded="false">
+                <span class="panel-icon">&#9654;</span>
+                <span>Wi-Fi клиент</span>
+                <span id="sta-status" class="badge badge-unknown" style="margin-left:auto">—</span>
+            </button>
+            <div class="panel-body" hidden>
+                <div class="kv-row">
+                    <span class="kv-k">Сеть:</span>
+                    <span id="sta-ssid" class="kv-v">—</span>
+                </div>
+                <div class="kv-row">
+                    <span class="kv-k">IP:</span>
+                    <span id="sta-ip" class="kv-v">—</span>
+                </div>
+
+                <div class="btn-row">
+                    <button id="btn-sta-scan" class="btn btn-outline">Сканировать</button>
+                </div>
+
+                <div class="field">
+                    <label for="sta-scan-list">Найденные сети</label>
+                    <select id="sta-scan-list">
+                        <option value="">— нажмите «Сканировать» —</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="sta-ssid-input">SSID</label>
+                    <input type="text" id="sta-ssid-input" placeholder="Имя сети">
+                </div>
+                <div class="field">
+                    <label for="sta-pass-input">Пароль</label>
+                    <input type="password" id="sta-pass-input" placeholder="Пароль">
+                </div>
+
+                <div class="btn-row">
+                    <button id="btn-sta-connect" class="btn btn-accent">Подключить</button>
+                    <button id="btn-sta-disconnect" class="btn btn-outline">Отключить</button>
+                    <button id="btn-sta-forget" class="btn btn-muted">Забыть</button>
                 </div>
             </div>
+        </section>
 
-            <div class="control-group">
-                <label>
-                    <input type="checkbox" id="pitch-comp-enabled"> Pitch compensation
-                </label>
-                <div class="param-row">
-                    <label for="pitch-gain">Gain:</label>
-                    <input type="text" id="pitch-gain" size="6">
-                    <label for="pitch-max-corr">MaxCorr:</label>
-                    <input type="text" id="pitch-max-corr" size="6">
+        <!-- Лог телеметрии -->
+        <section class="panel" id="panel-log">
+            <button class="panel-header" aria-expanded="false">
+                <span class="panel-icon">&#9654;</span>
+                <span>Лог телеметрии</span>
+            </button>
+            <div class="panel-body" hidden>
+                <div class="kv-row">
+                    <span class="kv-k">Кадров:</span>
+                    <span id="log-count" class="kv-v">—</span>
+                </div>
+                <div class="kv-row">
+                    <span class="kv-k">Вместимость:</span>
+                    <span id="log-capacity" class="kv-v">—</span>
+                </div>
+
+                <div id="oversteer-indicator" class="kv-row" style="display:none">
+                    <span class="kv-k">Oversteer:</span>
+                    <span id="oversteer-status" class="badge badge-unknown">—</span>
+                </div>
+
+                <div class="btn-row">
+                    <button id="btn-log-info" class="btn btn-outline">Статистика</button>
+                    <button id="btn-log-clear" class="btn btn-muted">Очистить</button>
+                    <button id="btn-log-csv" class="btn btn-accent">CSV (500)</button>
                 </div>
             </div>
+        </section>
 
-            <div class="control-group">
-                <label>
-                    <input type="checkbox" id="adaptive-beta-enabled"> Адаптивный Madgwick (защита при движении)
-                </label>
-                <div class="param-row">
-                    <label for="adaptive-accel-thresh">Порог |a| (g):</label>
-                    <input type="text" id="adaptive-accel-thresh" size="6">
+        <!-- Телеметрия (всегда открыта) -->
+        <section class="panel panel-telem open" id="panel-telem">
+            <button class="panel-header" aria-expanded="true">
+                <span class="panel-icon">&#9670;</span>
+                <span>Телеметрия</span>
+                <span id="telem-counter" class="counter">rx: 0</span>
+            </button>
+            <div class="panel-body">
+                <div id="telem-data">
+                    <p class="placeholder">Ожидание данных...</p>
                 </div>
             </div>
+        </section>
 
-            <div class="control-group">
-                <label>
-                    <input type="checkbox" id="oversteer-enabled"> Oversteer warn
-                </label>
-                <div class="param-row">
-                    <label for="ow-slip-thresh">SlipThresh (°):</label>
-                    <input type="text" id="ow-slip-thresh" size="6">
-                    <label for="ow-rate-thresh">RateThresh (°/s):</label>
-                    <input type="text" id="ow-rate-thresh" size="6">
-                    <label for="ow-throttle-red">ThrottleRed:</label>
-                    <input type="text" id="ow-throttle-red" size="6">
-                </div>
-            </div>
-
-            <div class="button-group">
-                <button id="btn-load-stab">Загрузить с устройства</button>
-                <button id="btn-save-stab">Сохранить на устройстве</button>
-            </div>
-
-            <div id="stab-save-status" class="status-item" style="display:none">
-                <span id="stab-save-msg" class="status-value unknown">—</span>
-            </div>
-        </div>
-
-        <div class="control-panel">
-            <h2>Лог телеметрии</h2>
-
-            <div class="status-panel">
-                <div class="status-item">
-                    <span class="status-label">Кадров:</span>
-                    <span id="log-count" class="status-value unknown">—</span>
-                </div>
-                <div class="status-item">
-                    <span class="status-label">Вместимость:</span>
-                    <span id="log-capacity" class="status-value unknown">—</span>
-                </div>
-            </div>
-
-            <div id="oversteer-indicator" class="status-item" style="display:none">
-                <span class="status-label">Oversteer:</span>
-                <span id="oversteer-status" class="status-value unknown">—</span>
-            </div>
-
-            <div class="button-group">
-                <button id="btn-log-info">Статистика</button>
-                <button id="btn-log-clear">Очистить лог</button>
-                <button id="btn-log-csv">Скачать CSV (500)</button>
-            </div>
-        </div>
-
-        <div class="telem-panel">
-            <h2>Телеметрия <span id="telem-counter" style="font-size:0.7em;color:#888;font-weight:normal">(rx: 0)</span></h2>
-            <div id="telem-data">
-                <p>Ожидание данных...</p>
-            </div>
-        </div>
-    </div>
+    </main>
 
     <script src="app.js"></script>
 </body>
 
 </html>
-

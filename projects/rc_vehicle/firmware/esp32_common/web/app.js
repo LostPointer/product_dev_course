@@ -1,72 +1,91 @@
-// WebSocket подключение
+// ═══════════════════════════════════════════════════════════════════
+// RC Vehicle — Web UI
+// ═══════════════════════════════════════════════════════════════════
+
+// ── WebSocket ──
 let ws = null;
 let wsReconnectInterval = null;
 const WS_URL = `ws://${window.location.hostname}/ws`;
 
-// Функция для отправки JSON-команды через WebSocket
 function wsSend(obj) {
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify(obj));
     }
 }
 
-// Элементы UI
-const wsStatusEl = document.getElementById('ws-status');
-const mcuStatusEl = document.getElementById('mcu-status');
-const throttleSlider = document.getElementById('throttle');
-const steeringSlider = document.getElementById('steering');
-const throttleValueEl = document.getElementById('throttle-value');
-const steeringValueEl = document.getElementById('steering-value');
-const btnCenter = document.getElementById('btn-center');
-const btnStop = document.getElementById('btn-stop');
-const telemDataEl = document.getElementById('telem-data');
-const telemCounterEl = document.getElementById('telem-counter');
-let telemRxCount = 0;
-const btnCalibAutoForward = document.getElementById('btn-calib-auto-forward');
-const btnCalibForward = document.getElementById('btn-calib-forward');
-const calibFwdAccelSlider = document.getElementById('calib-fwd-accel');
-const calibFwdAccelValueEl = document.getElementById('calib-fwd-accel-value');
-// Обратная совместимость: если старый HTML с throttle-слайдером
-const calibFwdThrottleSlider = document.getElementById('calib-fwd-throttle');
-const calibFwdThrottleValueEl = document.getElementById('calib-fwd-throttle-value');
+// ── DOM refs ──
+const $ = (id) => document.getElementById(id);
+const wsStatusEl       = $('ws-status');
+const mcuStatusEl      = $('mcu-status');
+const throttleSlider   = $('throttle');
+const steeringSlider   = $('steering');
+const throttleValueEl  = $('throttle-value');
+const steeringValueEl  = $('steering-value');
+const btnCenter        = $('btn-center');
+const btnStop          = $('btn-stop');
+const telemDataEl      = $('telem-data');
+const telemCounterEl   = $('telem-counter');
+const calibStatusEl    = $('calib-status');
+const calibValidEl     = $('calib-valid');
+const calibBiasEl      = $('calib-bias');
+const btnCalibGyro     = $('btn-calib-gyro');
+const btnCalibFull     = $('btn-calib-full');
+const btnCalibForward  = $('btn-calib-forward');
+const btnCalibAutoFwd  = $('btn-calib-auto-forward');
+const calibFwdAccelSlider    = $('calib-fwd-accel');
+const calibFwdAccelValueEl   = $('calib-fwd-accel-value');
+// Backward compat
+const calibFwdThrottleSlider = $('calib-fwd-throttle');
+const calibFwdThrottleValueEl= $('calib-fwd-throttle-value');
 
-// Wi‑Fi STA UI
-const staStatusEl = document.getElementById('sta-status');
-const staSsidEl = document.getElementById('sta-ssid');
-const staIpEl = document.getElementById('sta-ip');
-const staScanList = document.getElementById('sta-scan-list');
-const btnStaScan = document.getElementById('btn-sta-scan');
-const staSsidInput = document.getElementById('sta-ssid-input');
-const staPassInput = document.getElementById('sta-pass-input');
-const btnStaConnect = document.getElementById('btn-sta-connect');
-const btnStaDisconnect = document.getElementById('btn-sta-disconnect');
-const btnStaForget = document.getElementById('btn-sta-forget');
+// Wi-Fi STA
+const staStatusEl      = $('sta-status');
+const staSsidEl        = $('sta-ssid');
+const staIpEl          = $('sta-ip');
+const staScanList      = $('sta-scan-list');
+const btnStaScan       = $('btn-sta-scan');
+const staSsidInput     = $('sta-ssid-input');
+const staPassInput     = $('sta-pass-input');
+const btnStaConnect    = $('btn-sta-connect');
+const btnStaDisconnect = $('btn-sta-disconnect');
+const btnStaForget     = $('btn-sta-forget');
 
-// Калибровка IMU UI
-const calibStatusEl = document.getElementById('calib-status');
-const calibValidEl = document.getElementById('calib-valid');
-const calibBiasEl = document.getElementById('calib-bias');
-const btnCalibGyro = document.getElementById('btn-calib-gyro');
-const btnCalibFull = document.getElementById('btn-calib-full');
-
-// Состояние
+// ── State ──
 let lastCommandSeq = 0;
 let commandSendInterval = null;
 let lastTelemTime = 0;
 let wsConnectTime = 0;
+let telemRxCount = 0;
 const MCU_TIMEOUT_MS = 1500;
 let mcuStatusCheckInterval = null;
 let wifiStatusInterval = null;
 
-// Подключение к WebSocket
+// ── Accordion ──
+document.querySelectorAll('.panel-header').forEach(hdr => {
+    hdr.addEventListener('click', () => {
+        const panel = hdr.closest('.panel');
+        const body = panel.querySelector('.panel-body');
+        const open = panel.classList.toggle('open');
+        hdr.setAttribute('aria-expanded', open);
+        if (open) {
+            body.removeAttribute('hidden');
+        } else {
+            body.setAttribute('hidden', '');
+        }
+    });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// WebSocket connection
+// ═══════════════════════════════════════════════════════════════════
+
 function connectWebSocket() {
     try {
         ws = new WebSocket(WS_URL);
 
         ws.onopen = () => {
-            console.log('WebSocket connected');
-            wsStatusEl.textContent = 'Подключено';
-            wsStatusEl.className = 'status-value connected';
+            wsStatusEl.textContent = 'WS';
+            wsStatusEl.className = 'badge badge-on';
             clearInterval(wsReconnectInterval);
             lastTelemTime = 0;
             wsConnectTime = Date.now();
@@ -89,13 +108,12 @@ function connectWebSocket() {
                         applyStabConfig(data);
                     } else if (data.ok) {
                         applyStabConfig(data);
-                        showStabSaveStatus('Сохранено', 'connected');
+                        showStabSaveStatus('Сохранено', 'toast-ok');
                     } else {
-                        showStabSaveStatus('Ошибка сохранения', 'disconnected');
+                        showStabSaveStatus('Ошибка сохранения', 'toast-err');
                     }
                 } else if (data.type === 'log_info') {
                     updateLogInfo(data.count, data.capacity);
-                    // Если ожидается CSV — запросить данные
                     if (pendingLogTotal === -2) {
                         const total = data.count || 0;
                         const want = Math.min(500, total);
@@ -116,92 +134,78 @@ function connectWebSocket() {
                 } else if (data.type === 'self_test_result') {
                     showSelfTestResult(data);
                 } else if (data.type === 'toggle_kids_mode_ack') {
-                    // Синхронизировать UI с подтверждением от ESP32
                     kidsMode = data.active;
                     updateKidsModeUI();
-                    console.log('Kids Mode:', kidsMode ? 'ВКЛ' : 'ВЫКЛ');
                 }
             } catch (e) {
-                console.error('Failed to parse message:', e, event.data?.slice(0, 200));
+                console.error('Parse error:', e, event.data?.slice(0, 200));
                 if (telemDataEl) {
-                    telemDataEl.innerHTML = `<p style="color:red">JS error: ${e.message}</p>`;
+                    telemDataEl.innerHTML = `<p style="color:var(--danger)">JS error: ${e.message}</p>`;
                 }
             }
         };
 
-        ws.onerror = (error) => {
-            console.error('WebSocket error:', error);
-        };
+        ws.onerror = (error) => console.error('WS error:', error);
 
         ws.onclose = () => {
-            console.log('WebSocket disconnected');
-            wsStatusEl.textContent = 'Отключено';
-            wsStatusEl.className = 'status-value disconnected';
+            wsStatusEl.textContent = 'WS';
+            wsStatusEl.className = 'badge badge-off';
             stopCommandSending();
             stopMcuStatusCheck();
             setMcuStatus('unknown');
-
-            // Переподключение через 2 секунды
             wsReconnectInterval = setInterval(connectWebSocket, 2000);
         };
     } catch (e) {
-        console.error('Failed to connect WebSocket:', e);
+        console.error('WS connect failed:', e);
     }
 }
 
-// Отправка команды управления
+// ═══════════════════════════════════════════════════════════════════
+// Command sending
+// ═══════════════════════════════════════════════════════════════════
+
 function sendCommand() {
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
-        return;
-    }
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
     let throttle = parseFloat(throttleSlider.value);
     let steering = parseFloat(steeringSlider.value);
 
-    // Детский режим: ограничить газ и руль
     if (kidsMode) {
         throttle = Math.max(-kidsThrottleLimit, Math.min(kidsThrottleLimit, throttle));
         steering = Math.max(-kidsSteeringLimit, Math.min(kidsSteeringLimit, steering));
     }
 
-    const command = {
+    ws.send(JSON.stringify({
         type: 'cmd',
-        throttle: throttle,
-        steering: steering,
+        throttle, steering,
         seq: ++lastCommandSeq
-    };
-
-    ws.send(JSON.stringify(command));
+    }));
 }
 
-// Запуск периодической отправки команд (50 Hz = каждые 20 мс)
 function startCommandSending() {
-    if (commandSendInterval) {
-        clearInterval(commandSendInterval);
-    }
+    if (commandSendInterval) clearInterval(commandSendInterval);
     commandSendInterval = setInterval(sendCommand, 20);
 }
 
-// Остановка отправки команд
 function stopCommandSending() {
-    if (commandSendInterval) {
-        clearInterval(commandSendInterval);
-        commandSendInterval = null;
-    }
+    if (commandSendInterval) { clearInterval(commandSendInterval); commandSendInterval = null; }
 }
 
-// Статус подключения Pico/STM (по факту прихода телеметрии по UART)
+// ═══════════════════════════════════════════════════════════════════
+// MCU status
+// ═══════════════════════════════════════════════════════════════════
+
 function setMcuStatus(state) {
     if (!mcuStatusEl) return;
     if (state === 'connected') {
-        mcuStatusEl.textContent = 'Подключено';
-        mcuStatusEl.className = 'status-value connected';
+        mcuStatusEl.textContent = 'MCU';
+        mcuStatusEl.className = 'badge badge-on';
     } else if (state === 'disconnected') {
-        mcuStatusEl.textContent = 'Нет связи';
-        mcuStatusEl.className = 'status-value disconnected';
+        mcuStatusEl.textContent = 'MCU';
+        mcuStatusEl.className = 'badge badge-off';
     } else {
-        mcuStatusEl.textContent = '—';
-        mcuStatusEl.className = 'status-value unknown';
+        mcuStatusEl.textContent = 'MCU';
+        mcuStatusEl.className = 'badge badge-unknown';
     }
 }
 
@@ -209,34 +213,28 @@ function startMcuStatusCheck() {
     if (mcuStatusCheckInterval) clearInterval(mcuStatusCheckInterval);
     mcuStatusCheckInterval = setInterval(() => {
         const baseline = lastTelemTime || wsConnectTime;
-        if (Date.now() - baseline > MCU_TIMEOUT_MS) {
-            setMcuStatus('disconnected');
-        }
+        if (Date.now() - baseline > MCU_TIMEOUT_MS) setMcuStatus('disconnected');
     }, 500);
 }
 
 function stopMcuStatusCheck() {
-    if (mcuStatusCheckInterval) {
-        clearInterval(mcuStatusCheckInterval);
-        mcuStatusCheckInterval = null;
-    }
+    if (mcuStatusCheckInterval) { clearInterval(mcuStatusCheckInterval); mcuStatusCheckInterval = null; }
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// Wi-Fi STA
+// ═══════════════════════════════════════════════════════════════════
 
 function setStaStatus(state) {
     if (!staStatusEl) return;
-    if (state === 'connected') {
-        staStatusEl.textContent = 'Подключено';
-        staStatusEl.className = 'status-value connected';
-    } else if (state === 'disconnected') {
-        staStatusEl.textContent = 'Нет связи';
-        staStatusEl.className = 'status-value disconnected';
-    } else if (state === 'configured') {
-        staStatusEl.textContent = 'Настроено';
-        staStatusEl.className = 'status-value unknown';
-    } else {
-        staStatusEl.textContent = '—';
-        staStatusEl.className = 'status-value unknown';
-    }
+    const map = {
+        connected:    ['badge-on', 'Подключено'],
+        disconnected: ['badge-off', 'Нет связи'],
+        configured:   ['badge-warn', 'Настроено'],
+    };
+    const [cls, text] = map[state] || ['badge-unknown', '—'];
+    staStatusEl.textContent = text;
+    staStatusEl.className = 'badge ' + cls;
 }
 
 function updateSta(sta) {
@@ -246,153 +244,120 @@ function updateSta(sta) {
         if (staIpEl) staIpEl.textContent = '—';
         return;
     }
-
     const ssid = sta.ssid || '';
     const ip = sta.ip || '';
     const configured = !!sta.configured;
     const connected = !!sta.connected;
 
-    if (connected) {
-        setStaStatus('connected');
-    } else if (configured) {
-        setStaStatus('disconnected');
-    } else {
-        setStaStatus('unknown');
-    }
+    if (connected) setStaStatus('connected');
+    else if (configured) setStaStatus('disconnected');
+    else setStaStatus('unknown');
 
-    if (staSsidEl) {
-        staSsidEl.textContent = ssid || '—';
-        staSsidEl.className = 'status-value ' + (configured ? 'connected' : 'unknown');
-    }
-
-    if (staIpEl) {
-        staIpEl.textContent = ip || '—';
-        staIpEl.className = 'status-value ' + (connected ? 'connected' : 'unknown');
-    }
-
-    // Для удобства: подставляем SSID в инпут (пароль не отображаем)
-    if (staSsidInput && ssid && !staSsidInput.value) {
-        staSsidInput.value = ssid;
-    }
+    if (staSsidEl) staSsidEl.textContent = ssid || '—';
+    if (staIpEl) staIpEl.textContent = ip || '—';
+    if (staSsidInput && ssid && !staSsidInput.value) staSsidInput.value = ssid;
 }
 
 async function fetchWifiStatus() {
     try {
         const resp = await fetch('/api/wifi/status', { cache: 'no-store' });
-        if (!resp.ok) return;
-        const data = await resp.json();
-        updateSta(data.sta);
-    } catch (e) {
-        // Молча: если сеть/канал прыгает при AP+STA, возможны краткие ошибки.
-    }
+        if (resp.ok) updateSta(await resp.json().then(d => d.sta));
+    } catch (e) { /* ignore */ }
 }
 
 function renderWifiScanResults(networks) {
     if (!staScanList) return;
-
     const list = Array.isArray(networks) ? networks : [];
     staScanList.innerHTML = '';
 
-    const placeholder = document.createElement('option');
-    placeholder.value = '';
-    placeholder.textContent = list.length ? 'Выберите сеть…' : 'Сети не найдены';
-    staScanList.appendChild(placeholder);
+    const ph = document.createElement('option');
+    ph.value = '';
+    ph.textContent = list.length ? 'Выберите сеть...' : 'Сети не найдены';
+    staScanList.appendChild(ph);
 
     for (const n of list) {
         const ssid = (n?.ssid || '').trim();
         if (!ssid) continue;
-        const rssi = (typeof n.rssi === 'number') ? n.rssi : null;
-        const ch = (typeof n.channel === 'number') ? n.channel : null;
+        const rssi = typeof n.rssi === 'number' ? n.rssi : null;
+        const ch = typeof n.channel === 'number' ? n.channel : null;
         const open = !!n.open;
-        const sec = open ? 'open' : 'secured';
-
         const opt = document.createElement('option');
         opt.value = ssid;
         opt.dataset.open = open ? '1' : '0';
-        opt.textContent = `${ssid}` +
-            (rssi !== null ? ` (${rssi} dBm)` : '') +
-            (ch !== null ? ` ch${ch}` : '') +
-            ` ${sec}`;
+        opt.textContent = ssid
+            + (rssi !== null ? ` (${rssi} dBm)` : '')
+            + (ch !== null ? ` ch${ch}` : '')
+            + (open ? ' open' : '');
         staScanList.appendChild(opt);
     }
 }
 
 async function scanWifiNetworks() {
     if (!btnStaScan) return;
-    const prevText = btnStaScan.textContent;
+    const prev = btnStaScan.textContent;
     btnStaScan.disabled = true;
     btnStaScan.textContent = 'Сканирование...';
-
     try {
         const resp = await fetch('/api/wifi/scan', { cache: 'no-store' });
         if (resp.ok) {
-            const data = await resp.json();
-            const networks = data.networks || [];
+            const networks = (await resp.json()).networks || [];
             networks.sort((a, b) => (b.rssi || -100) - (a.rssi || -100));
             renderWifiScanResults(networks);
         }
-    } catch (e) {
-        // ignore
-    }
-
+    } catch (e) { /* ignore */ }
     btnStaScan.disabled = false;
-    btnStaScan.textContent = prevText;
+    btnStaScan.textContent = prev;
 }
 
-// Обновление статуса калибровки IMU
+// ═══════════════════════════════════════════════════════════════════
+// Calibration
+// ═══════════════════════════════════════════════════════════════════
+
 function updateCalibStatus(status, calib) {
     if (calibStatusEl && status) {
         const labels = {
-            idle: 'Ожидание',
-            collecting: 'Сбор данных...',
-            done: 'Завершена',
-            failed: 'Ошибка (движение)'
+            idle: 'Ожидание', collecting: 'Сбор...', done: 'Готово', failed: 'Ошибка'
         };
         calibStatusEl.textContent = labels[status] || status;
-        calibStatusEl.className = 'status-value ' + (status || 'unknown');
+        const classMap = {
+            idle: 'badge-unknown', collecting: 'badge-pulse badge-warn',
+            done: 'badge-on', failed: 'badge-off'
+        };
+        calibStatusEl.className = 'badge ' + (classMap[status] || 'badge-unknown');
 
-        const collecting = (status === 'collecting');
-        if (btnCalibGyro) btnCalibGyro.disabled = collecting;
-        if (btnCalibFull) btnCalibFull.disabled = collecting;
-        if (btnCalibForward) btnCalibForward.disabled = collecting;
-        if (btnCalibAutoForward) btnCalibAutoForward.disabled = collecting;
+        const busy = status === 'collecting';
+        [btnCalibGyro, btnCalibFull, btnCalibForward, btnCalibAutoFwd].forEach(b => { if (b) b.disabled = busy; });
     }
 
     if (calib) {
         if (calibValidEl) {
-            calibValidEl.textContent = calib.valid ? 'Валидны' : 'Нет данных';
-            calibValidEl.className = 'status-value ' + (calib.valid ? 'done' : 'idle');
+            calibValidEl.textContent = calib.valid ? 'Валидны' : 'Нет';
+            calibValidEl.className = 'badge ' + (calib.valid ? 'badge-on' : 'badge-unknown');
         }
-
         if (calib.bias && calibBiasEl) {
             calibBiasEl.style.display = 'block';
-            const set = (id, v) => {
-                const el = document.getElementById(id);
-                if (el) el.textContent = (typeof v === 'number') ? v.toFixed(4) : '—';
-            };
-            set('calib-gx', calib.bias.gx);
-            set('calib-gy', calib.bias.gy);
-            set('calib-gz', calib.bias.gz);
-            set('calib-ax', calib.bias.ax);
-            set('calib-ay', calib.bias.ay);
-            set('calib-az', calib.bias.az);
+            const set = (id, v) => { const el = $(id); if (el) el.textContent = typeof v === 'number' ? v.toFixed(4) : '—'; };
+            set('calib-gx', calib.bias.gx); set('calib-gy', calib.bias.gy); set('calib-gz', calib.bias.gz);
+            set('calib-ax', calib.bias.ax); set('calib-ay', calib.bias.ay); set('calib-az', calib.bias.az);
         } else if (calibBiasEl && !calib.valid) {
             calibBiasEl.style.display = 'none';
         }
     }
 }
 
-// Отправка команды калибровки
 function sendCalibrate(mode) {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ type: 'calibrate_imu', mode: mode }));
+    ws.send(JSON.stringify({ type: 'calibrate_imu', mode }));
 }
 
-// Обновление телеметрии (статус Pico/STM: по mcu_pong_ok с ESP32 или по факту прихода телеметрии)
+// ═══════════════════════════════════════════════════════════════════
+// Telemetry display
+// ═══════════════════════════════════════════════════════════════════
+
 function updateTelem(data) {
     lastTelemTime = Date.now();
     telemRxCount++;
-    if (telemCounterEl) telemCounterEl.textContent = `(rx: ${telemRxCount})`;
+    if (telemCounterEl) telemCounterEl.textContent = `rx: ${telemRxCount}`;
     if (data.mcu_pong_ok !== undefined) {
         setMcuStatus(data.mcu_pong_ok ? 'connected' : 'disconnected');
     } else {
@@ -400,123 +365,70 @@ function updateTelem(data) {
     }
 
     let html = '';
+    const row = (label, val) =>
+        `<div class="telem-item"><span class="telem-label">${label}</span><span class="telem-value">${val}</span></div>`;
+
     if (data.imu) {
-        html += `<div class="telem-item">
-            <span class="telem-label">Accel X:</span>
-            <span class="telem-value">${data.imu.ax?.toFixed(2) || 'N/A'}</span>
-        </div>`;
-        html += `<div class="telem-item">
-            <span class="telem-label">Accel Y:</span>
-            <span class="telem-value">${data.imu.ay?.toFixed(2) || 'N/A'}</span>
-        </div>`;
-        html += `<div class="telem-item">
-            <span class="telem-label">Accel Z:</span>
-            <span class="telem-value">${data.imu.az?.toFixed(2) || 'N/A'}</span>
-        </div>`;
-        html += `<div class="telem-item">
-            <span class="telem-label">Gyro X:</span>
-            <span class="telem-value">${data.imu.gx?.toFixed(2) || 'N/A'}</span>
-        </div>`;
-        html += `<div class="telem-item">
-            <span class="telem-label">Gyro Y:</span>
-            <span class="telem-value">${data.imu.gy?.toFixed(2) || 'N/A'}</span>
-        </div>`;
-        html += `<div class="telem-item">
-            <span class="telem-label">Gyro Z:</span>
-            <span class="telem-value">${data.imu.gz?.toFixed(2) || 'N/A'}</span>
-        </div>`;
+        html += row('Accel X', data.imu.ax?.toFixed(2) ?? 'N/A');
+        html += row('Accel Y', data.imu.ay?.toFixed(2) ?? 'N/A');
+        html += row('Accel Z', data.imu.az?.toFixed(2) ?? 'N/A');
+        html += row('Gyro X', data.imu.gx?.toFixed(2) ?? 'N/A');
+        html += row('Gyro Y', data.imu.gy?.toFixed(2) ?? 'N/A');
+        html += row('Gyro Z', data.imu.gz?.toFixed(2) ?? 'N/A');
     }
     if (data.act) {
-        html += `<div class="telem-item">
-            <span class="telem-label">Throttle:</span>
-            <span class="telem-value">${data.act.throttle?.toFixed(2) || 'N/A'}</span>
-        </div>`;
-        html += `<div class="telem-item">
-            <span class="telem-label">Steering:</span>
-            <span class="telem-value">${data.act.steering?.toFixed(2) || 'N/A'}</span>
-        </div>`;
+        html += row('Throttle', data.act.throttle?.toFixed(2) ?? 'N/A');
+        html += row('Steering', data.act.steering?.toFixed(2) ?? 'N/A');
     }
-
-    // EKF блок (Phase 4.1/4.2)
     if (data.ekf) {
-        html += `<div class="telem-item">
-            <span class="telem-label">EKF Slip:</span>
-            <span class="telem-value">${data.ekf.slip_deg?.toFixed(1) || 'N/A'} °</span>
-        </div>`;
-        html += `<div class="telem-item">
-            <span class="telem-label">EKF Speed:</span>
-            <span class="telem-value">${data.ekf.speed_ms?.toFixed(2) || 'N/A'} m/s</span>
-        </div>`;
-        html += `<div class="telem-item">
-            <span class="telem-label">EKF Vx/Vy:</span>
-            <span class="telem-value">${data.ekf.vx?.toFixed(2) || 'N/A'} / ${data.ekf.vy?.toFixed(2) || 'N/A'} m/s</span>
-        </div>`;
+        html += row('EKF Slip', (data.ekf.slip_deg?.toFixed(1) ?? 'N/A') + ' °');
+        html += row('EKF Speed', (data.ekf.speed_ms?.toFixed(2) ?? 'N/A') + ' m/s');
+        html += row('EKF Vx/Vy', `${data.ekf.vx?.toFixed(2) ?? '?'} / ${data.ekf.vy?.toFixed(2) ?? '?'} m/s`);
     }
-
-    // Orientation блок (pitch, roll, yaw) — данные в imu.orientation
     if (data.imu?.orientation) {
-        const orient = data.imu.orientation;
-        html += `<div class="telem-item">
-            <span class="telem-label">Pitch:</span>
-            <span class="telem-value">${orient.pitch?.toFixed(1) || 'N/A'} °</span>
-        </div>`;
-        html += `<div class="telem-item">
-            <span class="telem-label">Roll:</span>
-            <span class="telem-value">${orient.roll?.toFixed(1) || 'N/A'} °</span>
-        </div>`;
-        html += `<div class="telem-item">
-            <span class="telem-label">Yaw:</span>
-            <span class="telem-value">${orient.yaw?.toFixed(1) || 'N/A'} °</span>
-        </div>`;
+        const o = data.imu.orientation;
+        html += row('Pitch', (o.pitch?.toFixed(1) ?? 'N/A') + ' °');
+        html += row('Roll', (o.roll?.toFixed(1) ?? 'N/A') + ' °');
+        html += row('Yaw', (o.yaw?.toFixed(1) ?? 'N/A') + ' °');
     }
 
-    telemDataEl.innerHTML = html || '<p>Нет данных</p>';
+    telemDataEl.innerHTML = html || '<p class="placeholder">Нет данных</p>';
 
-    // Обновление панели калибровки из телеметрии
-    if (data.calib) {
-        updateCalibStatus(data.calib.status, data.calib);
-    }
+    if (data.calib) updateCalibStatus(data.calib.status, data.calib);
 
-    // Oversteer индикатор (Phase 4.2)
-    const owIndicator = document.getElementById('oversteer-indicator');
-    const owStatus = document.getElementById('oversteer-status');
+    // Oversteer indicator
+    const owIndicator = $('oversteer-indicator');
+    const owStatus = $('oversteer-status');
     if (owIndicator && owStatus && data.warn !== undefined) {
         owIndicator.style.display = 'flex';
         if (data.warn.oversteer) {
             owStatus.textContent = 'ЗАНОС!';
-            owStatus.className = 'status-value oversteer-active';
+            owStatus.className = 'badge badge-oversteer-active';
         } else {
             owStatus.textContent = 'OK';
-            owStatus.className = 'status-value oversteer-ok';
+            owStatus.className = 'badge badge-oversteer-ok';
         }
     }
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// Стабилизация (Phase 4.1/4.2/4.4)
+// Stabilization
 // ═══════════════════════════════════════════════════════════════════
 
-let currentMode = 0;  // 0=normal, 1=sport, 2=drift, 3=kids, 4=direct
-let kidsThrottleLimit = 0.50;  // 50%
-let kidsSteeringLimit = 0.70;  // 70%
+let currentMode = 0;
+let kidsThrottleLimit = 0.50;
+let kidsSteeringLimit = 0.70;
 let kidsMode = false;
 
 function applyStabConfig(cfg) {
-    const set = (id, val) => {
-        const el = document.getElementById(id);
-        if (el) el.value = val;
-    };
-    const setChk = (id, val) => {
-        const el = document.getElementById(id);
-        if (el) el.checked = !!val;
-    };
+    const set = (id, val) => { const el = $(id); if (el) el.value = val; };
+    const setChk = (id, val) => { const el = $(id); if (el) el.checked = !!val; };
 
     currentMode = cfg.mode ?? 0;
     updateModeButtons(currentMode);
 
     setChk('stab-enabled', cfg.enabled);
 
-    // Прошивка возвращает вложенный JSON: yaw_rate.pid.kp и т.д.
     const pid = cfg.yaw_rate?.pid;
     set('stab-kp', pid?.kp ?? '');
     set('stab-ki', pid?.ki ?? '');
@@ -534,7 +446,6 @@ function applyStabConfig(cfg) {
     set('ow-rate-thresh', cfg.oversteer?.rate_thresh_deg_s ?? '');
     set('ow-throttle-red', cfg.oversteer?.throttle_reduction ?? '');
 
-    // Детский режим: синхронизировать слайдеры с конфигом прошивки
     const km = cfg.kids_mode;
     if (km) {
         const tPct = Math.round((km.throttle_limit ?? 0.5) * 100);
@@ -543,29 +454,23 @@ function applyStabConfig(cfg) {
         kidsSteeringLimit = km.steering_limit ?? 0.7;
         set('kids-throttle-limit', tPct);
         set('kids-steering-limit', sPct);
-        const tEl = document.getElementById('kids-throttle-value');
-        const sEl = document.getElementById('kids-steering-value');
+        const tEl = $('kids-throttle-value');
+        const sEl = $('kids-steering-value');
         if (tEl) tEl.textContent = tPct;
         if (sEl) sEl.textContent = sPct;
     }
 }
 
 function updateModeButtons(mode) {
-    const ids = ['btn-mode-normal', 'btn-mode-sport', 'btn-mode-drift', 'btn-mode-kids', 'btn-mode-direct'];
+    const ids = ['btn-mode-normal','btn-mode-sport','btn-mode-drift','btn-mode-kids','btn-mode-direct'];
     ids.forEach((id, idx) => {
-        const el = document.getElementById(id);
+        const el = $(id);
         if (!el) return;
-        if (idx === mode) {
-            el.classList.add('btn-mode-active');
-        } else {
-            el.classList.remove('btn-mode-active');
-        }
+        el.classList.toggle('active', idx === mode);
     });
 
-    // Direct Law banner
-    const directBanner = document.getElementById('direct-law-banner');
-    const controlPanel = document.getElementById('control-panel');
-
+    const directBanner = $('direct-law-banner');
+    const controlPanel = $('panel-control');
     if (mode === 4) {
         if (directBanner) directBanner.style.display = 'block';
         if (controlPanel) controlPanel.classList.add('direct-active');
@@ -574,49 +479,32 @@ function updateModeButtons(mode) {
         if (controlPanel) controlPanel.classList.remove('direct-active');
     }
 
-    // Kids mode settings visibility (independent of drive mode)
     updateKidsModeUI();
 }
 
 function updateKidsModeUI() {
-    const kidsSettings = document.getElementById('kids-mode-settings');
-    const kidsBanner = document.getElementById('kids-mode-banner');
-    const controlPanel = document.getElementById('control-panel');
-    const toggleBtn = document.getElementById('btn-kids-toggle');
+    const kidsSettings = $('kids-mode-settings');
+    const kidsBanner = $('kids-mode-banner');
+    const controlPanel = $('panel-control');
+    const toggleBtn = $('btn-kids-toggle');
 
-    // Показываем настройки если включён browser-toggle ИЛИ выбран режим Kids (3)
-    const kidsActive = kidsMode || currentMode === 3;
-    if (kidsActive) {
-        if (kidsSettings) kidsSettings.style.display = 'block';
-        if (kidsBanner) kidsBanner.style.display = 'block';
-        if (controlPanel) controlPanel.classList.add('kids-active');
-        if (toggleBtn) toggleBtn.textContent = 'Детский режим: ВКЛ';
-        if (toggleBtn) toggleBtn.classList.add('btn-kids-active');
-    } else {
-        if (kidsSettings) kidsSettings.style.display = 'none';
-        if (kidsBanner) kidsBanner.style.display = 'none';
-        if (controlPanel) controlPanel.classList.remove('kids-active');
-        if (toggleBtn) toggleBtn.textContent = 'Детский режим: ВЫКЛ';
-        if (toggleBtn) toggleBtn.classList.remove('btn-kids-active');
+    const active = kidsMode || currentMode === 3;
+    if (kidsSettings) kidsSettings.style.display = active ? 'block' : 'none';
+    if (kidsBanner) kidsBanner.style.display = active ? 'block' : 'none';
+    if (controlPanel) controlPanel.classList.toggle('kids-active', active);
+    if (toggleBtn) {
+        toggleBtn.textContent = 'Детский режим: ' + (active ? 'ВКЛ' : 'ВЫКЛ');
+        toggleBtn.classList.toggle('btn-kids-active', active);
     }
 }
 
-function loadStabConfig() {
-    wsSend({ type: 'get_stab_config' });
-}
+function loadStabConfig() { wsSend({ type: 'get_stab_config' }); }
 
 function saveStabConfig() {
-    const getF = (id) => {
-        const el = document.getElementById(id);
-        return el ? parseFloat(el.value) : undefined;
-    };
-    const getChk = (id) => {
-        const el = document.getElementById(id);
-        return el ? el.checked : false;
-    };
+    const getF = (id) => { const el = $(id); return el ? parseFloat(el.value) : undefined; };
+    const getChk = (id) => { const el = $(id); return el ? el.checked : false; };
 
-    // Прошивка ожидает вложенный JSON — StabilizationConfigFromJson
-    const cfg = {
+    wsSend({
         type: 'set_stab_config',
         mode: currentMode,
         enabled: getChk('stab-enabled'),
@@ -624,23 +512,12 @@ function saveStabConfig() {
             adaptive_beta_enabled: getChk('adaptive-beta-enabled'),
             adaptive_accel_threshold_g: getF('adaptive-accel-thresh'),
         },
-        yaw_rate: {
-            pid: {
-                kp: getF('stab-kp'),
-                ki: getF('stab-ki'),
-                kd: getF('stab-kd'),
-                max_correction: getF('stab-max-corr'),
-            },
-        },
-        adaptive: {
-            enabled: getChk('adapt-pid-enabled'),
-            speed_ref_ms: getF('adapt-speed-ref'),
-        },
-        pitch_comp: {
-            enabled: getChk('pitch-comp-enabled'),
-            gain: getF('pitch-gain'),
-            max_correction: getF('pitch-max-corr'),
-        },
+        yaw_rate: { pid: {
+            kp: getF('stab-kp'), ki: getF('stab-ki'), kd: getF('stab-kd'),
+            max_correction: getF('stab-max-corr'),
+        }},
+        adaptive: { enabled: getChk('adapt-pid-enabled'), speed_ref_ms: getF('adapt-speed-ref') },
+        pitch_comp: { enabled: getChk('pitch-comp-enabled'), gain: getF('pitch-gain'), max_correction: getF('pitch-max-corr') },
         oversteer: {
             warn_enabled: getChk('oversteer-enabled'),
             slip_thresh_deg: getF('ow-slip-thresh'),
@@ -652,22 +529,21 @@ function saveStabConfig() {
             reverse_limit: kidsThrottleLimit,
             steering_limit: kidsSteeringLimit,
         },
-    };
-    wsSend(cfg);
+    });
 }
 
 function showStabSaveStatus(msg, cssClass) {
-    const statusEl = document.getElementById('stab-save-status');
-    const msgEl = document.getElementById('stab-save-msg');
-    if (!statusEl || !msgEl) return;
-    statusEl.style.display = 'flex';
+    const el = $('stab-save-status');
+    const msgEl = $('stab-save-msg');
+    if (!el || !msgEl) return;
+    el.style.display = 'block';
+    el.className = 'toast ' + cssClass;
     msgEl.textContent = msg;
-    msgEl.className = 'status-value ' + cssClass;
-    setTimeout(() => { statusEl.style.display = 'none'; }, 3000);
+    setTimeout(() => { el.style.display = 'none'; }, 3000);
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// Лог телеметрии (Phase 4.3/4.4)
+// Telemetry log
 // ═══════════════════════════════════════════════════════════════════
 
 let pendingLogFrames = [];
@@ -675,273 +551,214 @@ let pendingLogTotal = 0;
 let pendingLogOffset = 0;
 
 function updateLogInfo(count, capacity) {
-    const countEl = document.getElementById('log-count');
-    const capEl = document.getElementById('log-capacity');
-    if (countEl) countEl.textContent = count ?? '—';
+    const cEl = $('log-count');
+    const capEl = $('log-capacity');
+    if (cEl) cEl.textContent = count ?? '—';
     if (capEl) capEl.textContent = capacity ?? '—';
-}
-
-function getLogInfo() {
-    wsSend({ type: 'get_log_info' });
-}
-
-function clearLog() {
-    wsSend({ type: 'clear_log' });
-}
-
-function downloadLogCsv() {
-    // Запрашиваем последние 500 кадров через get_log_data
-    pendingLogFrames = [];
-    // Сначала узнаём текущее количество кадров
-    wsSend({ type: 'get_log_info' });
-    // Загрузка будет инициирована после получения log_info
-    pendingLogTotal = -1;  // сигнал что нужна выгрузка
 }
 
 function handleLogData(frames) {
     if (!Array.isArray(frames)) return;
     pendingLogFrames = pendingLogFrames.concat(frames);
-
     if (pendingLogTotal > 0) {
         if (pendingLogFrames.length >= pendingLogTotal) {
-            // Все кадры получены
             exportLogCsv(pendingLogFrames);
             pendingLogFrames = [];
             pendingLogTotal = 0;
         } else {
-            // Запросить следующую порцию
-            const nextOffset = pendingLogOffset + pendingLogFrames.length;
-            const remaining = pendingLogTotal - pendingLogFrames.length;
-            wsSend({ type: 'get_log_data', offset: nextOffset, count: Math.min(200, remaining) });
+            const nextOff = pendingLogOffset + pendingLogFrames.length;
+            const rem = pendingLogTotal - pendingLogFrames.length;
+            wsSend({ type: 'get_log_data', offset: nextOff, count: Math.min(200, rem) });
         }
     }
 }
 
 function exportLogCsv(frames) {
-    if (!frames || frames.length === 0) {
-        alert('Нет данных для скачивания');
-        return;
-    }
-    const header = 'ts_ms,ax,ay,az,gx,gy,gz,vx,vy,slip_deg,speed_ms,throttle,steering,pitch_deg,roll_deg,yaw_deg,yaw_rate_dps,oversteer_active\n';
+    if (!frames || !frames.length) { alert('Нет данных'); return; }
+    const hdr = 'ts_ms,ax,ay,az,gx,gy,gz,vx,vy,slip_deg,speed_ms,throttle,steering,pitch_deg,roll_deg,yaw_deg,yaw_rate_dps,oversteer_active\n';
     const rows = frames.map(f =>
         `${f.ts_ms},${f.ax},${f.ay},${f.az},${f.gx},${f.gy},${f.gz},${f.vx},${f.vy},${f.slip_deg},${f.speed_ms},${f.throttle},${f.steering},${f.pitch_deg},${f.roll_deg},${f.yaw_deg},${f.yaw_rate_dps},${f.oversteer_active}`
     ).join('\n');
-    const blob = new Blob([header + rows], { type: 'text/csv' });
+    const blob = new Blob([hdr + rows], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
-    a.download = 'telemetry_log.csv';
-    a.click();
+    a.href = url; a.download = 'telemetry_log.csv'; a.click();
     URL.revokeObjectURL(url);
 }
 
-// Обработчики событий
-throttleSlider.addEventListener('input', (e) => {
-    throttleValueEl.textContent = parseFloat(e.target.value).toFixed(2);
-});
+// ═══════════════════════════════════════════════════════════════════
+// Self-Test
+// ═══════════════════════════════════════════════════════════════════
 
-steeringSlider.addEventListener('input', (e) => {
-    steeringValueEl.textContent = parseFloat(e.target.value).toFixed(2);
-});
+const btnSelfTest = $('btn-self-test');
+const selfTestResultDiv = $('self-test-result');
+const selfTestOverall = $('self-test-overall');
+const selfTestTableBody = document.querySelector('#self-test-table tbody');
+
+function showSelfTestResult(data) {
+    if (btnSelfTest) { btnSelfTest.disabled = false; btnSelfTest.textContent = 'Запустить'; }
+    selfTestResultDiv.style.display = 'block';
+    selfTestOverall.textContent = data.passed ? 'ALL PASS' : 'FAIL';
+    selfTestOverall.className = 'badge ' + (data.passed ? 'badge-on' : 'badge-off');
+
+    selfTestTableBody.innerHTML = '';
+    if (data.tests) {
+        for (const t of data.tests) {
+            const row = document.createElement('tr');
+            row.innerHTML = `<td>${t.name}</td><td class="${t.passed ? 'st-pass' : 'st-fail'}">${t.passed ? 'PASS' : 'FAIL'}</td><td>${t.value || ''}</td>`;
+            selfTestTableBody.appendChild(row);
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Event listeners
+// ═══════════════════════════════════════════════════════════════════
+
+throttleSlider.addEventListener('input', (e) => { throttleValueEl.textContent = parseFloat(e.target.value).toFixed(2); });
+steeringSlider.addEventListener('input', (e) => { steeringValueEl.textContent = parseFloat(e.target.value).toFixed(2); });
 
 btnCenter.addEventListener('click', () => {
-    throttleSlider.value = 0;
-    steeringSlider.value = 0;
-    throttleValueEl.textContent = '0.00';
-    steeringValueEl.textContent = '0.00';
+    throttleSlider.value = 0; steeringSlider.value = 0;
+    throttleValueEl.textContent = '0.00'; steeringValueEl.textContent = '0.00';
 });
+btnStop.addEventListener('click', () => { throttleSlider.value = 0; throttleValueEl.textContent = '0.00'; });
 
-btnStop.addEventListener('click', () => {
-    throttleSlider.value = 0;
-    throttleValueEl.textContent = '0.00';
+// Calibration
+if (btnCalibGyro)  btnCalibGyro.addEventListener('click', () => sendCalibrate('gyro'));
+if (btnCalibFull)  btnCalibFull.addEventListener('click', () => sendCalibrate('full'));
+if (btnCalibForward) btnCalibForward.addEventListener('click', () => sendCalibrate('forward'));
+if (btnCalibAutoFwd) btnCalibAutoFwd.addEventListener('click', () => {
+    let target_accel = 0.1;
+    if (calibFwdAccelSlider) {
+        target_accel = parseInt(calibFwdAccelSlider.value) / 1000;
+    } else if (calibFwdThrottleSlider) {
+        target_accel = parseInt(calibFwdThrottleSlider.value) / 100 * 0.4;
+    }
+    wsSend({ type: 'calibrate_imu', mode: 'auto_forward', target_accel });
 });
-
-// Кнопки калибровки IMU
-if (btnCalibGyro) {
-    btnCalibGyro.addEventListener('click', () => sendCalibrate('gyro'));
-}
-if (btnCalibFull) {
-    btnCalibFull.addEventListener('click', () => sendCalibrate('full'));
-}
-if (btnCalibForward) {
-    btnCalibForward.addEventListener('click', () => sendCalibrate('forward'));
-}
-if (btnCalibAutoForward) {
-    btnCalibAutoForward.addEventListener('click', () => {
-        let target_accel = 0.1;
-        if (calibFwdAccelSlider) {
-            target_accel = parseInt(calibFwdAccelSlider.value) / 1000;  // milli-g → g
-        } else if (calibFwdThrottleSlider) {
-            // Обратная совместимость
-            target_accel = parseInt(calibFwdThrottleSlider.value) / 100 * 0.4;
-        }
-        wsSend({ type: 'calibrate_imu', mode: 'auto_forward', target_accel });
-    });
-}
 if (calibFwdAccelSlider) {
-    calibFwdAccelSlider.addEventListener('input', (e) => {
-        if (calibFwdAccelValueEl) calibFwdAccelValueEl.textContent = e.target.value;
-    });
+    calibFwdAccelSlider.addEventListener('input', (e) => { if (calibFwdAccelValueEl) calibFwdAccelValueEl.textContent = e.target.value; });
 }
 if (calibFwdThrottleSlider) {
-    calibFwdThrottleSlider.addEventListener('input', (e) => {
-        if (calibFwdThrottleValueEl) calibFwdThrottleValueEl.textContent = e.target.value;
-    });
+    calibFwdThrottleSlider.addEventListener('input', (e) => { if (calibFwdThrottleValueEl) calibFwdThrottleValueEl.textContent = e.target.value; });
 }
 
+// Wi-Fi scan list
 if (staScanList) {
     staScanList.addEventListener('change', async () => {
         const ssid = (staScanList.value || '').trim();
         if (!ssid) return;
+        if (staSsidInput) staSsidInput.value = ssid;
 
-        if (staSsidInput) {
-            staSsidInput.value = ssid;
-        }
-
-        const opt = staScanList.selectedOptions && staScanList.selectedOptions[0];
-        const isOpen = !!opt && opt.dataset && opt.dataset.open === '1';
+        const opt = staScanList.selectedOptions?.[0];
+        const isOpen = opt?.dataset?.open === '1';
 
         if (isOpen) {
-            // Открытая сеть: подключаемся сразу (без пароля)
             if (staPassInput) staPassInput.value = '';
-            try {
-                await fetch('/api/wifi/sta/connect', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ssid, password: '', save: true })
-                });
-            } catch (e) {
-                // ignore
-            }
+            try { await fetch('/api/wifi/sta/connect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ssid, password: '', save: true }) }); } catch (e) {}
             setTimeout(fetchWifiStatus, 300);
             return;
         }
 
-        // Защищённая сеть: спрашиваем пароль и подключаемся
         const defaultPass = staPassInput ? staPassInput.value : '';
-        const pass = prompt(`Пароль для сети "${ssid}"`, defaultPass);
-        if (pass === null) return; // cancel
+        const pass = prompt(`Пароль для "${ssid}"`, defaultPass);
+        if (pass === null) return;
         if (staPassInput) staPassInput.value = pass;
-
-        try {
-            await fetch('/api/wifi/sta/connect', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ssid, password: pass, save: true })
-            });
-        } catch (e) {
-            // ignore
-        }
+        try { await fetch('/api/wifi/sta/connect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ssid, password: pass, save: true }) }); } catch (e) {}
         setTimeout(fetchWifiStatus, 300);
     });
 }
 
-if (btnStaScan) {
-    btnStaScan.addEventListener('click', async () => {
-        await scanWifiNetworks();
-    });
-}
+if (btnStaScan) btnStaScan.addEventListener('click', () => scanWifiNetworks());
 
 btnStaConnect.addEventListener('click', async () => {
     const ssid = (staSsidInput?.value || '').trim();
     const password = staPassInput?.value || '';
     if (!ssid) return;
-
-    try {
-        await fetch('/api/wifi/sta/connect', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ssid, password, save: true })
-        });
-    } catch (e) {
-        // ignore
-    }
+    try { await fetch('/api/wifi/sta/connect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ssid, password, save: true }) }); } catch (e) {}
     setTimeout(fetchWifiStatus, 300);
 });
 
 btnStaDisconnect.addEventListener('click', async () => {
-    try {
-        await fetch('/api/wifi/sta/disconnect', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ forget: false })
-        });
-    } catch (e) {
-        // ignore
-    }
+    try { await fetch('/api/wifi/sta/disconnect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ forget: false }) }); } catch (e) {}
     setTimeout(fetchWifiStatus, 300);
 });
 
 btnStaForget.addEventListener('click', async () => {
-    try {
-        await fetch('/api/wifi/sta/disconnect', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ forget: true })
-        });
-    } catch (e) {
-        // ignore
-    }
+    try { await fetch('/api/wifi/sta/disconnect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ forget: true }) }); } catch (e) {}
     if (staSsidInput) staSsidInput.value = '';
     if (staPassInput) staPassInput.value = '';
     setTimeout(fetchWifiStatus, 300);
 });
 
-// Кнопки стабилизации (Phase 4.4)
-const btnLoadStab = document.getElementById('btn-load-stab');
-const btnSaveStab = document.getElementById('btn-save-stab');
-const btnModeNormal = document.getElementById('btn-mode-normal');
-const btnModeSport = document.getElementById('btn-mode-sport');
-const btnModeDrift = document.getElementById('btn-mode-drift');
-const btnModeKids = document.getElementById('btn-mode-kids');
-const btnModeDirect = document.getElementById('btn-mode-direct');
-const btnKidsToggle = document.getElementById('btn-kids-toggle');
-const btnLogInfo = document.getElementById('btn-log-info');
-const btnLogClear = document.getElementById('btn-log-clear');
-const btnLogCsv = document.getElementById('btn-log-csv');
-
+// Stabilization buttons
+const btnLoadStab = $('btn-load-stab');
+const btnSaveStab = $('btn-save-stab');
 if (btnLoadStab) btnLoadStab.addEventListener('click', loadStabConfig);
 if (btnSaveStab) btnSaveStab.addEventListener('click', saveStabConfig);
-const kidsThrottleSlider = document.getElementById('kids-throttle-limit');
-const kidsSteeringSlider = document.getElementById('kids-steering-limit');
-const kidsThrottleValueEl = document.getElementById('kids-throttle-value');
-const kidsSteeringValueEl = document.getElementById('kids-steering-value');
 
-if (btnModeNormal) btnModeNormal.addEventListener('click', () => { currentMode = 0; updateModeButtons(0); wsSend({ type: 'set_stab_config', mode: 0 }); });
-if (btnModeSport) btnModeSport.addEventListener('click', () => { currentMode = 1; updateModeButtons(1); wsSend({ type: 'set_stab_config', mode: 1 }); });
-if (btnModeDrift) btnModeDrift.addEventListener('click', () => { currentMode = 2; updateModeButtons(2); wsSend({ type: 'set_stab_config', mode: 2 }); });
-if (btnModeKids) btnModeKids.addEventListener('click', () => { currentMode = 3; updateModeButtons(3); wsSend({ type: 'set_stab_config', mode: 3 }); });
-if (btnModeDirect) btnModeDirect.addEventListener('click', () => { currentMode = 4; updateModeButtons(4); wsSend({ type: 'set_stab_config', mode: 4 }); });
+const kidsThrottleSliderEl = $('kids-throttle-limit');
+const kidsSteeringSliderEl = $('kids-steering-limit');
+const kidsThrottleValueEl = $('kids-throttle-value');
+const kidsSteeringValueEl = $('kids-steering-value');
+
+const btnModeNormal = $('btn-mode-normal');
+const btnModeSport  = $('btn-mode-sport');
+const btnModeDrift  = $('btn-mode-drift');
+const btnModeKids   = $('btn-mode-kids');
+const btnModeDirect = $('btn-mode-direct');
+const btnKidsToggle = $('btn-kids-toggle');
+
+const setMode = (m) => { currentMode = m; updateModeButtons(m); wsSend({ type: 'set_stab_config', mode: m }); };
+if (btnModeNormal) btnModeNormal.addEventListener('click', () => setMode(0));
+if (btnModeSport)  btnModeSport.addEventListener('click',  () => setMode(1));
+if (btnModeDrift)  btnModeDrift.addEventListener('click',  () => setMode(2));
+if (btnModeKids)   btnModeKids.addEventListener('click',   () => setMode(3));
+if (btnModeDirect) btnModeDirect.addEventListener('click', () => setMode(4));
+
 if (btnKidsToggle) btnKidsToggle.addEventListener('click', () => {
     kidsMode = !kidsMode;
     updateKidsModeUI();
     wsSend({ type: 'toggle_kids_mode', active: kidsMode });
 });
 
-if (kidsThrottleSlider) {
-    kidsThrottleSlider.addEventListener('input', (e) => {
-        const pct = parseInt(e.target.value);
-        kidsThrottleLimit = pct / 100;
-        if (kidsThrottleValueEl) kidsThrottleValueEl.textContent = pct;
-    });
-}
-if (kidsSteeringSlider) {
-    kidsSteeringSlider.addEventListener('input', (e) => {
-        const pct = parseInt(e.target.value);
-        kidsSteeringLimit = pct / 100;
-        if (kidsSteeringValueEl) kidsSteeringValueEl.textContent = pct;
-    });
-}
-if (btnLogInfo) btnLogInfo.addEventListener('click', getLogInfo);
-if (btnLogClear) btnLogClear.addEventListener('click', clearLog);
-if (btnLogCsv) btnLogCsv.addEventListener('click', () => {
-    // Сначала запрашиваем количество, затем скачиваем последние 500 кадров
+if (kidsThrottleSliderEl) kidsThrottleSliderEl.addEventListener('input', (e) => {
+    const pct = parseInt(e.target.value);
+    kidsThrottleLimit = pct / 100;
+    if (kidsThrottleValueEl) kidsThrottleValueEl.textContent = pct;
+});
+if (kidsSteeringSliderEl) kidsSteeringSliderEl.addEventListener('input', (e) => {
+    const pct = parseInt(e.target.value);
+    kidsSteeringLimit = pct / 100;
+    if (kidsSteeringValueEl) kidsSteeringValueEl.textContent = pct;
+});
+
+// Log buttons
+const btnLogInfo  = $('btn-log-info');
+const btnLogClear = $('btn-log-clear');
+const btnLogCsv   = $('btn-log-csv');
+if (btnLogInfo)  btnLogInfo.addEventListener('click', () => wsSend({ type: 'get_log_info' }));
+if (btnLogClear) btnLogClear.addEventListener('click', () => wsSend({ type: 'clear_log' }));
+if (btnLogCsv)   btnLogCsv.addEventListener('click', () => {
     pendingLogFrames = [];
-    pendingLogTotal = -2;  // маркер "нужен CSV после log_info"
+    pendingLogTotal = -2;
     wsSend({ type: 'get_log_info' });
 });
 
-// Инициализация при загрузке страницы
+// Self-test
+if (btnSelfTest) btnSelfTest.addEventListener('click', () => {
+    btnSelfTest.disabled = true;
+    btnSelfTest.textContent = 'Выполняется...';
+    selfTestResultDiv.style.display = 'none';
+    wsSend({ type: 'run_self_test' });
+    setTimeout(() => { btnSelfTest.disabled = false; btnSelfTest.textContent = 'Запустить'; }, 5000);
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// Init
+// ═══════════════════════════════════════════════════════════════════
+
 window.addEventListener('load', () => {
     connectWebSocket();
     fetchWifiStatus();
@@ -949,72 +766,8 @@ window.addEventListener('load', () => {
     wifiStatusInterval = setInterval(fetchWifiStatus, 1000);
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Self-Test
-// ═══════════════════════════════════════════════════════════════════════════
-
-const btnSelfTest = document.getElementById('btn-self-test');
-const selfTestResultDiv = document.getElementById('self-test-result');
-const selfTestOverall = document.getElementById('self-test-overall');
-const selfTestTableBody = document.querySelector('#self-test-table tbody');
-
-if (btnSelfTest) {
-    btnSelfTest.addEventListener('click', () => {
-        btnSelfTest.disabled = true;
-        btnSelfTest.textContent = 'Выполняется...';
-        selfTestResultDiv.style.display = 'none';
-        wsSend({ type: 'run_self_test' });
-        // Timeout: re-enable button after 5 sec if no response
-        setTimeout(() => {
-            btnSelfTest.disabled = false;
-            btnSelfTest.textContent = 'Запустить Self-Test';
-        }, 5000);
-    });
-}
-
-function showSelfTestResult(data) {
-    if (btnSelfTest) {
-        btnSelfTest.disabled = false;
-        btnSelfTest.textContent = 'Запустить Self-Test';
-    }
-    selfTestResultDiv.style.display = 'block';
-
-    if (data.passed) {
-        selfTestOverall.textContent = 'ALL PASS';
-        selfTestOverall.className = 'status-value connected';
-    } else {
-        selfTestOverall.textContent = 'FAIL';
-        selfTestOverall.className = 'status-value disconnected';
-    }
-
-    selfTestTableBody.innerHTML = '';
-    if (data.tests) {
-        for (const t of data.tests) {
-            const row = document.createElement('tr');
-            const nameCell = document.createElement('td');
-            nameCell.textContent = t.name;
-            const statusCell = document.createElement('td');
-            statusCell.textContent = t.passed ? 'PASS' : 'FAIL';
-            statusCell.className = t.passed ? 'self-test-pass' : 'self-test-fail';
-            const valueCell = document.createElement('td');
-            valueCell.textContent = t.value || '';
-            row.appendChild(nameCell);
-            row.appendChild(statusCell);
-            row.appendChild(valueCell);
-            selfTestTableBody.appendChild(row);
-        }
-    }
-}
-
-// Отключение при закрытии страницы
 window.addEventListener('beforeunload', () => {
     stopCommandSending();
-    if (wifiStatusInterval) {
-        clearInterval(wifiStatusInterval);
-        wifiStatusInterval = null;
-    }
-    if (ws) {
-        ws.close();
-    }
+    if (wifiStatusInterval) { clearInterval(wifiStatusInterval); wifiStatusInterval = null; }
+    if (ws) ws.close();
 });
-
