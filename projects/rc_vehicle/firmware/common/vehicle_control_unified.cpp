@@ -121,10 +121,17 @@ void VehicleControlUnified::ControlTaskLoop() {
     if (calib_mgr_->IsAutoForwardActive() && !rc_active_now) {
       const float dt_sec = static_cast<float>(dt_ms) * 0.001f;
       float fwd_accel = 0.0f;
+      float accel_mag = 1.0f;
+      float gyro_z = 0.0f;
       if (imu_handler_ && imu_handler_->IsEnabled()) {
-        fwd_accel = imu_calib_.GetForwardAccel(imu_handler_->GetData());
+        const auto& imu = imu_handler_->GetData();
+        fwd_accel = imu_calib_.GetForwardAccel(imu);
+        accel_mag = std::sqrt(imu.ax * imu.ax + imu.ay * imu.ay +
+                              imu.az * imu.az);
+        gyro_z = imu_handler_->GetFilteredGyroZ();
       }
-      commanded_throttle = calib_mgr_->UpdateAutoForward(fwd_accel, dt_sec);
+      commanded_throttle = calib_mgr_->UpdateAutoForward(
+          fwd_accel, accel_mag, gyro_z, dt_sec);
       commanded_steering = 0.0f;
     }
 

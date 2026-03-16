@@ -43,6 +43,9 @@ bool CalibrationManager::StartAutoForwardCalibration(float target_accel_g) {
   accel_pid_.Reset();
 
   auto_forward_active_ = true;
+  auto_phase_ = AutoPhase::Accelerate;
+  phase_elapsed_sec_ = 0.0f;
+  cruise_throttle_ = 0.0f;
   char msg[80];
   snprintf(msg, sizeof(msg),
            "Auto-forward calib started (PID, target=%.3f g)", target_accel_g_);
@@ -51,19 +54,69 @@ bool CalibrationManager::StartAutoForwardCalibration(float target_accel_g) {
 }
 
 float CalibrationManager::UpdateAutoForward(float current_accel_g,
+                                            float accel_magnitude,
+                                            float gyro_z_dps,
                                             float dt_sec) {
   if (!auto_forward_active_ || dt_sec <= 0.0f) {
     return 0.0f;
   }
-  float error = target_accel_g_ - current_accel_g;
-  float throttle = accel_pid_.Step(error, dt_sec);
-  // Только положительный throttle (едем вперёд)
-  return std::clamp(throttle, 0.0f, 0.5f);
+
+  phase_elapsed_sec_ += dt_sec;
+
+  switch (auto_phase_) {
+    case AutoPhase::Accelerate: {
+      float error = target_accel_g_ - current_accel_g;
+      float throttle = accel_pid_.Step(error, dt_sec);
+      throttle = std::clamp(throttle, 0.0f, 0.5f);
+
+      if (phase_elapsed_sec_ >= kAccelDurationSec) {
+        // Переход в круиз: фиксируем текущий throttle
+        cruise_throttle_ = throttle;
+        auto_phase_ = AutoPhase::Cruise;
+        phase_elapsed_sec_ = 0.0f;
+        platform_.Log(LogLevel::Info,
+                      "Auto-forward: cruise phase (hold throttle)");
+      }
+      return throttle;
+    }
+
+    case AutoPhase::Cruise: {
+      if (phase_elapsed_sec_ >= kCruiseDurationSec) {
+        auto_phase_ = AutoPhase::Brake;
+        phase_elapsed_sec_ = 0.0f;
+        accel_pid_.Reset();
+        platform_.Log(LogLevel::Info, "Auto-forward: braking");
+      }
+      // Постоянный газ — поддерживаем скорость
+      return cruise_throttle_;
+    }
+
+    case AutoPhase::Brake: {
+      // Детекция остановки: |a| ≈ 1g и |gyro_z| мал
+      bool stopped = (std::abs(accel_magnitude - 1.0f) < kStopAccelThresh) &&
+                     (std::abs(gyro_z_dps) < kStopGyroThresh);
+      bool timeout = phase_elapsed_sec_ >= kBrakeTimeoutSec;
+
+      if (stopped || timeout) {
+        platform_.Log(LogLevel::Info,
+                      stopped ? "Auto-forward: stopped (ZUPT)"
+                              : "Auto-forward: brake timeout");
+        StopAutoForward();
+        return 0.0f;
+      }
+      // Торможение: throttle = 0 (ESC neutral / coast)
+      return 0.0f;
+    }
+
+    default:
+      return 0.0f;
+  }
 }
 
 void CalibrationManager::StopAutoForward() {
   if (auto_forward_active_) {
     auto_forward_active_ = false;
+    auto_phase_ = AutoPhase::Idle;
     accel_pid_.Reset();
     platform_.Log(LogLevel::Info, "Auto-forward calibration stopped");
   }

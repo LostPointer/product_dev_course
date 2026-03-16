@@ -75,16 +75,18 @@ class CalibrationManager {
   }
 
   /**
-   * @brief Шаг PID-регулятора авто-движения.
+   * @brief Шаг авто-движения (state machine: разгон → круиз → торможение).
    *
-   * Вызывается из control loop каждый тик. Возвращает throttle,
-   * подобранный PID для поддержания целевого ускорения.
+   * Вызывается из control loop каждый тик. Возвращает throttle.
    *
    * @param current_accel_g Текущее продольное ускорение (g)
+   * @param accel_magnitude Модуль полного ускорения (g), для детекции остановки
+   * @param gyro_z_dps Фильтрованный gyro Z (dps), для детекции остановки
    * @param dt_sec Шаг времени (с)
-   * @return throttle [0..0.5]
+   * @return throttle [-0.1..0.5]
    */
-  float UpdateAutoForward(float current_accel_g, float dt_sec);
+  float UpdateAutoForward(float current_accel_g, float accel_magnitude,
+                          float gyro_z_dps, float dt_sec);
 
   /**
    * @brief Задать направление «вперёд» единичным вектором в СК датчика
@@ -141,9 +143,20 @@ class CalibrationManager {
   CalibStatus prev_calib_status_{CalibStatus::Idle};
 
   // Авто-движение вперёд для Forward-калибровки (PID по ускорению)
+  enum class AutoPhase { Idle, Accelerate, Cruise, Brake };
   bool auto_forward_active_{false};
+  AutoPhase auto_phase_{AutoPhase::Idle};
   float target_accel_g_{0.1f};
+  float phase_elapsed_sec_{0.0f};
+  float cruise_throttle_{0.0f};  // throttle зафиксированный в конце разгона
   PidController accel_pid_;
+
+  static constexpr float kAccelDurationSec = 1.5f;
+  static constexpr float kCruiseDurationSec = 1.0f;
+  static constexpr float kBrakeTimeoutSec = 3.0f;
+  // ZUPT-пороги для детекции остановки
+  static constexpr float kStopAccelThresh = 0.05f;  // |a| - 1g| < 0.05g
+  static constexpr float kStopGyroThresh = 3.0f;    // |gyro_z| < 3 dps
 };
 
 }  // namespace rc_vehicle
