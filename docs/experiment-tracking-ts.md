@@ -96,6 +96,7 @@
 - ✅ Создание проектов, добавление участников с ролями `owner`, `editor`, `viewer`.
 - ✅ **Многоуровневый доступ к проектам:** при `GET /projects` пользователь получает все проекты, где он участник через `project_members`.
 - ❌ Поиск и фильтрация проектов через UI (есть список, но без поиска/фильтра).
+- ❌ **Управление командой проекта с suggest:** при добавлении участника в проект через UI реализован **suggest** (подсказки при вводе) с отображением **ников пользователей** (username), а не UUID. API endpoint для поиска пользователей: `GET /api/v1/users/search?q=<query>`.
 - ✅ JWT авторизация (access + refresh токены, PyJWT, bcrypt).
 - ❌ Ротация refresh токенов с черным списком при отзыве (logout — stub).
 - ✅ Auth Proxy (BFF) на **Fastify** (TypeScript): `/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/me`; прокси `/api/*`, `/projects/*`, `/api/v1/telemetry/*`; access/refresh в HttpOnly Secure SameSite=Lax куках.
