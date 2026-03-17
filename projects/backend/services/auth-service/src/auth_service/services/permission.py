@@ -6,7 +6,7 @@ from uuid import UUID
 from datetime import datetime
 
 import structlog
-from asyncpg.exceptions import UniqueViolationError
+from asyncpg.exceptions import UniqueViolationError  # type: ignore[import-untyped]
 
 from auth_service.core.exceptions import ConflictError, ForbiddenError, NotFoundError
 from auth_service.domain.dto import EffectivePermissionsResponse

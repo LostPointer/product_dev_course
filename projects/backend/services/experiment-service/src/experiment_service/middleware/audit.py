@@ -4,10 +4,13 @@ Maps mutating HTTP routes to audit actions and sends them to auth-service.
 """
 from __future__ import annotations
 
+from typing import Awaitable, Callable
 from uuid import UUID
 
 import structlog
 from aiohttp import web
+from aiohttp.typedefs import Handler
+from aiohttp.web_response import StreamResponse
 
 from experiment_service.services.audit_client import AuditClient
 

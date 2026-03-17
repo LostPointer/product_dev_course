@@ -85,7 +85,7 @@ async def stop_script_runner(app: web.Application) -> None:
 
 def create_app() -> web.Application:
     app, cors = create_base_app(settings)
-    app.middlewares.append(audit_middleware)  # type: ignore[attr-defined]
+    app.middlewares.append(audit_middleware)  # type: ignore[arg-type]
 
     app.add_routes(health_routes)
     add_openapi_spec(app, OPENAPI_PATH)
