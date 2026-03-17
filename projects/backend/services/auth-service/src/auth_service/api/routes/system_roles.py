@@ -14,6 +14,7 @@ from auth_service.domain.dto import (
     UpdateRoleRequest,
 )
 from auth_service.domain.models import ScopeType
+from auth_service.repositories.audit import AuditRepository
 from auth_service.repositories.permissions import PermissionRepository
 from auth_service.repositories.roles import RoleRepository
 from auth_service.repositories.user_roles import UserRoleRepository
@@ -29,6 +30,7 @@ async def _get_permission_service(request: web.Request) -> PermissionService:
         PermissionRepository(pool),
         RoleRepository(pool),
         UserRoleRepository(pool),
+        audit_repo=AuditRepository(pool),
     )
 
 

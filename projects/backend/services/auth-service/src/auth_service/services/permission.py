@@ -5,6 +5,7 @@ from uuid import UUID
 
 from datetime import datetime
 
+import structlog
 from asyncpg.exceptions import UniqueViolationError
 
 from auth_service.core.exceptions import ConflictError, ForbiddenError, NotFoundError
@@ -12,14 +13,18 @@ from auth_service.domain.dto import EffectivePermissionsResponse
 from auth_service.domain.models import (
     PROJECT_OWNER_ROLE_ID,
     SUPERADMIN_ROLE_ID,
+    AuditAction,
     Role,
     ScopeType,
     UserProjectRole,
     UserSystemRole,
 )
+from auth_service.repositories.audit import AuditRepository
 from auth_service.repositories.permissions import PermissionRepository
 from auth_service.repositories.roles import RoleRepository
 from auth_service.repositories.user_roles import UserRoleRepository
+
+logger = structlog.get_logger(__name__)
 
 
 class PermissionService:
@@ -30,10 +35,42 @@ class PermissionService:
         permission_repo: PermissionRepository,
         role_repo: RoleRepository,
         user_role_repo: UserRoleRepository,
+        audit_repo: AuditRepository | None = None,
     ) -> None:
         self._perm_repo = permission_repo
         self._role_repo = role_repo
         self._user_role_repo = user_role_repo
+        self._audit_repo = audit_repo
+
+    async def _audit(
+        self,
+        actor_id: UUID,
+        action: str,
+        scope_type: str = ScopeType.SYSTEM,
+        *,
+        scope_id: UUID | None = None,
+        target_type: str | None = None,
+        target_id: str | None = None,
+        details: dict | None = None,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> None:
+        if self._audit_repo is None:
+            return
+        try:
+            await self._audit_repo.log(
+                actor_id=actor_id,
+                action=action,
+                scope_type=scope_type,
+                scope_id=scope_id,
+                target_type=target_type,
+                target_id=target_id,
+                details=details,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+        except Exception as e:
+            logger.warning("Audit log write failed", action=action, error=str(e))
 
     # ── Permission checks ──────────────────────────────────────────────
 
@@ -127,6 +164,8 @@ class PermissionService:
         target_user_id: UUID,
         role_id: UUID,
         expires_at: datetime | None = None,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
     ) -> UserSystemRole:
         """Grant a system role. Grantor must have 'roles.assign'."""
         await self.ensure_permission(grantor_id, "roles.assign")
@@ -135,12 +174,24 @@ class PermissionService:
         if role.scope_type != ScopeType.SYSTEM:
             raise ForbiddenError("Cannot assign a project role as a system role")
 
-        return await self._user_role_repo.grant_system_role(
+        assignment = await self._user_role_repo.grant_system_role(
             target_user_id, role_id, grantor_id, expires_at,
         )
+        await self._audit(
+            grantor_id, AuditAction.ROLE_GRANT,
+            target_type="user", target_id=str(target_user_id),
+            details={"role_id": str(role_id), "role_name": role.name, "scope": "system"},
+            ip_address=ip_address, user_agent=user_agent,
+        )
+        return assignment
 
     async def revoke_system_role(
-        self, grantor_id: UUID, target_user_id: UUID, role_id: UUID,
+        self,
+        grantor_id: UUID,
+        target_user_id: UUID,
+        role_id: UUID,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
     ) -> bool:
         """Revoke a system role. Protects last superadmin."""
         await self.ensure_permission(grantor_id, "roles.assign")
@@ -151,7 +202,14 @@ class PermissionService:
             if count <= 1:
                 raise ConflictError("Cannot revoke the last superadmin role")
 
-        return await self._user_role_repo.revoke_system_role(target_user_id, role_id)
+        result = await self._user_role_repo.revoke_system_role(target_user_id, role_id)
+        await self._audit(
+            grantor_id, AuditAction.ROLE_REVOKE,
+            target_type="user", target_id=str(target_user_id),
+            details={"role_id": str(role_id), "role_name": role.name, "scope": "system"},
+            ip_address=ip_address, user_agent=user_agent,
+        )
+        return result
 
     # ── Project role assignments ───────────────────────────────────────
 
@@ -161,6 +219,8 @@ class PermissionService:
         project_id: UUID,
         target_user_id: UUID,
         role_id: UUID,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
     ) -> UserProjectRole:
         """Grant a project role. Grantor must have 'project.members.change_role' in the project."""
         await self.ensure_permission(grantor_id, "project.members.change_role", project_id)
@@ -169,9 +229,17 @@ class PermissionService:
         if role.scope_type != ScopeType.PROJECT:
             raise ForbiddenError("Cannot assign a system role as a project role")
 
-        return await self._user_role_repo.grant_project_role(
+        assignment = await self._user_role_repo.grant_project_role(
             target_user_id, project_id, role_id, grantor_id,
         )
+        await self._audit(
+            grantor_id, AuditAction.ROLE_GRANT,
+            scope_type=ScopeType.PROJECT, scope_id=project_id,
+            target_type="user", target_id=str(target_user_id),
+            details={"role_id": str(role_id), "role_name": role.name, "scope": "project"},
+            ip_address=ip_address, user_agent=user_agent,
+        )
+        return assignment
 
     async def revoke_project_role(
         self,
@@ -179,21 +247,30 @@ class PermissionService:
         project_id: UUID,
         target_user_id: UUID,
         role_id: UUID,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
     ) -> bool:
         """Revoke a project role. Cannot remove the sole owner."""
         await self.ensure_permission(grantor_id, "project.members.change_role", project_id)
 
         if role_id == PROJECT_OWNER_ROLE_ID:
-            # Count owners by role_id, not by role name
             owner_count = await self._user_role_repo.count_project_role(
                 project_id, PROJECT_OWNER_ROLE_ID,
             )
             if owner_count <= 1:
                 raise ConflictError("Cannot revoke the last owner of a project")
 
-        return await self._user_role_repo.revoke_project_role(
+        result = await self._user_role_repo.revoke_project_role(
             target_user_id, project_id, role_id,
         )
+        await self._audit(
+            grantor_id, AuditAction.ROLE_REVOKE,
+            scope_type=ScopeType.PROJECT, scope_id=project_id,
+            target_type="user", target_id=str(target_user_id),
+            details={"role_id": str(role_id), "scope": "project"},
+            ip_address=ip_address, user_agent=user_agent,
+        )
+        return result
 
     async def validate_project_role(self, role_id: UUID) -> None:
         """Validate that a role is project-scoped. Raises ForbiddenError otherwise."""
@@ -243,6 +320,13 @@ class PermissionService:
         except UniqueViolationError:
             raise ConflictError(f"Role with name '{name}' already exists")
         await self._role_repo.set_permissions(role.id, permissions)
+        await self._audit(
+            creator_id, AuditAction.ROLE_CREATE,
+            scope_type=scope_type.value if project_id is None else ScopeType.PROJECT,
+            scope_id=project_id,
+            target_type="role", target_id=str(role.id),
+            details={"name": name, "permissions": permissions},
+        )
         return role
 
     async def update_custom_role(
@@ -277,7 +361,15 @@ class PermissionService:
                 )
             await self._role_repo.set_permissions(role_id, permissions)
 
-        return await self._role_repo.update(role_id, name=name, description=description)
+        updated = await self._role_repo.update(role_id, name=name, description=description)
+        await self._audit(
+            updater_id, AuditAction.ROLE_UPDATE,
+            scope_type=role.scope_type.value,
+            scope_id=role.project_id,
+            target_type="role", target_id=str(role_id),
+            details={"name": name, "permissions": permissions},
+        )
+        return updated
 
     async def delete_custom_role(self, deleter_id: UUID, role_id: UUID) -> None:
         """Delete a custom role. Cannot delete built-in roles."""
@@ -291,3 +383,10 @@ class PermissionService:
             await self.ensure_permission(deleter_id, "project.roles.manage", role.project_id)
 
         await self._role_repo.delete(role_id)
+        await self._audit(
+            deleter_id, AuditAction.ROLE_DELETE,
+            scope_type=role.scope_type.value,
+            scope_id=role.project_id,
+            target_type="role", target_id=str(role_id),
+            details={"name": role.name},
+        )

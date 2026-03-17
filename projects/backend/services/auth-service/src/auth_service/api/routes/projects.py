@@ -6,6 +6,7 @@ from uuid import UUID
 
 from aiohttp import web
 
+from auth_service.api.utils import extract_client_ip, extract_user_agent
 from auth_service.core.exceptions import AuthError, ForbiddenError, NotFoundError, handle_auth_error
 from backend_common.db.pool import get_pool_service as get_pool
 from auth_service.domain.dto import (
@@ -16,6 +17,7 @@ from auth_service.domain.dto import (
     ProjectResponse,
     ProjectUpdateRequest,
 )
+from auth_service.repositories.audit import AuditRepository
 from auth_service.repositories.permissions import PermissionRepository
 from auth_service.repositories.projects import ProjectRepository
 from auth_service.repositories.roles import RoleRepository
@@ -34,12 +36,14 @@ async def get_project_service(request: web.Request) -> ProjectService:
     project_repo = ProjectRepository(pool)
     user_repo = UserRepository(pool)
     user_role_repo = UserRoleRepository(pool)
+    audit_repo = AuditRepository(pool)
     perm_svc = PermissionService(
         PermissionRepository(pool),
         RoleRepository(pool),
         user_role_repo,
+        audit_repo=audit_repo,
     )
-    return ProjectService(project_repo, user_repo, user_role_repo, perm_svc)
+    return ProjectService(project_repo, user_repo, user_role_repo, perm_svc, audit_repo=audit_repo)
 
 
 async def get_user_id_from_token(request: web.Request) -> UUID:
@@ -95,6 +99,8 @@ async def create_project(request: web.Request) -> web.Response:
             name=req.name,
             description=req.description,
             owner_id=user_id,
+            ip_address=extract_client_ip(request),
+            user_agent=extract_user_agent(request),
         )
         return web.json_response(
             ProjectResponse.from_project(project).model_dump(),
@@ -218,7 +224,11 @@ async def delete_project(request: web.Request) -> web.Response:
 
     try:
         service = await get_project_service(request)
-        await service.delete_project(project_id, user_id)
+        await service.delete_project(
+            project_id, user_id,
+            ip_address=extract_client_ip(request),
+            user_agent=extract_user_agent(request),
+        )
         return web.json_response({"ok": True}, status=200)
     except NotFoundError as e:
         return web.json_response({"error": str(e)}, status=404)
@@ -303,6 +313,8 @@ async def add_member(request: web.Request) -> web.Response:
             requester_id=user_id,
             new_user_id=new_user_id,
             role_id=role_id,
+            ip_address=extract_client_ip(request),
+            user_agent=extract_user_agent(request),
         )
         return web.json_response(
             {
@@ -356,6 +368,8 @@ async def remove_member(request: web.Request) -> web.Response:
             requester_id=user_id,
             member_user_id=member_user_id,
             role_id=role_id,
+            ip_address=extract_client_ip(request),
+            user_agent=extract_user_agent(request),
         )
         return web.json_response({"ok": True}, status=200)
     except NotFoundError as e:

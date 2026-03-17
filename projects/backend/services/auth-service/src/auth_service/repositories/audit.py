@@ -1,6 +1,7 @@
 """Audit log repository."""
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -34,7 +35,7 @@ class AuditRepository(BaseRepository):
             "RETURNING id, timestamp, actor_id, action, scope_type, scope_id, "
             "target_type, target_id, details, ip_address, user_agent",
             actor_id, action, scope_type, scope_id, target_type, target_id,
-            details or {}, ip_address, user_agent,
+            json.dumps(details or {}), ip_address, user_agent,
         )
         assert row is not None
         return AuditEntry.from_row(dict(row))

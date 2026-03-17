@@ -10,6 +10,7 @@ from backend_common.aiohttp_app import add_cors_to_routes, add_healthcheck, crea
 from backend_common.db.migrations import create_migration_runner
 from backend_common.logging_config import configure_logging
 
+from auth_service.api.routes.audit import setup_routes as setup_audit_routes
 from auth_service.api.routes.auth import setup_routes as setup_auth_routes
 from auth_service.api.routes.permissions import setup_routes as setup_permissions_routes
 from auth_service.api.routes.projects import setup_routes as setup_project_routes
@@ -51,6 +52,7 @@ def create_app() -> web.Application:
     setup_permissions_routes(app)
     setup_system_roles_routes(app)
     setup_project_roles_routes(app)
+    setup_audit_routes(app)
 
     # Setup database pool and migrations
     app.on_startup.append(init_pool)

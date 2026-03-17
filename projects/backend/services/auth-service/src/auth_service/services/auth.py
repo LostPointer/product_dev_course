@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import secrets
+import structlog
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -15,7 +16,8 @@ from auth_service.core.exceptions import (
     UserNotFoundError,
 )
 from auth_service.domain.dto import AuthTokensResponse, UserResponse
-from auth_service.domain.models import InviteToken, User
+from auth_service.domain.models import AuditAction, InviteToken, ScopeType, User
+from auth_service.repositories.audit import AuditRepository
 from auth_service.repositories.invites import InviteRepository
 from auth_service.repositories.password_reset import PasswordResetRepository
 from auth_service.repositories.revoked_tokens import RevokedTokenRepository
@@ -29,6 +31,8 @@ from auth_service.services.jwt import (
 from auth_service.services.password import hash_password, verify_password
 from auth_service.services.permission import PermissionService
 
+logger = structlog.get_logger(__name__)
+
 
 class AuthService:
     """Service for authentication operations."""
@@ -41,6 +45,7 @@ class AuthService:
         permission_service: PermissionService,
         invite_repo: InviteRepository | None = None,
         registration_mode: str = "open",
+        audit_repo: AuditRepository | None = None,
     ):
         self._user_repo = user_repository
         self._revoked_repo = revoked_repo
@@ -48,6 +53,35 @@ class AuthService:
         self._perm_svc = permission_service
         self._invite_repo = invite_repo
         self._registration_mode = registration_mode
+        self._audit_repo = audit_repo
+
+    async def _audit(
+        self,
+        actor_id: UUID,
+        action: str,
+        *,
+        target_type: str | None = None,
+        target_id: str | None = None,
+        details: dict | None = None,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> None:
+        """Write audit entry, silently ignoring errors."""
+        if self._audit_repo is None:
+            return
+        try:
+            await self._audit_repo.log(
+                actor_id=actor_id,
+                action=action,
+                scope_type=ScopeType.SYSTEM,
+                target_type=target_type,
+                target_id=target_id,
+                details=details,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+        except Exception as e:
+            logger.warning("Audit log write failed", action=action, error=str(e))
 
     async def bootstrap_admin(
         self,
@@ -56,6 +90,8 @@ class AuthService:
         username: str,
         email: str,
         password: str,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
     ) -> tuple[User, AuthTokensResponse]:
         """Create the first superadmin user. Only works if no superadmin exists yet."""
         if not expected_secret or bootstrap_secret != expected_secret:
@@ -75,6 +111,12 @@ class AuthService:
         await self._perm_svc.bootstrap_grant_superadmin(user.id)
 
         tokens = await self._create_tokens(str(user.id))
+        await self._audit(
+            user.id, AuditAction.BOOTSTRAP,
+            target_type="user", target_id=str(user.id),
+            details={"username": username},
+            ip_address=ip_address, user_agent=user_agent,
+        )
         return user, tokens
 
     async def register(
@@ -83,6 +125,8 @@ class AuthService:
         email: str,
         password: str,
         invite_token: UUID | None = None,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
     ) -> tuple[User, AuthTokensResponse]:
         """Register a new user."""
         if self._registration_mode == "invite":
@@ -104,6 +148,12 @@ class AuthService:
             await self._invite_repo.mark_used(invite_token, user.id)
 
         tokens = await self._create_tokens(str(user.id))
+        await self._audit(
+            user.id, AuditAction.REGISTER,
+            target_type="user", target_id=str(user.id),
+            details={"username": username},
+            ip_address=ip_address, user_agent=user_agent,
+        )
         return user, tokens
 
     async def create_invite(
@@ -146,7 +196,13 @@ class AuthService:
 
         return await self._invite_repo.delete(token)
 
-    async def login(self, username: str, password: str) -> tuple[User, AuthTokensResponse]:
+    async def login(
+        self,
+        username: str,
+        password: str,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> tuple[User, AuthTokensResponse]:
         """Authenticate user and return tokens."""
         user = await self._user_repo.get_by_username(username)
         if not user:
@@ -159,6 +215,10 @@ class AuthService:
             raise ForbiddenError("Account is deactivated")
 
         tokens = await self._create_tokens(str(user.id))
+        await self._audit(
+            user.id, AuditAction.LOGIN,
+            ip_address=ip_address, user_agent=user_agent,
+        )
         return user, tokens
 
     async def change_password(
@@ -166,6 +226,8 @@ class AuthService:
         user_id: UUID,
         old_password: str,
         new_password: str,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
     ) -> User:
         """Change user password."""
         user = await self._user_repo.get_by_id(user_id)
@@ -176,11 +238,22 @@ class AuthService:
             raise InvalidCredentialsError("Invalid old password")
 
         new_hashed = hash_password(new_password)
-        return await self._user_repo.update_password(
+        updated = await self._user_repo.update_password(
             user_id, new_hashed, password_change_required=False,
         )
+        await self._audit(
+            user_id, AuditAction.PASSWORD_CHANGE,
+            target_type="user", target_id=str(user_id),
+            ip_address=ip_address, user_agent=user_agent,
+        )
+        return updated
 
-    async def logout(self, refresh_token: str) -> None:
+    async def logout(
+        self,
+        refresh_token: str,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> None:
         """Revoke a refresh token."""
         try:
             payload = decode_token(refresh_token)
@@ -198,6 +271,10 @@ class AuthService:
 
         expires_at = datetime.fromtimestamp(exp, tz=timezone.utc)
         await self._revoked_repo.revoke(UUID(jti), UUID(user_id), expires_at)
+        await self._audit(
+            UUID(user_id), AuditAction.LOGOUT,
+            ip_address=ip_address, user_agent=user_agent,
+        )
 
     async def refresh_token(self, refresh_token: str) -> AuthTokensResponse:
         """Refresh access token using refresh token."""
@@ -250,7 +327,13 @@ class AuthService:
         await self._reset_repo.create_token(token, user.id, expires_at)
         return token, expires_at
 
-    async def confirm_password_reset(self, token: str, new_password: str) -> AuthTokensResponse:
+    async def confirm_password_reset(
+        self,
+        token: str,
+        new_password: str,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> AuthTokensResponse:
         """Reset password using a valid reset token."""
         record = await self._reset_repo.get_by_token(token)
         if not record:
@@ -262,7 +345,13 @@ class AuthService:
         user_id: UUID = record["user_id"]
         await self._user_repo.update_password(user_id, hash_password(new_password), password_change_required=False)
         await self._reset_repo.delete_token(token)
-        return await self._create_tokens(str(user_id))
+        tokens = await self._create_tokens(str(user_id))
+        await self._audit(
+            user_id, AuditAction.PASSWORD_RESET,
+            target_type="user", target_id=str(user_id),
+            ip_address=ip_address, user_agent=user_agent,
+        )
+        return tokens
 
     async def admin_reset_user(
         self,

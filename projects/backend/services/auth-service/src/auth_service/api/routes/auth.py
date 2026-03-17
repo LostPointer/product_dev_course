@@ -6,7 +6,7 @@ from uuid import UUID
 import structlog
 from aiohttp import web
 
-from auth_service.api.utils import extract_bearer_token
+from auth_service.api.utils import extract_bearer_token, extract_client_ip, extract_user_agent
 from auth_service.core.exceptions import AuthError, handle_auth_error
 from backend_common.db.pool import get_pool_service as get_pool
 from auth_service.domain.dto import (
@@ -25,6 +25,7 @@ from auth_service.domain.dto import (
     UserRegisterRequest,
     UserResponse,
 )
+from auth_service.repositories.audit import AuditRepository
 from auth_service.repositories.invites import InviteRepository
 from auth_service.repositories.password_reset import PasswordResetRepository
 from auth_service.repositories.permissions import PermissionRepository
@@ -46,10 +47,12 @@ async def get_auth_service(request: web.Request) -> AuthService:
     revoked_repo = RevokedTokenRepository(pool)
     reset_repo = PasswordResetRepository(pool)
     invite_repo = InviteRepository(pool)
+    audit_repo = AuditRepository(pool)
     perm_service = PermissionService(
         PermissionRepository(pool),
         RoleRepository(pool),
         UserRoleRepository(pool),
+        audit_repo=audit_repo,
     )
     return AuthService(
         user_repo,
@@ -58,6 +61,7 @@ async def get_auth_service(request: web.Request) -> AuthService:
         perm_service,
         invite_repo=invite_repo,
         registration_mode=settings.registration_mode,
+        audit_repo=audit_repo,
     )
 
 
@@ -90,6 +94,8 @@ async def bootstrap_admin(request: web.Request) -> web.Response:
             username=req.username,
             email=req.email,
             password=req.password,
+            ip_address=extract_client_ip(request),
+            user_agent=extract_user_agent(request),
         )
         user_resp = await auth_service.get_user_response(user)
         return web.json_response(
@@ -122,6 +128,8 @@ async def register(request: web.Request) -> web.Response:
             email=req.email,
             password=req.password,
             invite_token=req.invite_token,
+            ip_address=extract_client_ip(request),
+            user_agent=extract_user_agent(request),
         )
         user_resp = await auth_service.get_user_response(user)
         return web.json_response(
@@ -152,6 +160,8 @@ async def login(request: web.Request) -> web.Response:
         user, tokens = await auth_service.login(
             username=req.username,
             password=req.password,
+            ip_address=extract_client_ip(request),
+            user_agent=extract_user_agent(request),
         )
         user_resp = await auth_service.get_user_response(user)
         return web.json_response(
@@ -216,7 +226,11 @@ async def logout(request: web.Request) -> web.Response:
 
     try:
         auth_service = await get_auth_service(request)
-        await auth_service.logout(req.refresh_token)
+        await auth_service.logout(
+            req.refresh_token,
+            ip_address=extract_client_ip(request),
+            user_agent=extract_user_agent(request),
+        )
         return web.json_response({"ok": True}, status=200)
     except AuthError as e:
         return handle_auth_error(request, e)
@@ -242,6 +256,8 @@ async def change_password(request: web.Request) -> web.Response:
         user = await auth_service.get_user_by_token(token)
         updated_user = await auth_service.change_password(
             user.id, req.old_password, req.new_password,
+            ip_address=extract_client_ip(request),
+            user_agent=extract_user_agent(request),
         )
         user_resp = await auth_service.get_user_response(updated_user)
         return web.json_response(user_resp.model_dump(), status=200)
@@ -284,7 +300,11 @@ async def password_reset_confirm(request: web.Request) -> web.Response:
 
     try:
         auth_service = await get_auth_service(request)
-        tokens = await auth_service.confirm_password_reset(req.reset_token, req.new_password)
+        tokens = await auth_service.confirm_password_reset(
+            req.reset_token, req.new_password,
+            ip_address=extract_client_ip(request),
+            user_agent=extract_user_agent(request),
+        )
         return web.json_response(tokens.model_dump(), status=200)
     except AuthError as e:
         return handle_auth_error(request, e)

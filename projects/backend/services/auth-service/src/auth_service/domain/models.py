@@ -1,6 +1,7 @@
 """Domain models."""
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import StrEnum
@@ -335,7 +336,7 @@ class AuditEntry:
             scope_id=row.get("scope_id"),
             target_type=row.get("target_type"),
             target_id=row.get("target_id"),
-            details=row.get("details", {}),
+            details=json.loads(row["details"]) if isinstance(row.get("details"), str) else (row.get("details") or {}),
             ip_address=str(row["ip_address"]) if row.get("ip_address") else None,
             user_agent=row.get("user_agent"),
         )
