@@ -18,6 +18,7 @@ from auth_service.api.routes.project_roles import setup_routes as setup_project_
 from auth_service.api.routes.system_roles import setup_routes as setup_system_roles_routes
 from backend_common.db.pool import close_pool_service as close_pool, init_pool_service
 from auth_service.settings import settings
+from auth_service.workers import start_background_worker, stop_background_worker
 
 
 async def init_pool(_app: Any = None) -> None:
@@ -57,6 +58,8 @@ def create_app() -> web.Application:
     # Setup database pool and migrations
     app.on_startup.append(init_pool)
     app.on_startup.append(apply_migrations_on_startup)
+    app.on_startup.append(start_background_worker)
+    app.on_cleanup.append(stop_background_worker)
     app.on_cleanup.append(close_pool)
 
     # Add CORS to all routes

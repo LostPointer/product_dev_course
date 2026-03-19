@@ -44,6 +44,7 @@ class Settings(BaseServiceSettings):
     stale_session_max_hours: int = 24  # auto-fail running sessions older than this
     webhook_stuck_minutes: int = 10  # reclaim in_progress deliveries older than this
     webhook_succeeded_retention_days: int = 30  # purge succeeded deliveries older than this
+    audit_retention_days: int = 365  # delete run_events/capture_session_events older than this
 
 
 @lru_cache

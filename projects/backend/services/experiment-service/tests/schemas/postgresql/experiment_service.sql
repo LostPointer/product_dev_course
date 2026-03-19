@@ -229,6 +229,7 @@ CREATE TABLE capture_session_events (
 );
 
 CREATE INDEX capture_session_events_session_idx ON capture_session_events (capture_session_id, created_at DESC);
+CREATE INDEX idx_capture_session_events_created_at ON capture_session_events (created_at);
 
 CREATE TABLE artifacts (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -398,6 +399,7 @@ CREATE TABLE run_events (
 );
 
 CREATE INDEX run_events_run_idx ON run_events (run_id, created_at DESC);
+CREATE INDEX idx_run_events_created_at ON run_events (created_at);
 
 CREATE TABLE run_metrics (
     id bigserial PRIMARY KEY,
