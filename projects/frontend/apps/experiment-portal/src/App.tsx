@@ -3,6 +3,7 @@ import Layout from './components/Layout'
 import ProtectedRoute from './components/ProtectedRoute'
 import Login from './pages/Login'
 import Register from './pages/Register'
+import ChangePassword from './pages/ChangePassword'
 import ExperimentsList from './pages/ExperimentsList'
 import ExperimentDetail from './pages/ExperimentDetail'
 import RunDetail from './pages/RunDetail'
@@ -12,6 +13,7 @@ import ProjectsList from './pages/ProjectsList'
 import TelemetryViewer from './pages/TelemetryViewer'
 import Webhooks from './pages/Webhooks'
 import AdminUsers from './pages/AdminUsers'
+import SensorMonitor from './pages/SensorMonitor'
 import './App.scss'
 
 function App() {
@@ -19,6 +21,14 @@ function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route
+        path="/change-password"
+        element={
+          <ProtectedRoute requirePasswordChanged={false}>
+            <ChangePassword />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/*"
         element={
@@ -32,6 +42,7 @@ function App() {
                 <Route path="/runs/:id" element={<RunDetail />} />
                 <Route path="/sensors" element={<SensorsList />} />
                 <Route path="/sensors/new" element={<CreateSensor />} />
+                <Route path="/sensor-monitor" element={<SensorMonitor />} />
                 <Route path="/telemetry" element={<TelemetryViewer />} />
                 <Route path="/webhooks" element={<Webhooks />} />
                 <Route path="/admin/users" element={<AdminUsers />} />

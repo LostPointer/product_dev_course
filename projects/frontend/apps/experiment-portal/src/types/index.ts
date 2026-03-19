@@ -133,9 +133,17 @@ export interface AuthResponse {
   [key: string]: unknown
 }
 
+export interface UserSearchResult {
+  id: string
+  username: string
+  email: string
+}
+
 /** Типы для датчиков */
 
 export type SensorStatus = 'registering' | 'active' | 'inactive' | 'archived'
+
+export type ConnectionStatus = 'online' | 'delayed' | 'offline'
 
 export interface Sensor {
   id: string
@@ -145,12 +153,26 @@ export interface Sensor {
   input_unit: string
   display_unit: string
   status: SensorStatus
+  connection_status?: ConnectionStatus
   token_preview?: string | null
   last_heartbeat?: string | null
   active_profile_id?: string | null
   calibration_notes?: string | null
   created_at: string
   updated_at: string
+}
+
+export interface StatusSummary {
+  online: number
+  delayed: number
+  offline: number
+  total: number
+}
+
+export interface HeartbeatHistory {
+  sensor_id: string
+  timestamps: string[]
+  count: number
 }
 
 export interface SensorCreate {
@@ -426,6 +448,46 @@ export interface RunMetricSeries {
 export interface RunMetricsResponse {
   run_id: string
   series: RunMetricSeries[]
+}
+
+export interface RunMetric {
+  name: string
+  step: number
+  value: number
+  timestamp: string
+}
+
+export interface RunMetricsListResponse {
+  items: RunMetric[]
+  total: number
+}
+
+export interface MetricSummaryItem {
+  name: string
+  last_step: number
+  last_value: number
+  count: number
+  min: number
+  avg: number
+  max: number
+}
+
+export interface MetricSummaryResponse {
+  items: MetricSummaryItem[]
+}
+
+export interface MetricBucket {
+  name: string
+  bucket_start: number
+  bucket_end: number
+  min: number
+  avg: number
+  max: number
+  count: number
+}
+
+export interface MetricAggregationsResponse {
+  items: MetricBucket[]
 }
 
 /** Типы для вебхуков */

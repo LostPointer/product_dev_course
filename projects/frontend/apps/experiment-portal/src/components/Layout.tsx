@@ -42,6 +42,13 @@ const navItems: NavItem[] = [
     shortLabel: 'SN',
   },
   {
+    to: '/sensor-monitor',
+    label: 'Монитор датчиков',
+    description: 'Статус подключения и история heartbeat',
+    eyebrow: 'Sensor Monitor',
+    shortLabel: 'SM',
+  },
+  {
     to: '/telemetry',
     label: 'Телеметрия',
     description: 'Потоки сигналов и живая диагностика',
@@ -89,6 +96,12 @@ const pageMeta = [
     title: 'Датчики',
     description: 'Держите под контролем флот устройств, состояние каналов и токены доступа.',
     eyebrow: 'Sensor Fleet',
+  },
+  {
+    match: (pathname: string) => pathname.startsWith('/sensor-monitor'),
+    title: 'Монитор датчиков',
+    description: 'Оперативный контроль статуса подключения и истории heartbeat по флоту.',
+    eyebrow: 'Sensor Monitor',
   },
   {
     match: (pathname: string) => pathname.startsWith('/telemetry'),
