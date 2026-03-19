@@ -21,6 +21,7 @@ from auth_service.repositories.audit import AuditRepository
 from auth_service.repositories.invites import InviteRepository
 from auth_service.repositories.password_reset import PasswordResetRepository
 from auth_service.repositories.revoked_tokens import RevokedTokenRepository
+from auth_service.repositories.token_families import TokenFamilyRepository
 from auth_service.repositories.users import UserRepository
 from auth_service.services.jwt import (
     create_access_token,
@@ -46,6 +47,7 @@ class AuthService:
         invite_repo: InviteRepository | None = None,
         registration_mode: str = "open",
         audit_repo: AuditRepository | None = None,
+        family_repo: TokenFamilyRepository | None = None,
     ):
         self._user_repo = user_repository
         self._revoked_repo = revoked_repo
@@ -54,6 +56,7 @@ class AuthService:
         self._invite_repo = invite_repo
         self._registration_mode = registration_mode
         self._audit_repo = audit_repo
+        self._family_repo = family_repo
 
     async def _audit(
         self,
@@ -241,6 +244,9 @@ class AuthService:
         updated = await self._user_repo.update_password(
             user_id, new_hashed, password_change_required=False,
         )
+        # Invalidate all refresh token families on password change
+        if self._family_repo is not None:
+            await self._family_repo.revoke_all_user_families(user_id)
         await self._audit(
             user_id, AuditAction.PASSWORD_CHANGE,
             target_type="user", target_id=str(user_id),
@@ -254,7 +260,7 @@ class AuthService:
         ip_address: str | None = None,
         user_agent: str | None = None,
     ) -> None:
-        """Revoke a refresh token."""
+        """Revoke a refresh token and its family (if present)."""
         try:
             payload = decode_token(refresh_token)
             if payload.get("type") != "refresh":
@@ -269,15 +275,33 @@ class AuthService:
         except ValueError as e:
             raise InvalidCredentialsError(str(e)) from e
 
+        fid_str: str | None = payload.get("fid")
+        family_id: UUID | None = UUID(fid_str) if fid_str else None
+
         expires_at = datetime.fromtimestamp(exp, tz=timezone.utc)
-        await self._revoked_repo.revoke(UUID(jti), UUID(user_id), expires_at)
+        await self._revoked_repo.revoke(UUID(jti), UUID(user_id), expires_at, family_id)
+
+        if family_id is not None and self._family_repo is not None:
+            await self._family_repo.revoke_family(family_id)
+
         await self._audit(
             UUID(user_id), AuditAction.LOGOUT,
             ip_address=ip_address, user_agent=user_agent,
         )
 
     async def refresh_token(self, refresh_token: str) -> AuthTokensResponse:
-        """Refresh access token using refresh token."""
+        """Refresh access token using refresh token (with rotation).
+
+        Flow:
+        1. Decode and validate JWT claims.
+        2. If family tracking is enabled (fid claim present):
+           a. Check family is not revoked (stolen token detector).
+           b. Check jti is not in revoked_tokens (reuse detection).
+              If jti already revoked → whole family is compromised → revoke family → 401.
+           c. Revoke this jti (add to blacklist).
+           d. Issue new refresh token with the *same* family_id.
+        3. Issue new access token.
+        """
         try:
             payload = decode_token(refresh_token)
             if payload.get("type") != "refresh":
@@ -288,17 +312,35 @@ class AuthService:
             user_id = payload.get("sub")
             if not user_id:
                 raise ValueError("Token missing user ID")
+            exp: int = payload["exp"]
         except ValueError as e:
             raise InvalidCredentialsError(str(e)) from e
 
+        fid_str: str | None = payload.get("fid")
+        family_id: UUID | None = UUID(fid_str) if fid_str else None
+
+        # Family-level check: if the whole family was revoked (e.g. logout / password change)
+        if family_id is not None and self._family_repo is not None:
+            if await self._family_repo.is_revoked(family_id):
+                raise InvalidCredentialsError("Token family has been revoked")
+
+        # Per-token check: if this specific jti was already used → reuse detection
         if await self._revoked_repo.is_revoked(UUID(jti)):
+            # Token reuse detected — revoke the whole family to protect the user
+            if family_id is not None and self._family_repo is not None:
+                await self._family_repo.revoke_family(family_id)
             raise InvalidCredentialsError("Token has been revoked")
 
         user = await self._user_repo.get_by_id(UUID(user_id))
         if not user:
             raise UserNotFoundError()
 
-        return await self._create_tokens(user_id)
+        # Retire the current jti (mark as used)
+        expires_at = datetime.fromtimestamp(exp, tz=timezone.utc)
+        await self._revoked_repo.revoke(UUID(jti), UUID(user_id), expires_at, family_id)
+
+        # Issue new tokens, carrying the same family_id forward
+        return await self._create_tokens(user_id, family_id=family_id)
 
     async def get_user_by_token(self, access_token: str) -> User:
         """Get user from access token."""
@@ -438,18 +480,35 @@ class AuthService:
         role_names = await self._perm_svc.list_system_role_names(user.id)
         return UserResponse.from_user(user, system_roles=role_names)
 
-    async def _create_tokens(self, user_id: str) -> AuthTokensResponse:
-        """Create access and refresh tokens with RBAC v2 claims."""
+    async def _create_tokens(
+        self,
+        user_id: str,
+        family_id: UUID | None = None,
+    ) -> AuthTokensResponse:
+        """Create access and refresh tokens with RBAC v2 claims.
+
+        Args:
+            user_id: User identifier string.
+            family_id: Existing family to continue (refresh rotation).
+                When ``None`` and ``_family_repo`` is configured, a new family
+                is created so the issued refresh token can be tracked.
+        """
         uid = UUID(user_id)
         is_sa = await self._perm_svc.is_superadmin(uid)
-        
+
         # Get system permissions (empty if superadmin)
         system_perms: list[str] = []
         if not is_sa:
             effective = await self._perm_svc.get_effective_permissions(uid)
             system_perms = effective.system_permissions
-        
+
+        # Create a new family when we are issuing a brand-new refresh token
+        if family_id is None and self._family_repo is not None:
+            family_id = await self._family_repo.create(uid)
+
+        fid_str: str | None = str(family_id) if family_id is not None else None
+
         return AuthTokensResponse(
             access_token=create_access_token(user_id, is_superadmin=is_sa, system_permissions=system_perms),
-            refresh_token=create_refresh_token(user_id),
+            refresh_token=create_refresh_token(user_id, family_id=fid_str),
         )

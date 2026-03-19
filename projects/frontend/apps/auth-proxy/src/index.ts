@@ -778,7 +778,10 @@ export async function buildServer(config: Config, _cache?: PermissionsCache) {
         const { traceId, requestId } = getTraceContext(request)
         const outgoingHeaders = getOutgoingRequestHeaders(traceId)
 
-        // Best-effort revoke
+        const refreshToken = request.cookies?.[config.refreshCookieName]
+
+        // Best-effort revoke — always pass the refresh token so the auth-service
+        // can invalidate the token family (rotation support).
         try {
             await fetch(`${config.authUrl}/auth/logout`, {
                 method: 'POST',
@@ -786,7 +789,9 @@ export async function buildServer(config: Config, _cache?: PermissionsCache) {
                     'content-type': 'application/json',
                     ...outgoingHeaders,
                 },
-                body: JSON.stringify({}),
+                body: JSON.stringify(
+                    refreshToken ? { refresh_token: refreshToken } : {}
+                ),
             })
         } catch (err) {
             request.log.warn(

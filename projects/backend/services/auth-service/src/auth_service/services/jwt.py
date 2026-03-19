@@ -38,8 +38,14 @@ def create_access_token(user_id: str, is_superadmin: bool = False, system_permis
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
-def create_refresh_token(user_id: str) -> str:
-    """Create refresh token."""
+def create_refresh_token(user_id: str, family_id: str | None = None) -> str:
+    """Create refresh token.
+
+    Args:
+        user_id: User identifier.
+        family_id: Token family UUID string. When provided the claim ``fid`` is
+            embedded in the payload to enable reuse-detection.
+    """
     now = int(time.time())
     payload: dict[str, Any] = {
         "sub": user_id,
@@ -48,6 +54,8 @@ def create_refresh_token(user_id: str) -> str:
         "iat": now,
         "exp": now + settings.refresh_token_ttl_sec,
     }
+    if family_id is not None:
+        payload["fid"] = family_id
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 

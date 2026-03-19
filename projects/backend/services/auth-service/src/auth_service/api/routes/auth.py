@@ -31,6 +31,7 @@ from auth_service.repositories.password_reset import PasswordResetRepository
 from auth_service.repositories.permissions import PermissionRepository
 from auth_service.repositories.revoked_tokens import RevokedTokenRepository
 from auth_service.repositories.roles import RoleRepository
+from auth_service.repositories.token_families import TokenFamilyRepository
 from auth_service.repositories.user_roles import UserRoleRepository
 from auth_service.repositories.users import UserRepository
 from auth_service.services.auth import AuthService
@@ -54,6 +55,7 @@ async def get_auth_service(request: web.Request) -> AuthService:
         UserRoleRepository(pool),
         audit_repo=audit_repo,
     )
+    family_repo = TokenFamilyRepository(pool)
     return AuthService(
         user_repo,
         revoked_repo,
@@ -62,6 +64,7 @@ async def get_auth_service(request: web.Request) -> AuthService:
         invite_repo=invite_repo,
         registration_mode=settings.registration_mode,
         audit_repo=audit_repo,
+        family_repo=family_repo,
     )
 
 
