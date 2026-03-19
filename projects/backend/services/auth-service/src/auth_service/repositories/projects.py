@@ -81,18 +81,40 @@ class ProjectRepository(BaseRepository):
             raise NotFoundError(f"Project {project_id} not found")
         return project
 
-    async def list_by_user(self, user_id: UUID) -> list[Project]:
-        """List all projects where user has any active role."""
-        query = """
-            SELECT DISTINCT p.id, p.name, p.description, p.owner_id, p.created_at, p.updated_at
+    async def list_by_user(
+        self,
+        user_id: UUID,
+        search: str | None = None,
+        role: str | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> tuple[list[Project], int]:
+        """List projects where user has any active role, with optional filtering.
+
+        Returns a tuple of (projects, total_count).
+        """
+        base_where = """
             FROM projects p
             INNER JOIN user_project_roles upr ON p.id = upr.project_id
+            INNER JOIN roles r ON r.id = upr.role_id
             WHERE upr.user_id = $1
               AND (upr.expires_at IS NULL OR upr.expires_at > now())
-            ORDER BY p.created_at DESC
+              AND ($2::text IS NULL OR p.name ILIKE '%' || $2 || '%')
+              AND ($3::text IS NULL OR r.name = $3)
         """
-        rows = await self._fetch(query, user_id)
-        return [Project.from_row(dict(row)) for row in rows]
+        count_query = f"SELECT COUNT(DISTINCT p.id) {base_where}"
+        count_row = await self._fetchrow(count_query, user_id, search, role)
+        total = int(count_row["count"]) if count_row else 0
+
+        select_query = f"""
+            SELECT DISTINCT ON (p.created_at, p.id)
+                   p.id, p.name, p.description, p.owner_id, p.created_at, p.updated_at
+            {base_where}
+            ORDER BY p.created_at DESC, p.id
+            LIMIT $4 OFFSET $5
+        """
+        rows = await self._fetch(select_query, user_id, search, role, limit, offset)
+        return [Project.from_row(dict(row)) for row in rows], total
 
     async def list_all(self) -> list[Project]:
         """List all projects (for superadmin/admin views)."""

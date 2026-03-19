@@ -11,6 +11,7 @@ from auth_service.core.exceptions import AuthError, ForbiddenError, NotFoundErro
 from backend_common.db.pool import get_pool_service as get_pool
 from auth_service.domain.dto import (
     ProjectCreateRequest,
+    ProjectListResponse,
     ProjectMemberAddRequest,
     ProjectMemberResponse,
     ProjectMemberUpdateRequest,
@@ -144,24 +145,40 @@ async def get_project(request: web.Request) -> web.Response:
 
 
 async def list_projects(request: web.Request) -> web.Response:
-    """List all projects for current user."""
+    """List projects for current user with optional search and role filter.
+
+    Query parameters:
+      search  — case-insensitive substring match on project name
+      role    — filter by role name (e.g. owner, editor, viewer)
+      limit   — page size, 1-100, default 20
+      offset  — page offset, default 0
+    """
     try:
         user_id = await get_user_id_from_token(request)
     except AuthError as e:
         return handle_auth_error(request, e)
 
+    search: str | None = request.query.get("search") or None
+    role: str | None = request.query.get("role") or None
+
+    try:
+        limit = min(max(int(request.query.get("limit", "20")), 1), 100)
+        offset = max(int(request.query.get("offset", "0")), 0)
+    except ValueError:
+        return web.json_response({"error": "limit and offset must be integers"}, status=400)
+
     try:
         service = await get_project_service(request)
-        projects = await service.list_user_projects(user_id)
-        return web.json_response(
-            {
-                "projects": [
-                    ProjectResponse.from_project(p).model_dump()
-                    for p in projects
-                ]
-            },
-            status=200,
+        projects, total = await service.list_user_projects(
+            user_id, search=search, role=role, limit=limit, offset=offset,
         )
+        response = ProjectListResponse(
+            items=[ProjectResponse.from_project(p) for p in projects],
+            total=total,
+            limit=limit,
+            offset=offset,
+        )
+        return web.json_response(response.model_dump(), status=200)
     except AuthError as e:
         return handle_auth_error(request, e)
     except Exception:

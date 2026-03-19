@@ -101,9 +101,21 @@ class ProjectService:
 
         return project
 
-    async def list_user_projects(self, user_id: UUID) -> list[Project]:
-        """List all projects where user is a member."""
-        return await self.project_repo.list_by_user(user_id)
+    async def list_user_projects(
+        self,
+        user_id: UUID,
+        search: str | None = None,
+        role: str | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> tuple[list[Project], int]:
+        """List projects where user is a member, with optional filtering.
+
+        Returns (projects, total_count).
+        """
+        return await self.project_repo.list_by_user(
+            user_id, search=search, role=role, limit=limit, offset=offset,
+        )
 
     async def list_all_projects(self, user_id: UUID) -> list[Project]:
         """List all projects. Requires 'projects.list' or superadmin."""
@@ -112,7 +124,8 @@ class ProjectService:
         # Otherwise fall back to list_user_projects
         if await self.user_role_repo.is_superadmin(user_id):
             return await self.project_repo.list_all()
-        return await self.project_repo.list_by_user(user_id)
+        projects, _ = await self.project_repo.list_by_user(user_id)
+        return projects
 
     async def update_project(
         self,

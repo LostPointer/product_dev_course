@@ -241,6 +241,15 @@ class ProjectResponse(BaseModel):
         )
 
 
+class ProjectListResponse(BaseModel):
+    """Paginated project list response."""
+
+    items: list[ProjectResponse]
+    total: int
+    limit: int
+    offset: int
+
+
 class ProjectMemberResponse(BaseModel):
     """Project member response (через user_project_roles)."""
 
