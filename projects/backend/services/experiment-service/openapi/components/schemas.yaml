@@ -499,6 +499,9 @@ Sensor:
       type: string
       format: date-time
       nullable: true
+    connection_status:
+      type: string
+      enum: [online, delayed, offline]
     active_profile_id:
       type: string
       format: uuid

@@ -11,6 +11,7 @@ from backend_common.aiohttp_app import (
     add_openapi_spec,
     create_base_app,
 )
+from backend_common.metrics import metrics_handler, metrics_middleware
 from backend_common.db.migrations import create_migration_runner
 from backend_common.logging_config import configure_logging
 
@@ -85,11 +86,13 @@ async def stop_script_runner(app: web.Application) -> None:
 
 def create_app() -> web.Application:
     app, cors = create_base_app(settings)
+    app.middlewares.append(metrics_middleware("experiment-service"))
     app.middlewares.append(audit_middleware)  # type: ignore[arg-type]
 
     app.add_routes(health_routes)
     add_openapi_spec(app, OPENAPI_PATH)
     setup_routes(app)
+    app.router.add_get("/metrics", metrics_handler)
 
     # OpenTelemetry (auto-instruments aiohttp server; no-op when endpoint not set)
     setup_otel(app)

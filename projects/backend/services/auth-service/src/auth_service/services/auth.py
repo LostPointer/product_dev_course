@@ -31,6 +31,11 @@ from auth_service.services.jwt import (
 )
 from auth_service.services.password import hash_password, verify_password
 from auth_service.services.permission import PermissionService
+from auth_service.prometheus_metrics import (
+    AUTH_LOGINS,
+    AUTH_REUSE_DETECTIONS,
+    AUTH_TOKEN_REFRESHES,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -209,9 +214,11 @@ class AuthService:
         """Authenticate user and return tokens."""
         user = await self._user_repo.get_by_username(username)
         if not user:
+            AUTH_LOGINS.labels(result="failure").inc()
             raise InvalidCredentialsError()
 
         if not verify_password(password, user.hashed_password):
+            AUTH_LOGINS.labels(result="failure").inc()
             raise InvalidCredentialsError()
 
         if not user.is_active:
@@ -225,6 +232,7 @@ class AuthService:
             user.id, AuditAction.LOGIN,
             ip_address=ip_address, user_agent=user_agent,
         )
+        AUTH_LOGINS.labels(result="success").inc()
         return user, tokens
 
     async def change_password(
@@ -336,6 +344,7 @@ class AuthService:
         # Per-token check: if this specific jti was already used → reuse detection
         if await self._revoked_repo.is_revoked(UUID(jti)):
             # Token reuse detected — revoke the whole family to protect the user
+            AUTH_REUSE_DETECTIONS.inc()
             if family_id is not None and self._family_repo is not None:
                 await self._family_repo.revoke_family(family_id)
             raise InvalidCredentialsError("Token has been revoked")
@@ -349,7 +358,9 @@ class AuthService:
         await self._revoked_repo.revoke(UUID(jti), UUID(user_id), expires_at, family_id)
 
         # Issue new tokens, carrying the same family_id forward
-        return await self._create_tokens(user_id, family_id=family_id)
+        tokens = await self._create_tokens(user_id, family_id=family_id)
+        AUTH_TOKEN_REFRESHES.inc()
+        return tokens
 
     async def get_user_by_token(self, access_token: str) -> User:
         """Get user from access token."""

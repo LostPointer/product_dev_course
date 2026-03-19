@@ -14,6 +14,7 @@ ROLE_PERMISSIONS: dict[str, str] = {
         "experiments.archive,"
         "runs.create,"
         "runs.update,"
+        "metrics.write,"
         "project.members.view"
     ),
     "owner": (
@@ -24,6 +25,7 @@ ROLE_PERMISSIONS: dict[str, str] = {
         "experiments.archive,"
         "runs.create,"
         "runs.update,"
+        "metrics.write,"
         "project.settings.update,"
         "project.settings.delete,"
         "project.members.view,"

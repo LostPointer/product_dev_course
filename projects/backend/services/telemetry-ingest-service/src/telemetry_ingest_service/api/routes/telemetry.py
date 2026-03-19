@@ -15,6 +15,11 @@ from telemetry_ingest_service.api.utils import read_json
 from telemetry_ingest_service.core.exceptions import NotFoundError, ScopeMismatchError, UnauthorizedError
 from telemetry_ingest_service.domain.dto import TelemetryIngestDTO
 from telemetry_ingest_service.middleware.rest_rate_limit import IngestRateLimiter
+from telemetry_ingest_service.prometheus_metrics import (
+    INGEST_RATE_LIMITED,
+    SSE_CONNECTIONS_ACTIVE,
+    TELEMETRY_READINGS_INGESTED,
+)
 from telemetry_ingest_service.services.telemetry import TelemetryIngestService
 from telemetry_ingest_service.services.telemetry import hash_sensor_token
 from telemetry_ingest_service.settings import settings
@@ -73,6 +78,7 @@ async def ingest_telemetry(request: web.Request) -> web.Response:
 
     allowed, retry_after = _rest_limiter.check(dto.sensor_id, len(dto.readings))
     if not allowed:
+        INGEST_RATE_LIMITED.labels(transport="rest").inc()
         raise web.HTTPTooManyRequests(
             text=f"Rate limit exceeded. Retry in {retry_after}s.",
             headers={"Retry-After": str(retry_after)},
@@ -88,6 +94,7 @@ async def ingest_telemetry(request: web.Request) -> web.Response:
     except NotFoundError as exc:
         raise web.HTTPNotFound(text=str(exc)) from exc
 
+    TELEMETRY_READINGS_INGESTED.labels(transport="rest").inc(accepted)
     return web.json_response({"status": "accepted", "accepted": accepted}, status=202)
 
 
@@ -278,6 +285,7 @@ async def telemetry_stream(request: web.Request) -> web.StreamResponse:
     cursor_ts = since_ts
     cursor_id = since_id
 
+    SSE_CONNECTIONS_ACTIVE.inc()
     try:
         while True:
             if request.transport is None or request.transport.is_closing():
@@ -334,6 +342,8 @@ async def telemetry_stream(request: web.Request) -> web.StreamResponse:
         await resp.write(b"event: error\n")
         await resp.write(b"data: " + str(exc).encode("utf-8") + b"\n\n")
         return resp
+    finally:
+        SSE_CONNECTIONS_ACTIVE.dec()
     return resp
 
 
