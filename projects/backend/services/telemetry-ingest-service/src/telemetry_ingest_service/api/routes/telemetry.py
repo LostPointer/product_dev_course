@@ -14,7 +14,7 @@ from pydantic import ValidationError
 from telemetry_ingest_service.api.utils import read_json
 from telemetry_ingest_service.core.exceptions import NotFoundError, ScopeMismatchError, UnauthorizedError
 from telemetry_ingest_service.domain.dto import TelemetryIngestDTO
-from telemetry_ingest_service.middleware.ws_rate_limit import WsRateLimiter
+from telemetry_ingest_service.middleware.rest_rate_limit import IngestRateLimiter
 from telemetry_ingest_service.services.telemetry import TelemetryIngestService
 from telemetry_ingest_service.services.telemetry import hash_sensor_token
 from telemetry_ingest_service.settings import settings
@@ -24,9 +24,9 @@ from backend_common.db.pool import get_pool_service as get_pool
 
 routes = web.RouteTableDef()
 
-_rest_limiter = WsRateLimiter(
-    max_messages=settings.rest_rate_limit_requests_per_window,
-    max_readings=settings.rest_rate_limit_readings_per_window,
+_rest_limiter = IngestRateLimiter(
+    max_requests_per_window=settings.rest_rate_limit_requests_per_window,
+    max_readings_per_window=settings.rest_rate_limit_readings_per_window,
     window_seconds=settings.rest_rate_limit_window_seconds,
 )
 
@@ -71,14 +71,11 @@ async def ingest_telemetry(request: web.Request) -> web.Response:
     except ValidationError as exc:
         raise web.HTTPBadRequest(text=exc.json()) from exc
 
-    limit_hit = _rest_limiter.check(dto.sensor_id, len(dto.readings))
-    if limit_hit is not None:
+    allowed, retry_after = _rest_limiter.check(dto.sensor_id, len(dto.readings))
+    if not allowed:
         raise web.HTTPTooManyRequests(
-            text=f"Rate limit exceeded ({limit_hit.reason}). Retry in {limit_hit.retry_after}s.",
-            headers={
-                "Retry-After": str(limit_hit.retry_after),
-                "X-RateLimit-Limit": str(limit_hit.limit),
-            },
+            text=f"Rate limit exceeded. Retry in {retry_after}s.",
+            headers={"Retry-After": str(retry_after)},
         )
 
     service = TelemetryIngestService()
