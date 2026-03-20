@@ -10,6 +10,10 @@
 #include "rc_vehicle_common.hpp"
 #include "slew_rate.hpp"
 
+#ifdef ESP_PLATFORM
+#include "udp_telem_sender.hpp"
+#endif
+
 namespace rc_vehicle {
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -290,6 +294,11 @@ void VehicleControlUnified::ControlTaskLoop() {
         frame.oversteer_active = oversteer_guard_.IsActive() ? 1.0f : 0.0f;
         telem_mgr_->Push(frame);
         telem_mgr_->SetLastLogTime(now);
+
+#ifdef ESP_PLATFORM
+        // UDP telemetry streaming (no-op если не активен)
+        UdpTelemEnqueue(frame);
+#endif
       }
     }
 

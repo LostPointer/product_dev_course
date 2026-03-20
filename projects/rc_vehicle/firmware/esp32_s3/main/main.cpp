@@ -12,6 +12,7 @@
 #include "freertos/task.h"
 #include "dns_server.hpp"
 #include "http_server.hpp"
+#include "udp_telem_sender.hpp"
 #include "vehicle_control.hpp"
 #include "websocket_server.hpp"
 #include "wifi_ap.hpp"
@@ -73,6 +74,12 @@ extern "C" void app_main(void) {
     return;
   }
 
+  // Инициализация UDP-стриминга телеметрии
+  ESP_LOGI(TAG, "Initializing UDP telemetry streamer...");
+  if (UdpTelemInit() != ESP_OK) {
+    ESP_LOGW(TAG, "UDP telemetry streamer init failed (non-fatal)");
+  }
+
   // Регистрация обработчиков WebSocket команд
   ESP_LOGI(TAG, "Registering WebSocket command handlers...");
   g_command_registry.Register("calibrate_imu", rc_vehicle::HandleCalibrateImu);
@@ -94,6 +101,12 @@ extern "C" void app_main(void) {
   g_command_registry.Register("toggle_kids_mode",
                               rc_vehicle::HandleToggleKidsMode);
   g_command_registry.Register("run_self_test", rc_vehicle::HandleRunSelfTest);
+  g_command_registry.Register("udp_stream_start",
+                              rc_vehicle::HandleUdpStreamStart);
+  g_command_registry.Register("udp_stream_stop",
+                              rc_vehicle::HandleUdpStreamStop);
+  g_command_registry.Register("udp_stream_status",
+                              rc_vehicle::HandleUdpStreamStatus);
   ESP_LOGI(TAG, "Registered %zu command handlers",
            g_command_registry.GetHandlerCount());
 

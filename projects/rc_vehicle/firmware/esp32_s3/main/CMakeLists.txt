@@ -35,6 +35,7 @@ idf_component_register(
         "../../common/lpf_butterworth.cpp"
         "../../esp32_common/imu_calibration_nvs.cpp"
         "../../esp32_common/stabilization_config_nvs.cpp"
+        "../../esp32_common/udp_telem_sender.cpp"
     INCLUDE_DIRS
         "."
         "../../common"
@@ -47,6 +48,7 @@ idf_component_register(
         esp_driver_gpio
         esp_driver_ledc
         esp_driver_spi
+        lwip
         freertos
         cjson
         esp_timer

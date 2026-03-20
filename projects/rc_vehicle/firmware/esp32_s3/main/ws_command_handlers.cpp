@@ -7,6 +7,7 @@
 #include "stabilization_config.hpp"
 #include "stabilization_config_json.hpp"
 #include "telemetry_log.hpp"
+#include "udp_telem_sender.hpp"
 #include "vehicle_control.hpp"
 #include "ws_command_registry.hpp"
 
@@ -385,6 +386,76 @@ void HandleRunSelfTest(cJSON* json, httpd_req_t* req) {
 
   ESP_LOGI(TAG, "run_self_test -> %s (%zu checks)",
            all_passed ? "ALL PASS" : "FAIL", results.size());
+}
+
+void HandleUdpStreamStart(cJSON* json, httpd_req_t* req) {
+  cJSON* ip_item = cJSON_GetObjectItem(json, "ip");
+  cJSON* port_item = cJSON_GetObjectItem(json, "port");
+  cJSON* hz_item = cJSON_GetObjectItem(json, "hz");
+
+  const char* ip = (ip_item && cJSON_IsString(ip_item)) ? ip_item->valuestring
+                                                        : nullptr;
+  uint16_t port = (port_item && cJSON_IsNumber(port_item))
+                      ? (uint16_t)port_item->valueint
+                      : 5555;
+  uint8_t hz = (hz_item && cJSON_IsNumber(hz_item)) ? (uint8_t)hz_item->valueint
+                                                    : 100;
+
+  cJSON* reply = cJSON_CreateObject();
+  if (reply) {
+    cJSON_AddStringToObject(reply, "type", "udp_stream_start_ack");
+    if (!ip) {
+      cJSON_AddBoolToObject(reply, "ok", false);
+      cJSON_AddStringToObject(reply, "error", "missing ip field");
+    } else {
+      bool ok = UdpTelemStart(ip, port, hz);
+      cJSON_AddBoolToObject(reply, "ok", ok);
+      if (ok) {
+        cJSON_AddStringToObject(reply, "ip", ip);
+        cJSON_AddNumberToObject(reply, "port", port);
+        cJSON_AddNumberToObject(reply, "hz", hz);
+      } else {
+        cJSON_AddStringToObject(reply, "error", "invalid parameters");
+      }
+    }
+    WsSendJsonReply(req, reply);
+    cJSON_Delete(reply);
+  }
+
+  ESP_LOGI(TAG, "udp_stream_start ip=%s port=%u hz=%u", ip ? ip : "null", port,
+           hz);
+}
+
+void HandleUdpStreamStop(cJSON* json, httpd_req_t* req) {
+  (void)json;
+  UdpTelemStop();
+
+  cJSON* reply = cJSON_CreateObject();
+  if (reply) {
+    cJSON_AddStringToObject(reply, "type", "udp_stream_stop_ack");
+    cJSON_AddBoolToObject(reply, "ok", true);
+    WsSendJsonReply(req, reply);
+    cJSON_Delete(reply);
+  }
+
+  ESP_LOGI(TAG, "udp_stream_stop");
+}
+
+void HandleUdpStreamStatus(cJSON* json, httpd_req_t* req) {
+  (void)json;
+
+  cJSON* reply = cJSON_CreateObject();
+  if (reply) {
+    cJSON_AddStringToObject(reply, "type", "udp_stream_status");
+    cJSON_AddBoolToObject(reply, "streaming", UdpTelemIsStreaming());
+    cJSON_AddStringToObject(reply, "ip", UdpTelemGetTargetIp());
+    cJSON_AddNumberToObject(reply, "port", UdpTelemGetTargetPort());
+    cJSON_AddNumberToObject(reply, "hz", UdpTelemGetHz());
+    cJSON_AddNumberToObject(reply, "seq", (double)UdpTelemGetSeq());
+    cJSON_AddNumberToObject(reply, "dropped", (double)UdpTelemGetDropped());
+    WsSendJsonReply(req, reply);
+    cJSON_Delete(reply);
+  }
 }
 
 }  // namespace rc_vehicle

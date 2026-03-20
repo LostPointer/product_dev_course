@@ -121,4 +121,28 @@ void HandleToggleKidsMode(cJSON* json, httpd_req_t* req);
  */
 void HandleRunSelfTest(cJSON* json, httpd_req_t* req);
 
+/**
+ * @brief Start UDP telemetry streaming
+ *
+ * Request: {"type":"udp_stream_start","ip":"192.168.4.100","port":5555,"hz":100}
+ * Response: {"type":"udp_stream_start_ack","ok":true,"ip":"...","port":N,"hz":N}
+ */
+void HandleUdpStreamStart(cJSON* json, httpd_req_t* req);
+
+/**
+ * @brief Stop UDP telemetry streaming
+ *
+ * Request: {"type":"udp_stream_stop"}
+ * Response: {"type":"udp_stream_stop_ack","ok":true}
+ */
+void HandleUdpStreamStop(cJSON* json, httpd_req_t* req);
+
+/**
+ * @brief Get UDP telemetry streaming status
+ *
+ * Request: {"type":"udp_stream_status"}
+ * Response: {"type":"udp_stream_status","streaming":bool,...}
+ */
+void HandleUdpStreamStatus(cJSON* json, httpd_req_t* req);
+
 }  // namespace rc_vehicle
