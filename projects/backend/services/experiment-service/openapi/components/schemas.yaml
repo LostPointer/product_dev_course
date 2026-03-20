@@ -693,3 +693,91 @@ TelemetryIngestRequest:
           meta:
             type: object
             additionalProperties: true
+ComparisonRequest:
+  type: object
+  required:
+  - run_ids
+  - metric_names
+  properties:
+    run_ids:
+      type: array
+      items:
+        type: string
+        format: uuid
+      minItems: 2
+      maxItems: 10
+    metric_names:
+      type: array
+      items:
+        type: string
+      minItems: 1
+      maxItems: 20
+    from_step:
+      type: integer
+      minimum: 0
+    to_step:
+      type: integer
+    max_points_per_series:
+      type: integer
+      minimum: 100
+      maximum: 2000
+      default: 500
+ComparisonResponse:
+  type: object
+  properties:
+    experiment_id:
+      type: string
+      format: uuid
+    metric_names:
+      type: array
+      items:
+        type: string
+    runs:
+      type: array
+      items:
+        $ref: '#/ComparisonRunEntry'
+ComparisonRunEntry:
+  type: object
+  properties:
+    run_id:
+      type: string
+      format: uuid
+    run_name:
+      type: string
+    status:
+      $ref: '#/RunStatus'
+    metrics:
+      type: object
+      additionalProperties:
+        $ref: '#/ComparisonMetricData'
+ComparisonMetricData:
+  type: object
+  properties:
+    summary:
+      $ref: '#/ComparisonMetricSummary'
+    series:
+      type: array
+      items:
+        $ref: '#/ComparisonPoint'
+ComparisonMetricSummary:
+  type: object
+  properties:
+    last_value:
+      type: number
+    last_step:
+      type: integer
+    min:
+      type: number
+    max:
+      type: number
+    avg:
+      type: number
+    count:
+      type: integer
+ComparisonPoint:
+  type: object
+  properties:
+    step:
+      type: integer
+    value:
+      type: number
