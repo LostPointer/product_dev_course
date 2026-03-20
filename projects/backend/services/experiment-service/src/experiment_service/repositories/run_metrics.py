@@ -191,6 +191,153 @@ class RunMetricsRepository(BaseRepository):
         rows: list[Record] = list(await self._fetch(query, *params))
         return rows
 
+    async def fetch_multi_run_summary(
+        self,
+        project_id: UUID,
+        run_ids: list[UUID],
+        names: list[str],
+    ) -> list[Record]:
+        """Return min/max/avg/count aggregates grouped by (run_id, name)."""
+        query = """
+            SELECT
+                run_id,
+                name,
+                count(*)::bigint  AS total_steps,
+                min(value)        AS min_value,
+                max(value)        AS max_value,
+                avg(value)        AS avg_value
+            FROM run_metrics
+            WHERE project_id = $1
+              AND run_id = ANY($2)
+              AND name = ANY($3)
+            GROUP BY run_id, name
+            ORDER BY run_id, name
+        """
+        rows: list[Record] = list(await self._fetch(query, project_id, run_ids, names))
+        return rows
+
+    async def fetch_multi_run_last(
+        self,
+        project_id: UUID,
+        run_ids: list[UUID],
+        names: list[str],
+    ) -> list[Record]:
+        """Return last (by step) value per (run_id, name)."""
+        query = """
+            SELECT DISTINCT ON (run_id, name)
+                run_id,
+                name,
+                step  AS last_step,
+                value AS last_value
+            FROM run_metrics
+            WHERE project_id = $1
+              AND run_id = ANY($2)
+              AND name = ANY($3)
+            ORDER BY run_id, name, step DESC
+        """
+        rows: list[Record] = list(await self._fetch(query, project_id, run_ids, names))
+        return rows
+
+    async def count_multi_run_points(
+        self,
+        project_id: UUID,
+        run_ids: list[UUID],
+        names: list[str],
+        *,
+        from_step: int | None = None,
+        to_step: int | None = None,
+    ) -> list[Record]:
+        """Return COUNT per (run_id, name) with optional step range filter."""
+        conditions = ["project_id = $1", "run_id = ANY($2)", "name = ANY($3)"]
+        params: list[Any] = [project_id, run_ids, names]
+        idx = 4
+        if from_step is not None:
+            conditions.append(f"step >= ${idx}")
+            params.append(from_step)
+            idx += 1
+        if to_step is not None:
+            conditions.append(f"step <= ${idx}")
+            params.append(to_step)
+            idx += 1
+        where_clause = " AND ".join(conditions)
+        query = f"""
+            SELECT run_id, name, count(*)::bigint AS cnt
+            FROM run_metrics
+            WHERE {where_clause}
+            GROUP BY run_id, name
+        """
+        rows: list[Record] = list(await self._fetch(query, *params))
+        return rows
+
+    async def fetch_multi_run_series(
+        self,
+        project_id: UUID,
+        run_ids: list[UUID],
+        names: list[str],
+        *,
+        from_step: int | None = None,
+        to_step: int | None = None,
+    ) -> list[Record]:
+        """Return raw (run_id, name, step, value) rows ordered by run_id, name, step."""
+        conditions = ["project_id = $1", "run_id = ANY($2)", "name = ANY($3)"]
+        params: list[Any] = [project_id, run_ids, names]
+        idx = 4
+        if from_step is not None:
+            conditions.append(f"step >= ${idx}")
+            params.append(from_step)
+            idx += 1
+        if to_step is not None:
+            conditions.append(f"step <= ${idx}")
+            params.append(to_step)
+            idx += 1
+        where_clause = " AND ".join(conditions)
+        query = f"""
+            SELECT run_id, name, step, value
+            FROM run_metrics
+            WHERE {where_clause}
+            ORDER BY run_id, name, step
+        """
+        rows: list[Record] = list(await self._fetch(query, *params))
+        return rows
+
+    async def fetch_multi_run_series_bucketed(
+        self,
+        project_id: UUID,
+        run_ids: list[UUID],
+        names: list[str],
+        *,
+        bucket_size: int,
+        from_step: int | None = None,
+        to_step: int | None = None,
+    ) -> list[Record]:
+        """Return step-bucketed avg(value) per (run_id, name, bucket)."""
+        conditions = ["project_id = $1", "run_id = ANY($2)", "name = ANY($3)"]
+        # $4 is bucket_size — referenced in SELECT expressions
+        params: list[Any] = [project_id, run_ids, names, bucket_size]
+        idx = 5
+        if from_step is not None:
+            conditions.append(f"step >= ${idx}")
+            params.append(from_step)
+            idx += 1
+        if to_step is not None:
+            conditions.append(f"step <= ${idx}")
+            params.append(to_step)
+            idx += 1
+        where_clause = " AND ".join(conditions)
+        query = f"""
+            SELECT
+                run_id,
+                name,
+                (step / $4) * $4 AS step,
+                avg(value)        AS value
+            FROM run_metrics
+            WHERE {where_clause}
+            GROUP BY run_id, name, (step / $4)
+            ORDER BY run_id, name, step
+        """
+        rows: list[Record] = list(await self._fetch(query, *params))
+        return rows
+
     async def fetch_aggregations(
         self,
         project_id: UUID,
