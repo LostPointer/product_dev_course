@@ -319,9 +319,9 @@ async def add_member(request: web.Request) -> web.Response:
 
     try:
         new_user_id = UUID(req.user_id)
-        role_id = UUID(req.role_id)
-    except ValueError:
-        return web.json_response({"error": "Invalid ID"}, status=400)
+        role_id = UUID(req.resolved_role_id())
+    except ValueError as e:
+        return web.json_response({"error": str(e)}, status=400)
 
     try:
         service = await get_project_service(request)
@@ -420,14 +420,15 @@ async def update_member_role(request: web.Request) -> web.Response:
         return web.json_response({"error": f"Invalid request: {e}"}, status=400)
 
     try:
-        new_role_id = UUID(req.role_id)
-        # Get old role_id from query param
-        old_role_id_str = request.query.get("old_role_id")
+        new_role_id = UUID(req.resolved_role_id())
+        # Get old role_id from query param (also supports role name)
+        old_role_id_str = request.query.get("old_role_id") or request.query.get("old_role")
         if not old_role_id_str:
             return web.json_response({"error": "old_role_id query param required"}, status=400)
-        old_role_id = UUID(old_role_id_str)
-    except ValueError:
-        return web.json_response({"error": "Invalid role ID"}, status=400)
+        from auth_service.domain.dto import PROJECT_ROLE_NAME_TO_ID as _RMAP
+        old_role_id = UUID(_RMAP.get(old_role_id_str.lower(), old_role_id_str))
+    except ValueError as e:
+        return web.json_response({"error": str(e)}, status=400)
 
     try:
         service = await get_project_service(request)

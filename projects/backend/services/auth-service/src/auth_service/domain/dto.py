@@ -262,18 +262,54 @@ class ProjectMemberResponse(BaseModel):
     granted_at: str | None = None
 
 
+# Fixed UUIDs for built-in project roles (match 001_initial_schema.sql seed)
+PROJECT_ROLE_NAME_TO_ID: dict[str, str] = {
+    "owner":  "00000000-0000-0000-0000-000000000010",
+    "editor": "00000000-0000-0000-0000-000000000011",
+    "viewer": "00000000-0000-0000-0000-000000000012",
+}
+
+
 class ProjectMemberAddRequest(BaseModel):
-    """Request to add a member to a project (grant a role)."""
+    """Request to add a member to a project (grant a role).
+
+    Accepts either ``role_id`` (UUID) or ``role`` (name: owner/editor/viewer).
+    """
 
     user_id: str
-    role_id: str
+    role_id: str | None = None
+    role: str | None = None
     expires_at: str | None = None  # ISO 8601 datetime
+
+    def resolved_role_id(self) -> str:
+        if self.role_id:
+            return self.role_id
+        if self.role:
+            rid = PROJECT_ROLE_NAME_TO_ID.get(self.role.lower())
+            if not rid:
+                raise ValueError(f"Unknown role name: {self.role!r}. Use one of: {list(PROJECT_ROLE_NAME_TO_ID)}")
+            return rid
+        raise ValueError("Either role_id or role must be provided")
 
 
 class ProjectMemberUpdateRequest(BaseModel):
-    """Request to update a member's role."""
+    """Request to update a member's role.
 
-    role_id: str
+    Accepts either ``role_id`` (UUID) or ``role`` (name: owner/editor/viewer).
+    """
+
+    role_id: str | None = None
+    role: str | None = None
+
+    def resolved_role_id(self) -> str:
+        if self.role_id:
+            return self.role_id
+        if self.role:
+            rid = PROJECT_ROLE_NAME_TO_ID.get(self.role.lower())
+            if not rid:
+                raise ValueError(f"Unknown role name: {self.role!r}. Use one of: {list(PROJECT_ROLE_NAME_TO_ID)}")
+            return rid
+        raise ValueError("Either role_id or role must be provided")
 
 
 class GrantProjectRoleRequest(BaseModel):
