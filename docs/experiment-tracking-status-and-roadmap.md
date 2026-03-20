@@ -418,8 +418,8 @@
   - SLO/SLI мониторинг
   - Chaos-тесты
   - ~~Metrics Service (run_metrics API)~~ ✅ Реализовано (POST/GET /runs/{id}/metrics, summary, step-bucketed aggregations)
-  - Artifact Service (S3, pre-signed URL)
-  - Comparison Service
+  - ~~Artifact Service~~ ⚠️ CRUD API + approve endpoints реализованы (16 тестов), frontend (таблица, фильтр, add/delete/approve dialogs); S3/pre-signed URL — ❌
+  - ~~Comparison Service~~ ✅ Реализовано (POST/GET /experiments/{id}/compare, multi-run metric comparison с auto-downsampling; frontend: чекбоксы runs, overlay Plotly charts, summary table)
   - Подписки на события (event subscriptions)
   - SLA ingest API: ⚠️ per-sensor REST rate limiter реализован (requests + readings per window, 429 с Retry-After); журнал ошибок датчика — ❌
   - Фикстуры и seed-данные для демо
@@ -575,7 +575,7 @@
   Есть DB-констрейнты, уникальности и ссылочная целостность. Не реализовано:
 
   1. **Retention policy для аудит-лога:** ✅ `AUDIT_RETENTION_DAYS=365` настроен, background cleanup worker работает в auth-service и experiment-service, индексы по `created_at` добавлены.
-  2. **Дедупликация телеметрии:** duplicate detection по `(sensor_id, timestamp, signal)` — сейчас полагается на уникальные timestamps; при burst-отправке возможны дубли.
+  2. **Дедупликация телеметрии:** ✅ уникальный индекс `(sensor_id, timestamp, signal)` + `ON CONFLICT DO NOTHING` — дубли при burst-отправке исключены.
   3. **Retention для `revoked_tokens`:** cleanup токенов старше TTL (частично реализовано в background worker, но без настройки TTL для revoked_tokens).
   4. **Soft-delete vs hard-delete:** определить политику для удалённых экспериментов/запусков (сейчас hard delete; для аудита может потребоваться soft-delete с `deleted_at`).
 
@@ -708,10 +708,10 @@
 
 ##### Этап 4: Расширения (backlog) ❌
 
-- **Scheduled profiles:** ❌
-  - Автоматическая активация профиля по `valid_from` (worker task проверяет `status = 'scheduled'` с `valid_from <= now()`).
-  - **Что нужно:** добавить в background worker (`background_tasks.py`) задачу `scheduled_profile_activation`: SELECT profiles WHERE status='scheduled' AND valid_from <= now(), для каждого → `publish_profile()`. Audit event: `conversion_profile.auto_activated`.
-  - **Frontend:** отображение `valid_from` в таблице профилей; UI для создания scheduled-профиля (datepicker).
+- **Scheduled profiles:** ✅ Реализовано
+  - Scheduled profiles worker: auto-activation `draft` -> `active`, auto-archive `active` -> `archived`.
+  - Background worker в `background_tasks.py` выполняет `scheduled_profile_activation`.
+  - Audit event: `conversion_profile.auto_activated`.
 
 - **Custom formula:** ❌
   - Пользовательское выражение (подмножество Python) для нестандартных формул: `sqrt(x) * 2.5 + log(x + 1)`.
@@ -726,13 +726,12 @@
   - **Реализация:** таблица `profile_ab_tests` (id, sensor_id, profile_a_id, profile_b_id, split_strategy, started_at, ended_at); при ingest — применять оба профиля, записывать `physical_value_a` и `physical_value_b` (или два `telemetry_records` с разными `conversion_profile_id`).
   - **Frontend:** UI для создания A/B-теста, графики с наложением двух кривых.
 
-- **Валидация payload при создании:** ❌
-  - Проверка структуры `payload` по `kind` при `POST /conversion-profiles`:
-    - `linear`: `{a: number, b: number}` — оба обязательны.
-    - `polynomial`: `{coefficients: number[]}` — минимум 1 элемент.
-    - `lookup_table`: `{table: [{raw: number, physical: number}, ...]}` — минимум 2 точки, отсортировано по `raw`.
-  - **Реализация:** Pydantic discriminated union по `kind` или JSON Schema validation.
-  - **Frontend:** уже есть специализированные поля для каждого kind; добавить серверную валидацию как safety net.
+- **Валидация payload при создании:** ✅ Реализовано
+  - Pydantic discriminated union по `kind` (linear, polynomial, lookup_table).
+  - `linear`: `{a: number, b: number}` — оба обязательны.
+  - `polynomial`: `{coefficients: number[]}` — минимум 1 элемент.
+  - `lookup_table`: `{table: [{raw: number, physical: number}, ...]}` — минимум 2 точки, отсортировано по `raw`.
+  - Серверная валидация как safety net для frontend.
 
 - **Batch ingest с конверсией:** ❌
   - При batch insert > 100 readings — параллельная конверсия с `asyncio.gather` или thread pool.
@@ -755,14 +754,14 @@
 ### 4. Integrations & Collaboration (итерация 7)
 - **Enforcement бизнес-политик:** ❌
 - **Расширенные фильтры API:** ✅ Реализовано: `GET /api/v1/experiments` поддерживает `?status=`, `?tags=` (comma-separated, @> containment), `?created_after=`, `?created_before=` (ISO-8601); `GET /api/v1/experiments/{id}/runs` — те же фильтры; `GET /api/v1/sensors` — `?status=`, `?created_after=`, `?created_before=`; поиск по тексту — `GET /api/v1/experiments/search?q=`.
-- **Экспорт данных:** ✅ Частично реализовано.
+- **Экспорт данных:** ✅ Реализовано (CSV/JSON + ZIP+Parquet).
   - ✅ **Метаданные:** `GET /api/v1/experiments/export?format=csv|json` и `GET /api/v1/experiments/{id}/runs/export?format=csv|json` с поддержкой фильтров (status, tags, created_after, created_before); до 5000 записей; на фронтенде кнопки «CSV» / «JSON» на списке экспериментов и списке запусков.
   - ✅ **Экспорт с данными датчиков (телеметрия) — Этап 1+2:** Backend API + Frontend UI для экспорта telemetry readings из capture sessions. Подробный план и статус ниже.
 - **Подписки на события:** ❌
 
 ### 4.5 Экспорт данных с телеметрией датчиков
 
-> **Статус:** ✅ Этапы 1 и 2 реализованы (backend API + frontend UI). Этап 3 (расширенный экспорт) — backlog.
+> **Статус:** ✅ Этапы 1, 2 и 3 (частично) реализованы (backend API + frontend UI + ZIP+Parquet экспорт). Остаток этапа 3 (асинхронный экспорт, шаблоны) — backlog.
 > **Приоритет:** Средний — важно для анализа данных вне платформы (Jupyter, MATLAB, Excel).
 
 #### Текущее состояние
@@ -810,12 +809,11 @@
 3. **TelemetryViewer (history mode):** ✅ Реализовано.
    - Кнопка «Экспорт данных…» открывает `TelemetryExportModal`, предзаполненный текущим состоянием (сессия, датчик, raw/physical, include_late, агрегация).
 
-##### Этап 3: Расширенный экспорт (backlog)
+##### Этап 3: Расширенный экспорт ✅ (частично)
 
-- **Полный экспорт эксперимента:** одним архивом (ZIP): метаданные эксперимента + все runs + все capture sessions + все telemetry readings. Формат: директория `experiment_<id>/runs/<run_id>/sessions/<session_id>/telemetry.csv`.
-- **Формат Parquet:** для интеграции с pandas/PySpark; более компактный чем CSV для больших выгрузок.
-- **Асинхронный экспорт:** для больших объёмов (>100k записей) — создание задачи, фоновая генерация файла, уведомление о готовности, ссылка на скачивание.
-- **Шаблоны экспорта:** пользователь может сохранить конфигурацию экспорта (фильтры, колонки, формат) и переиспользовать.
+- ✅ **ZIP+Parquet экспорт:** `GET /experiments/{id}/export?format=zip` — полный экспорт эксперимента одним архивом (ZIP): метаданные эксперимента + все runs + все capture sessions + все telemetry readings в формате Parquet.
+- **Асинхронный экспорт:** ❌ для больших объёмов (>100k записей) — создание задачи, фоновая генерация файла, уведомление о готовности, ссылка на скачивание.
+- **Шаблоны экспорта:** ❌ пользователь может сохранить конфигурацию экспорта (фильтры, колонки, формат) и переиспользовать.
 
 #### Зависимости
 

@@ -18,15 +18,15 @@
 | Фронтенд | TypeScript + React + Vite | ✅ TypeScript + React + Vite + React Router + React Query + Plotly |
 | Стриминг/интеграции | WebSocket/SSE, Kafka или Redis Streams для Telemetry Ingest | ⚠️ **SSE + REST** (WebSocket и Kafka/Redis не реализованы; достаточно для MVP) |
 | Инфраструктура | Docker/Docker Compose, nginx как фронтовой прокси | ⚠️ Docker Compose; **Auth Proxy (Fastify)** вместо nginx как BFF/прокси; nginx только внутри контейнеров фронтенда |
-| Тестирование и качество | pytest, pytest-aiohttp, линтеры (ruff, mypy), OpenAPI/AsyncAPI | ✅ pytest + pytest-aiohttp + yandex-taxi-testsuite; vitest (фронт); jest (auth-proxy); mypy; Cypress (E2E); OpenAPI — ✅, AsyncAPI — ❌ |
+| Тестирование и качество | pytest, pytest-aiohttp, линтеры (ruff, mypy), OpenAPI/AsyncAPI | ✅ pytest + pytest-aiohttp + yandex-taxi-testsuite; vitest (фронт); jest (auth-proxy); mypy; Cypress (E2E); OpenAPI — ✅, AsyncAPI — ✅ |
 
 ## 2. Цели продукта и KPI
 1. **Прозрачность экспериментов:** ✅ каждый эксперимент и его запуски доступны для просмотра в единой системе.
-2. **Отслеживаемость качества:** ⚠️ просмотр телеметрии (live + historical) и аудит-лог реализованы; сравнение запусков (Comparison Service) — ❌.
-3. **Повторяемость:** ⚠️ параметры, окружение, git_sha сохраняются; артефакты — только схема, без хранилища.
+2. **Отслеживаемость качества:** ✅ просмотр телеметрии (live + historical) и аудит-лог реализованы; сравнение запусков (Comparison Service) — ✅.
+3. **Повторяемость:** ⚠️ параметры, окружение, git_sha сохраняются; артефакты — API + метаданные есть, S3 хранилище нет.
 4. **KPI:**
    - покрытие 100% экспериментов командой — ✅ (все эксперименты привязаны к проектам с RBAC)
-   - TTM сравнения < 10 сек — ❌ (Comparison Service не реализован)
+   - TTM сравнения < 10 сек — ✅ (Comparison Service реализован: POST/GET /experiments/{id}/compare, multi-run metric comparison с auto-downsampling)
    - время регистрации нового запуска < 3 сек — ✅
    - MTTR < 15 мин — ⚠️ (OpenTelemetry + Grafana/Loki для диагностики, Prometheus метрики на всех сервисах; SLO/SLI мониторинг не настроен)
 
@@ -57,20 +57,20 @@
 - ✅ Docker Compose окружение
 - ✅ Тесты (unit + integration: pytest, vitest, jest, Cypress)
 - ✅ OpenAPI документация
-- ✅ Импорт/экспорт через REST (CSV/JSON)
+- ✅ Импорт/экспорт через REST (CSV/JSON, ZIP+Parquet)
 - ✅ Logging stack (Loki + Alloy + Grafana)
 - ✅ OpenTelemetry трассировка
 
 ### Вне scope / не реализовано
 - ✅ Metrics Service API (POST/GET /runs/{id}/metrics, summary, step-bucketed aggregations; frontend: RunMetrics panel с Plotly, summary cards)
-- ❌ Artifact Service (таблица `artifacts` есть, но нет S3/pre-signed URL/UI)
-- ❌ Comparison Service
+- ⚠️ Artifact Service (CRUD API + approve endpoints + метаданные реализованы, 16 тестов; S3/pre-signed URL нет; frontend: таблица, фильтр, add/delete/approve dialogs)
+- ✅ Comparison Service (POST/GET /experiments/{id}/compare, multi-run metric comparison с auto-downsampling; frontend: чекбоксы runs, overlay Plotly charts, summary table)
 - ❌ API Gateway (роль выполняет Auth Proxy)
 - ❌ WebSocket (вместо него SSE — достаточно для MVP)
 - ❌ Kafka/Redis Streams
 - ❌ Kubernetes деплой
 - ❌ Мобильное приложение
-- ❌ AsyncAPI спецификация
+- ✅ AsyncAPI спецификация (SSE + WebSocket каналы telemetry-ingest-service)
 
 ## 5. Архитектура и компоненты
 
@@ -84,8 +84,8 @@
 | Sensor Simulator | React SPA для генерации тестовой телеметрии (waveforms, сценарии burst/dropout/late) | localStorage | ✅ |
 | Logging Stack (Loki + Alloy + Grafana) | Сбор и визуализация логов со всех сервисов | Loki | ✅ |
 | Metrics Service | Прием батчей метрик, хранение серий, агрегации | PostgreSQL (`experiment_db`) | ✅ |
-| Artifact Service | Загрузка артефактов, версионирование | — | ❌ |
-| Comparison Service | Построение сравнений запусков | — | ❌ |
+| Artifact Service | CRUD артефактов, approve, метаданные | PostgreSQL (`experiment_db`) | ⚠️ (API + метаданные есть, S3 хранилище нет) |
+| Comparison Service | Сравнение запусков, multi-run metric comparison | PostgreSQL (`experiment_db`) | ✅ |
 | API Gateway | Агрегация ответов, внешний API | — | ❌ (Auth Proxy выполняет роль BFF) |
 
 ## 6. Функциональные требования
@@ -116,7 +116,7 @@
 - ✅ Датчик нельзя удалить при активных capture sessions.
 - ⚠️ Эксперимент можно архивировать — нет проверки на `running` запуски (в backlog).
 - ✅ Capture session нельзя удалить, кроме `draft`/`failed`.
-- ⚠️ Профили преобразования — схема и статусная машина есть; backfill с пересчётом `physical_value` — ❌.
+- ⚠️ Профили преобразования — схема и статусная машина есть; scheduled profiles (auto-activation draft->active, auto-archive active->archived) — ✅; валидация payload (Pydantic discriminated union) — ✅; backfill с пересчётом `physical_value` — ❌.
 
 ### 6.2 Датчики и телеметрия
 - ✅ Регистрация датчика: имя, тип, единица измерения, проект, секретный токен.
@@ -127,7 +127,7 @@
 - ✅ Sensor Simulator (React SPA) для тестовой отправки с различными сценариями (burst, dropout, sine, late data).
 - ❌ Журнал ошибок приёма на уровне датчика.
 - ✅ Каждое значение хранит `raw_value` и `physical_value`; пользователь переключает режим на графике.
-- ⚠️ Профили преобразования: схема + статусная машина (`draft`, `active`, `scheduled`, `deprecated`); backfill-пересчёт — ❌.
+- ⚠️ Профили преобразования: схема + статусная машина (`draft`, `active`, `scheduled`, `deprecated`); scheduled profiles worker (auto-activation/archive) — ✅; валидация payload (Pydantic discriminated union: linear, polynomial, lookup_table) — ✅; backfill-пересчёт — ❌.
 - ✅ Множественные проекты для датчиков (`sensor_projects`).
 - ✅ Агрегированные запросы из `telemetry_1m` continuous aggregate (TimescaleDB).
 
@@ -141,7 +141,7 @@
 - ✅ «Старт отсчёта» / «Стоп отсчёта» создаёт/завершает capture session.
 - ✅ Один запуск поддерживает несколько capture sessions.
 - ✅ Расширенные фильтры: `status`, `tags`, `created_after`, `created_before`, поиск по тексту.
-- ✅ Экспорт экспериментов и запусков в CSV/JSON.
+- ✅ Экспорт экспериментов и запусков в CSV/JSON; ZIP+Parquet экспорт (`GET /experiments/{id}/export?format=zip`).
 
 ### 6.4 Метрики
 - ✅ Таблица `run_metrics` существует в схеме (run_id, name, step, value, timestamp).
@@ -153,13 +153,15 @@
 - ❌ Backfill engine для пересчёта `physical_value` при смене профиля.
 
 ### 6.5 Артефакты
-- ⚠️ Таблица `artifacts` существует в схеме (type, uri, checksum, size, metadata, approved_by).
+- ✅ Таблица `artifacts` существует в схеме (type, uri, checksum, size, metadata, approved_by).
+- ✅ Artifact Service API: CRUD + approve endpoints, 16 тестов.
+- ✅ Frontend: таблица артефактов, фильтр, add/delete/approve dialogs.
 - ❌ Загрузка файлов через pre-signed URL / S3.
-- ❌ UI для управления артефактами.
 
 ### 6.6 Сравнения
-- ❌ Comparison Service не реализован.
-- ❌ Сравнение запусков, расчёт дельт, экспорт отчётов.
+- ✅ Comparison Service: POST/GET /experiments/{id}/compare, multi-run metric comparison с auto-downsampling.
+- ✅ Frontend: страница сравнения — чекбоксы runs, overlay Plotly charts, summary table.
+- ❌ Экспорт отчётов сравнения.
 
 ### 6.7 API Gateway
 - ❌ Отдельный API Gateway не реализован; Auth Proxy (Fastify) выполняет роль BFF/прокси.
@@ -172,7 +174,7 @@
 - ✅ Переключатель capture session для выбранного запуска (history mode).
 - ✅ Формы добавления датчика, эксперимента и запуска с валидацией.
 - ✅ Монитор датчиков: страница `/sensor-monitor` с StatusIndicator (online/delayed/offline), SensorStatusSummaryBar, heartbeat sparklines, автообновление.
-- ❌ Экран сравнения запусков.
+- ✅ Экран сравнения запусков: чекбоксы runs, overlay Plotly charts, summary table.
 
 ### 6.9 UX Live-монитора
 - ❌ Таймлайн capture session поверх графиков (цветные полосы running/failed/backfilling).
@@ -222,17 +224,17 @@
 - ✅ Experiment Service и Auth Service описывают OpenAPI спецификации.
 - ❌ API Gateway с объединённой схемой.
 - ✅ Telemetry Ingest Service: REST-ручка `/api/v1/telemetry` и SSE `/api/v1/telemetry/stream`.
-- ❌ AsyncAPI описание.
+- ✅ AsyncAPI спецификация: SSE + WebSocket каналы telemetry-ingest-service.
 - ✅ Webhooks: исходящие уведомления по событиям (status change, backfill и т.д.) через webhook subscriptions.
 - ❌ Входящие вебхуки для CI/CD.
-- ❌ CLI-утилита для отправки результатов.
+- ✅ CLI-утилита `etp`: run create/finish, metrics push, artifact register для CI/CD.
 
 ## 8. Данные и модели
 - ✅ **Experiment:** id, project_id, name, description, tags[], owner_id, created_at, updated_at, status, experiment_type, metadata (JSONB).
 - ✅ **Run:** id, experiment_id, project_id, params(JSONB), git_sha, env, tags[], status, started_at, finished_at, duration_seconds, notes, metadata.
 - ✅ **RunMetric:** run_id, name, step, value, timestamp — таблица и API реализованы (POST/GET /runs/{id}/metrics, summary, aggregations).
-- ⚠️ **Artifact:** id, run_id, type, uri, checksum, size, metadata, approved_by — таблица есть, API нет.
-- ❌ **Comparison:** не реализовано.
+- ⚠️ **Artifact:** id, run_id, type, uri, checksum, size, metadata, approved_by — таблица и CRUD API + approve endpoints реализованы; S3 хранилище нет.
+- ✅ **Comparison:** POST/GET /experiments/{id}/compare — multi-run metric comparison с auto-downsampling.
 - ✅ **Sensor:** id, project_id, name, type, input_unit, display_unit, token_hash, token_preview, status, last_heartbeat, active_profile_id.
 - ✅ **SensorProjects:** sensor_id, project_id (M2M).
 - ✅ **ConversionProfile:** id, sensor_id, version, kind, payload(JSONB), valid_from, valid_to, status, created_by, published_by.
@@ -269,8 +271,8 @@
 |------|-----------|--------|
 | **MVP (спринты 1–3)** | Auth, Telemetry Ingest (REST + SSE), список датчиков, CRUD экспериментов/запусков, старт/стоп отсчёта, Docker Compose | ✅ |
 | **Beta (спринты 4–6)** | SSE стриминг (live + history), мульти-панельные графики, webhooks, аудит, расширенные фильтры, экспорт, backfill, RBAC, TimescaleDB | ✅ |
-| **GA (спринты 7–8)** | Наблюдаемость (OpenTelemetry + Loki/Grafana), документация | ⚠️ (трассировка и логи — ✅; SLO/SLI, алёрты, CLI, вебхуки CI/CD — ❌) |
-| **Не реализовано** | Artifact Service (S3), Comparison Service, API Gateway, WebSocket, Kafka, мобильное приложение, chaos-тесты, нагрузочное тестирование | ❌ |
+| **GA (спринты 7–8)** | Наблюдаемость (OpenTelemetry + Loki/Grafana), документация, CLI | ⚠️ (трассировка и логи — ✅; CLI `etp` — ✅; AsyncAPI — ✅; SLO/SLI, алёрты, вебхуки CI/CD — ❌) |
+| **Не реализовано** | Artifact Service (S3 хранилище), API Gateway, Kafka, мобильное приложение, chaos-тесты, нагрузочное тестирование | ❌ |
 
 ## 13. Критерии приёмки
 
