@@ -16,7 +16,7 @@
 | Язык и HTTP-слой | Python 3.14+, `aiohttp` | ✅ Python 3.14, `aiohttp` (сервер и клиент) |
 | Работа с БД | PostgreSQL 15+, `asyncpg`, без ORM; миграции через Alembic | ⚠️ PostgreSQL 16 + TimescaleDB, `asyncpg`, без ORM; **миграции — собственный runner** (`schema_migrations` + checksum), не Alembic |
 | Фронтенд | TypeScript + React + Vite | ✅ TypeScript + React + Vite + React Router + React Query + Plotly |
-| Стриминг/интеграции | WebSocket/SSE, Kafka или Redis Streams для Telemetry Ingest | ⚠️ **SSE + REST** (WebSocket и Kafka/Redis не реализованы; достаточно для MVP) |
+| Стриминг/интеграции | WebSocket/SSE, Kafka или Redis Streams для Telemetry Ingest | ⚠️ **SSE + REST + WebSocket**; Kafka/Redis Streams — не реализованы (достаточно для MVP) |
 | Инфраструктура | Docker/Docker Compose, nginx как фронтовой прокси | ⚠️ Docker Compose; **Auth Proxy (Fastify)** вместо nginx как BFF/прокси; nginx только внутри контейнеров фронтенда |
 | Тестирование и качество | pytest, pytest-aiohttp, линтеры (ruff, mypy), OpenAPI/AsyncAPI | ✅ pytest + pytest-aiohttp + yandex-taxi-testsuite; vitest (фронт); jest (auth-proxy); mypy; Cypress (E2E); OpenAPI — ✅, AsyncAPI — ✅ |
 
@@ -66,7 +66,7 @@
 - ⚠️ Artifact Service (CRUD API + approve endpoints + метаданные реализованы, 16 тестов; S3/pre-signed URL нет; frontend: таблица, фильтр, add/delete/approve dialogs)
 - ✅ Comparison Service (POST/GET /experiments/{id}/compare, multi-run metric comparison с auto-downsampling; frontend: чекбоксы runs, overlay Plotly charts, summary table)
 - ❌ API Gateway (роль выполняет Auth Proxy)
-- ❌ WebSocket (вместо него SSE — достаточно для MVP)
+- ✅ WebSocket ingest (`GET /api/v1/telemetry/ws`) — реализован для высокочастотных источников (RC-машинка 500 Гц)
 - ❌ Kafka/Redis Streams
 - ❌ Kubernetes деплой
 - ❌ Мобильное приложение
@@ -116,18 +116,18 @@
 - ✅ Датчик нельзя удалить при активных capture sessions.
 - ⚠️ Эксперимент можно архивировать — нет проверки на `running` запуски (в backlog).
 - ✅ Capture session нельзя удалить, кроме `draft`/`failed`.
-- ⚠️ Профили преобразования — схема и статусная машина есть; scheduled profiles (auto-activation draft->active, auto-archive active->archived) — ✅; валидация payload (Pydantic discriminated union) — ✅; backfill с пересчётом `physical_value` — ❌.
+- ✅ Профили преобразования — схема и статусная машина есть; scheduled profiles (auto-activation draft->active, auto-archive active->archived) — ✅; валидация payload (Pydantic discriminated union) — ✅; backfill с пересчётом `physical_value` — ✅.
 
 ### 6.2 Датчики и телеметрия
 - ✅ Регистрация датчика: имя, тип, единица измерения, проект, секретный токен.
-- ⚠️ API ingest `/api/v1/telemetry` — POST (REST, батчи); SSE стриминг (`GET /api/v1/telemetry/stream`). **WebSocket — ❌.**
+- ✅ API ingest `/api/v1/telemetry` — POST (REST, батчи); SSE стриминг (`GET /api/v1/telemetry/stream`); WebSocket ingest (`GET /api/v1/telemetry/ws`) с rate limiting и seq acks.
 - ⚠️ SLA ingest API: per-sensor REST rate limiter реализован (requests + readings per window, 429 с Retry-After); журнал ошибок датчика — ❌.
 - ✅ Мониторинг состояния: `connection_status` вычисляется (online/delayed/offline), `status-summary`, `heartbeat-history`; frontend дашборд `/sensor-monitor`.
 - ✅ Веб-интерфейс: список датчиков, создание, фильтрация по проекту/типу.
 - ✅ Sensor Simulator (React SPA) для тестовой отправки с различными сценариями (burst, dropout, sine, late data).
 - ❌ Журнал ошибок приёма на уровне датчика.
 - ✅ Каждое значение хранит `raw_value` и `physical_value`; пользователь переключает режим на графике.
-- ⚠️ Профили преобразования: схема + статусная машина (`draft`, `active`, `scheduled`, `deprecated`); scheduled profiles worker (auto-activation/archive) — ✅; валидация payload (Pydantic discriminated union: linear, polynomial, lookup_table) — ✅; backfill-пересчёт — ❌.
+- ✅ Профили преобразования: схема + статусная машина (`draft`, `active`, `scheduled`, `deprecated`); scheduled profiles worker (auto-activation/archive) — ✅; валидация payload (Pydantic discriminated union: linear, polynomial, lookup_table) — ✅; backfill-пересчёт — ✅.
 - ✅ Множественные проекты для датчиков (`sensor_projects`).
 - ✅ Агрегированные запросы из `telemetry_1m` continuous aggregate (TimescaleDB).
 
@@ -150,7 +150,7 @@
 - ✅ Live-канал (SSE) ретранслирует последние точки телеметрии.
 - ✅ При активном отсчёте сохраняются все значения датчиков с отметками времени.
 - ✅ Для каждого значения доступны `raw_value` и `physical_value`.
-- ❌ Backfill engine для пересчёта `physical_value` при смене профиля.
+- ✅ Backfill engine для пересчёта `physical_value` при смене профиля (background worker `conversion_backfill`, API start/complete, UI с progress bar).
 
 ### 6.5 Артефакты
 - ✅ Таблица `artifacts` существует в схеме (type, uri, checksum, size, metadata, approved_by).
