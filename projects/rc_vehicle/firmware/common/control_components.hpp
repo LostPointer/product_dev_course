@@ -249,7 +249,11 @@ struct TelemetrySnapshot {
   bool kids_anti_spin_active{false};
   float kids_throttle_limit{0.0f};
 
-  // Actuators
+  // RC input (сырые значения с пульта, до стабилизации)
+  float rc_throttle{0.0f};
+  float rc_steering{0.0f};
+
+  // Actuators (applied, после стабилизации/trim/slew rate)
   float throttle{0.0f};
   float steering{0.0f};
 };

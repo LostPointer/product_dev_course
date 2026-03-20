@@ -376,6 +376,10 @@ function updateTelem(data) {
         html += row('Gyro Y', data.imu.gy?.toFixed(2) ?? 'N/A');
         html += row('Gyro Z', data.imu.gz?.toFixed(2) ?? 'N/A');
     }
+    if (data.rc) {
+        html += row('RC Throttle', data.rc.throttle?.toFixed(2) ?? 'N/A');
+        html += row('RC Steering', data.rc.steering?.toFixed(2) ?? 'N/A');
+    }
     if (data.act) {
         html += row('Throttle', data.act.throttle?.toFixed(2) ?? 'N/A');
         html += row('Steering', data.act.steering?.toFixed(2) ?? 'N/A');

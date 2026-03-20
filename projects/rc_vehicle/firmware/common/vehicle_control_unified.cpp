@@ -237,6 +237,15 @@ void VehicleControlUnified::ControlTaskLoop() {
       snap.throttle = applied_throttle;
       snap.steering = applied_steering;
 
+      // Raw RC input (до стабилизации)
+      if (rc_handler_ && rc_handler_->IsActive()) {
+        auto rc_cmd = rc_handler_->GetCommand();
+        if (rc_cmd) {
+          snap.rc_throttle = rc_cmd->throttle;
+          snap.rc_steering = rc_cmd->steering;
+        }
+      }
+
       // Kids Mode status (routing определяется drive_mode/traits)
       snap.kids_mode_active = (drive_mode == DriveMode::Kids);
       snap.kids_anti_spin_active = kids_processor_.IsAntiSpinActive();

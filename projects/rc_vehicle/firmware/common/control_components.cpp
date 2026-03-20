@@ -256,6 +256,15 @@ std::string TelemetryHandler::BuildTelemJson(
     }
   }
 
+  // RC input (сырые значения с пульта)
+  if (snap.rc_ok) {
+    cJSON* rc = cJSON_AddObjectToObject(root, "rc");
+    if (rc) {
+      cJSON_AddNumberToObject(rc, "throttle", snap.rc_throttle);
+      cJSON_AddNumberToObject(rc, "steering", snap.rc_steering);
+    }
+  }
+
   // Actuators
   cJSON* act = cJSON_AddObjectToObject(root, "act");
   if (act) {
