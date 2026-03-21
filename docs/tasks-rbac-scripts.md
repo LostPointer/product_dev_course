@@ -124,8 +124,8 @@
 
 ## Фаза 2: Интеграция auth-proxy + experiment-service
 
-### 2.1 auth-proxy: permissions injection
-**~5ч** | зависит от: 1.6 | блокирует: 2.3
+### 2.1 auth-proxy: permissions injection + script-service routing
+**~6ч** | зависит от: 1.6 | блокирует: 2.3
 
 - Заменить логику получения роли (`GET /projects/{pid}/members`) на `GET /users/{uid}/effective-permissions?project_id={pid}`
 - Убрать заголовок `X-Project-Role`
@@ -133,6 +133,9 @@
   - `X-User-Permissions: experiments.create,experiments.view,...`
   - `X-User-System-Permissions: scripts.execute,audit.read,...`
   - `X-User-Is-Superadmin: true/false`
+- Добавить proxy-правила для script-service:
+  - `/api/v1/scripts/*` → `script-service:8004`
+  - `/api/v1/executions/*` → `script-service:8004`
 - Обновить типы в TypeScript
 - Тесты auth-proxy
 
@@ -214,30 +217,38 @@
 ## Фаза 4: Script Service
 
 ### 4.1 Scaffold script-service
-**~4ч** | зависит от: 1.1 | блокирует: 4.2, 4.3, 4.5
+**~4ч** | зависит от: 1.1 | блокирует: 4.2, 4.3
 
 - Создать структуру каталогов: `services/script-service/` (по аналогии с experiment-service)
 - `pyproject.toml` с зависимостями (aiohttp, asyncpg, pydantic, aio-pika)
 - `settings.py`, `app.py` (aiohttp application factory)
 - `Dockerfile`
-- Миграция `001_initial_schema.sql`: таблицы `scripts`, `script_executions`
-- Domain models: `Script`, `ScriptExecution`, enums статусов
+- Миграция `001_initial_schema.sql`: таблицы `scripts` (с git-полями), `script_executions`
+  - **Важно:** использовать `DB_SCHEMA: script` — отдельная PostgreSQL-схема в общей БД (см. [script-execution-design.md](script-execution-design.md), раздел 5)
+- Domain models: `Script` (с git_repo_url, git_path, git_ref), `ScriptExecution`, enums статусов
 - Добавить в `docker-compose.yml` + `docker-compose.override.yml`
 - `make dev-clean && make dev-up` — сервис стартует
 
-### 4.2 Script CRUD API
-**~4ч** | зависит от: 4.1 | блокирует: 4.3
+### 4.2 Git Integration + Script CRUD API
+**~8ч** | зависит от: 4.1 | блокирует: 4.3
 
+> **Примечание:** GitClient здесь — для валидации git_ref при CRUD (resolve tag/branch → commit, проверка существования файла).
+> Отдельный GitClient в `common/script_runner/` (фаза 5) — для загрузки скриптов при выполнении на стороне runner'а.
+> Общий код (clone/fetch/checkout) стоит вынести в общую утилиту и переиспользовать.
+
+- `GitClient`: clone, fetch, checkout, read_file, resolve_ref (с кэшированием репозитория)
+- Валидация git_path (защита от path traversal)
 - `ScriptRepo`: create, get_by_id, list (фильтры: target_service, is_active), update, soft_delete
-- `ScriptManager` (service): CRUD с валидацией (имя уникально, параметры валидны)
+- `ScriptManager` (service): CRUD с валидацией (имя уникально, git_ref валиден, параметры валидны)
 - `routes/scripts.py`:
   - `POST /api/v1/scripts` — требует `scripts.manage`
   - `GET /api/v1/scripts` — требует `scripts.manage` или `scripts.execute`
   - `GET /api/v1/scripts/{id}` — аналогично
   - `PATCH /api/v1/scripts/{id}` — требует `scripts.manage`
   - `DELETE /api/v1/scripts/{id}` — soft delete, `scripts.manage`
+  - `POST /api/v1/scripts/{id}/approve` — `scripts.manage`
 - `dependencies.py` — `extract_user()`, `ensure_permission()` (аналогично experiment-service)
-- Тесты CRUD
+- Тесты CRUD + git integration
 
 ### 4.3 Execution API + RabbitMQ dispatcher
 **~6ч** | зависит от: 4.2 | блокирует: 4.4
@@ -245,10 +256,11 @@
 - `ExecutionRepo`: create, get_by_id, list (фильтры), update_status, update_result
 - `ExecutionDispatcher` (service):
   - `execute(user_id, script_id, parameters, target_instance)`:
-    - Валидация скрипта (exists, is_active)
+    - Валидация скрипта (exists, is_active, is_approved)
     - Валидация параметров по schema
-    - Создание записи `script_executions` (status=pending)
-    - Publish в RabbitMQ: `script.execute.{target_service}`
+    - Получение commit hash из git_ref (resolve tag/branch → commit)
+    - Создание записи `script_executions` (status=pending, git_ref_at_execution=commit_hash)
+    - Publish в RabbitMQ: `script.execute.{target_service}` (с git_repo_url, git_path, git_ref)
     - Вернуть execution_id
   - `cancel(user_id, execution_id)`: publish `script.cancel.{service}`, статус → cancelled
 - RabbitMQ status consumer: слушает `script.status.*`, обновляет `script_executions`
@@ -263,7 +275,7 @@
 ### 4.4 Тесты script-service
 **~4ч** | зависит от: 4.3
 
-- Unit: ScriptManager CRUD, валидация параметров
+- Unit: ScriptManager CRUD, валидация параметров, git integration
 - Unit: ExecutionDispatcher — создание execution, публикация в RabbitMQ (мок)
 - Unit: Status consumer — обновление статуса при получении сообщения
 - API: полный цикл CRUD скриптов
@@ -275,24 +287,30 @@
 ## Фаза 5: Script Runner (common module)
 
 ### 5.1 Модуль script_runner
-**~5ч** | зависит от: 4.3 | блокирует: 5.2
+**~6ч** | зависит от: 4.3 | блокирует: 5.2
 
-- `common/script_runner/models.py` — Pydantic-модели сообщений (ExecuteCommand, StatusReport, CancelCommand)
+- `common/script_runner/models.py` — Pydantic-модели сообщений (ExecuteCommand с git-полями, StatusReport, CancelCommand)
+- `common/script_runner/git_client.py`:
+  - `GitClient(repo_url, token, cache_dir)`
+  - `clone()` / `fetch()` — кэширование репозитория
+  - `checkout(ref)` — checkout commit/tag/branch
+  - `read_file(path)` — чтение файла с валидацией path
+  - `resolve_ref(ref)` — resolve tag/branch → commit hash
 - `common/script_runner/executor.py`:
-  - `execute_script(script_body, script_type, parameters, timeout_sec)` → (exit_code, stdout, stderr)
+  - `execute_script(script_path, script_type, parameters, timeout_sec)` → (exit_code, stdout, stderr)
   - `asyncio.create_subprocess_exec` с таймаутом
-  - Очистка env vars (только параметры)
+  - Очистка env vars (только `PARAM_*` + `PATH`)
   - SIGTERM → SIGKILL при таймауте
 - `common/script_runner/consumer.py`:
   - Подключение к RabbitMQ
   - Слушает `script.execute.{service_name}`
   - Слушает `script.cancel.{service_name}`
-  - При получении — запускает executor, отправляет статусы
+  - При получении — git checkout, запуск executor, отправка статусов
   - Семафор на `max_concurrent`
 - `common/script_runner/runner.py`:
-  - `ScriptRunner(service_name, rabbitmq_url, max_concurrent)`
+  - `ScriptRunner(service_name, rabbitmq_url, git_repo_url, git_token, max_concurrent)`
   - `start()` / `stop()`
-- Unit-тесты executor (subprocess с таймаутами)
+- Unit-тесты executor (subprocess с таймаутами), git_client
 
 ### 5.2 Интеграция runner в сервисы
 **~3ч** | зависит от: 5.1
@@ -300,13 +318,14 @@
 - experiment-service: добавить `ScriptRunner` в startup/cleanup
 - auth-service: аналогично
 - telemetry-ingest-service: аналогично
-- Добавить `RABBITMQ_URL` в env сервисов (если ещё нет)
+- Добавить `RABBITMQ_URL`, `SCRIPTS_GIT_REPO_URL`, `SCRIPTS_GIT_TOKEN` в env сервисов
 - Smoke-тест: запустить скрипт через API → получить результат
 
 ### 5.3 Тесты script runner
 **~4ч** | зависит от: 5.2
 
 - Unit: executor — успешный скрипт, ошибка, таймаут, cancel
+- Unit: git_client — clone, fetch, checkout, read_file, path traversal защита
 - Unit: consumer — получение сообщения, отправка статусов
 - Integration: script-service → RabbitMQ → experiment-service runner → статус обратно
 - Тест: max_concurrent — третий скрипт ждёт пока один из двух завершится
@@ -357,21 +376,41 @@
 - Фильтры в URL query params
 
 ### 6.6 Страница «Скрипты» — реестр
-**~5ч** | зависит от: 6.1, 4.2
+**~6ч** | зависит от: 6.1, 4.2
 
-- Новая страница `/admin/scripts`, route, навигация
-- Таб «Реестр»: таблица скриптов, CRUD
-- Форма: name, target_service, script_type, script_body (monospace textarea), параметры (динамическая форма), timeout
-- `<PermissionGate permission="scripts.manage">` на кнопках
+- Новая страница `/admin/scripts`, route, навигация (требует `scripts.execute` или `scripts.manage`)
+- Два таба: «Реестр» / «Выполнения»
+- **Таб «Реестр»**:
+  - Таблица: name, target_service, script_type, git_path, git_ref, timeout, is_active, is_approved
+  - Фильтры: target_service (dropdown), is_active (checkbox), is_approved (checkbox)
+  - Кнопка «Создать скрипт» (требует `scripts.manage`)
+  - Модалка создания/редактирования:
+    - Поля: name, description, target_service, script_type, **git_repo_url, git_path, git_ref, git_ref_type**
+    - Parameters schema editor (динамическое добавление/удаление параметров)
+    - Валидация git_path (защита от path traversal)
+  - Кнопки действий: Редактировать, Деактивировать, Аппрувнуть (требуют `scripts.manage`)
+- `<PermissionGate permission="scripts.manage">` на кнопках CRUD
 
 ### 6.7 Страница «Скрипты» — выполнение
-**~6ч** | зависит от: 6.6, 4.3
+**~7ч** | зависит от: 6.6, 4.3
 
-- Таб «Выполнения»: таблица, фильтры (script, status, user)
-- Модалка запуска: выбор скрипта → динамическая форма параметров → Execute
-- Детали: статус, stdout/stderr в `<pre>`, exit_code
-- Кнопка «Отменить» для pending/running
-- Автообновление (refetchInterval) для активных выполнений
+- **Таб «Выполнения»**:
+  - Таблица: script_name, status (badge), requested_by, target_service, started_at, duration
+  - Фильтры: script_id (dropdown), status (multi-select), requested_by (text), date range
+  - Кнопка «Запустить скрипт» (требует `scripts.execute`)
+- **Модалка запуска скрипта**:
+  - Шаг 1: Выбор скрипта (dropdown с активными аппрувнутыми скриптами)
+  - Шаг 2: Параметры (динамическая форма, генерируется из `parameters_schema`)
+  - Шаг 3: Target instance (опционально)
+  - Шаг 4: Подтверждение (обзор: скрипт, параметры, timeout)
+  - Результат: execution_id, редирект на детали
+- **Детали выполнения** (модалка или отдельная страница):
+  - Header: script name, status badge, execution ID
+  - Info: requested_by, started_at, duration, exit_code
+  - Parameters: JSON viewer
+  - Logs: stdout/stderr в `<pre>` с прокруткой (stderr с красным фоном)
+  - Footer: кнопка «Отменить» (для pending/running)
+- **Автообновление**: `refetchInterval: 2000` для pending/running, остановка при terminal status
 
 ### 6.8 Тесты фронта
 **~5ч** | зависит от: 6.2–6.7
@@ -396,7 +435,7 @@
 | 1.7 | JWT: system permissions в токене | ~2ч | 1.3 |
 | 1.8 | Тесты auth-service RBAC | ~6ч | 1.6 |
 | **Фаза 2** | **Интеграция** | | |
-| 2.1 | auth-proxy: permissions injection | ~5ч | 1.6 |
+| 2.1 | auth-proxy: permissions injection + script-service routing | ~6ч | 1.6 |
 | 2.2 | experiment-service: ensure_permission | ~5ч | 1.2 |
 | 2.3 | Redis-кэш permissions | ~3ч | 2.1 |
 | 2.4 | Тесты интеграции | ~4ч | 2.1, 2.2 |
@@ -408,11 +447,11 @@
 | 3.5 | Тесты аудита | ~3ч | 3.2, 3.3, 3.4 |
 | **Фаза 4** | **Script Service** | | |
 | 4.1 | Scaffold + DB + Docker | ~4ч | 1.1 |
-| 4.2 | Script CRUD API | ~4ч | 4.1 |
+| 4.2 | Git Integration + Script CRUD API | ~8ч | 4.1 |
 | 4.3 | Execution API + RabbitMQ | ~6ч | 4.2 |
 | 4.4 | Тесты script-service | ~4ч | 4.3 |
 | **Фаза 5** | **Script Runner** | | |
-| 5.1 | Модуль script_runner | ~5ч | 4.3 |
+| 5.1 | Модуль script_runner | ~6ч | 4.3 |
 | 5.2 | Интеграция в сервисы | ~3ч | 5.1 |
 | 5.3 | Тесты script runner | ~4ч | 5.2 |
 | **Фаза 6** | **Frontend** | | |
@@ -421,13 +460,13 @@
 | 6.3 | «Системные роли» + PermissionPicker | ~6ч | 6.1 |
 | 6.4 | ProjectMembersModal рефакторинг | ~4ч | 6.1 |
 | 6.5 | Страница «Аудит» | ~5ч | 6.1, 3.4 |
-| 6.6 | Скрипты — реестр | ~5ч | 6.1, 4.2 |
-| 6.7 | Скрипты — выполнение | ~6ч | 6.6, 4.3 |
+| 6.6 | Скрипты — реестр | ~6ч | 6.1, 4.2 |
+| 6.7 | Скрипты — выполнение | ~7ч | 6.6, 4.3 |
 | 6.8 | Тесты фронта | ~5ч | 6.2–6.7 |
 
-**Итого backend: ~105ч (~13 рабочих дней)**
-**Frontend: ~41ч (~5 рабочих дней)**
-**Всего: ~146ч (~18 рабочих дней)**
+**Итого backend: ~110ч (~14 рабочих дней)**
+**Frontend: ~48ч (~6 рабочих дней)**
+**Всего: ~158ч (~20 рабочих дней)**
 
 ---
 
@@ -457,7 +496,9 @@ Frontend:
 ```
 
 **Параллельные потоки** (backend + frontend разработчик):
-- Backend: 1.1 → 1.2 → 1.3 → 1.4/1.5 → 1.6 → 2.1 → 2.2 → 2.4 → 3.1–3.5 → 4.1–4.4 → 5.1–5.3
+- Backend: 1.1 → 1.2 → 1.3 → 1.4/1.5 → 1.6 → 2.1 → 2.2 → 2.4 → 4.1–4.4 → 5.1–5.3
 - Frontend: (ждёт 1.6) → 6.1 → 6.2/6.3/6.4 параллельно → (ждёт 3.4) → 6.5 → (ждёт 4.2) → 6.6 → 6.7 → 6.8
+
+**Примечание:** Фаза 3 (Аудит) зависит только от 1.1, поэтому 3.1 можно начать сразу после 1.1 параллельно с 1.2+. При наличии второго разработчика аудит не лежит на критическом пути.
 
 При одном разработчике — критический путь: **1.1 → 1.2 → 1.3 → 1.4 → 1.6 → 2.1 → 2.2 → 2.4 → 4.1 → 4.2 → 4.3 → 5.1 → 5.2 → 5.3 → 6.1 → 6.6 → 6.7** (~85ч, ~11 дней). Аудит (фаза 3), тесты и остальной frontend идут в параллель или в конце.
