@@ -3,8 +3,9 @@
 #include <atomic>
 #include <cstring>
 
-#include "config.hpp"
+#include "../common/config.hpp"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
@@ -27,10 +28,11 @@ struct __attribute__((packed)) UdpTelemPacket {
   uint8_t magic[2];
   uint8_t version;
   uint32_t seq;
-  TelemetryLogFrame frame;
+  uint8_t frame[sizeof(TelemetryLogFrame)];
 };
 
-static_assert(sizeof(UdpTelemPacket) == 79, "UdpTelemPacket size mismatch");
+static_assert(sizeof(UdpTelemPacket) == (2 + 1 + 4 + sizeof(TelemetryLogFrame)),
+              "UdpTelemPacket size mismatch");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Module state
@@ -140,7 +142,7 @@ static void udp_sender_task(void* arg) {
     last_send_us = now_us;
 
     pkt.seq = s_seq.fetch_add(1, std::memory_order_relaxed);
-    memcpy(&pkt.frame, &frame, sizeof(TelemetryLogFrame));
+    memcpy(pkt.frame, &frame, sizeof(TelemetryLogFrame));
 
     // Take a consistent snapshot of the target address under spinlock.
     struct sockaddr_in target_snap;
