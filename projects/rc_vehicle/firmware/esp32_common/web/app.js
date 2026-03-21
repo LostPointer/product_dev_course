@@ -148,8 +148,8 @@ function connectWebSocket() {
                     updateLogInfo(data.count, data.capacity);
                     if (pendingLogTotal === -2) {
                         const total = data.count || 0;
-                        const want = Math.min(500, total);
-                        const offset = total > want ? total - want : 0;
+                        const want = total;
+                        const offset = 0;
                         pendingLogTotal = want;
                         pendingLogOffset = offset;
                         pendingLogFrames = [];
