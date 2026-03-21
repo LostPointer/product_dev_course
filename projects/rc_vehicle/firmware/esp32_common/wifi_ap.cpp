@@ -268,11 +268,6 @@ esp_err_t WiFiApInit(void) {
   ap_cfg.ap.max_connection = WIFI_AP_MAX_CONNECTIONS;
   ap_cfg.ap.beacon_interval = 100;
 
-  // TODO: одноразовая очистка мусорных STA creds из NVS (удалить после
-  // прошивки)
-  ClearStaCreds();
-  ESP_LOGW(TAG, "STA creds cleared (one-time cleanup)");
-
   // Настройка STA (опционально): пробуем загрузить из NVS и подключиться.
   char sta_ssid[33];
   char sta_pass[65];
