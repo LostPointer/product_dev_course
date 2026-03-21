@@ -85,7 +85,25 @@
       "Bash(./unit_tests 2>&1 | tail -15)",
       "Bash(ls:*)",
       "Bash(./build/unit_tests 2>&1 | tail -5)",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "mcp__plugin_context7_context7__query-docs",
+      "Bash(/home/lostpointer/product_dev_course/projects/telemetry_cli/.venv/bin/pip install:*)",
+      "Bash(/home/lostpointer/product_dev_course/projects/telemetry_cli/.venv/bin/python -m pytest tests/test_ci_commands.py -v --tb=short)",
+      "Bash(npm install:*)",
+      "Bash(printf '{\"\"\"\"username\"\"\"\":\"\"\"\"admin@example.com\"\"\"\",\"\"\"\"password\"\"\"\":\"\"\"\"Admin1234!\"\"\"\"}')",
+      "Bash(curl -s -c /tmp/cookies.txt -b /tmp/cookies.txt -X POST http://localhost:8080/auth/login -H \"Content-Type: application/json\" -d @-)",
+      "Bash(docker exec:*)",
+      "Bash(printf '{\"\"\"\"username\"\"\"\":\"\"\"\"admin\"\"\"\",\"\"\"\"password\"\"\"\":\"\"\"\"Admin1234!\"\"\"\"}')",
+      "Bash(flutter --version)",
+      "Bash(sudo apt-get:*)",
+      "Bash(DEBIAN_FRONTEND=noninteractive sudo apt-get install -y unzip)",
+      "Bash(export PATH=\"/home/lostpointer/.flutter-sdk/bin:$PATH\")",
+      "Bash(flutter analyze:*)",
+      "Bash(flutter pub:*)",
+      "Bash(cmake -B build)",
+      "Bash(cmake --build build)",
+      "Bash(/home/lostpointer/product_dev_course/projects/rc_vehicle/firmware/tests/build/unit_tests)",
+      "Bash(flutter build:*)"
     ]
   }
 }
