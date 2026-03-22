@@ -8,6 +8,8 @@
 #include "config.hpp"
 #include "esp_http_server.h"
 #include "esp_log.h"
+#include "telemetry_log.hpp"
+#include "vehicle_control.hpp"
 #include "wifi_ap.hpp"
 
 static const char* TAG = "http_server";
@@ -713,6 +715,62 @@ static esp_err_t redirect_to_root_handler(httpd_req_t* req) {
   return ESP_OK;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Binary telemetry log download: GET /api/log.bin
+// Protocol:
+//   [4 bytes] uint32_t frame_count  (little-endian)
+//   [4 bytes] uint32_t frame_size   (sizeof(TelemetryLogFrame))
+//   [frame_count × frame_size bytes] raw TelemetryLogFrame data
+// ─────────────────────────────────────────────────────────────────────────────
+
+static esp_err_t log_bin_handler(httpd_req_t* req) {
+  size_t count = 0;
+  size_t cap = 0;
+  VehicleControlGetLogInfo(&count, &cap);
+
+  httpd_resp_set_type(req, "application/octet-stream");
+  httpd_resp_set_hdr(req, "Content-Disposition",
+                     "attachment; filename=\"telemetry_log.bin\"");
+  httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
+
+  // Header: frame_count + frame_size
+  const uint32_t header[2] = {
+      static_cast<uint32_t>(count),
+      static_cast<uint32_t>(sizeof(TelemetryLogFrame)),
+  };
+  esp_err_t err =
+      httpd_resp_send_chunk(req, reinterpret_cast<const char*>(header),
+                            sizeof(header));
+  if (err != ESP_OK) return err;
+
+  // Send frames in chunks to avoid large stack allocation
+  constexpr size_t kBatchSize = 32;
+  TelemetryLogFrame batch[kBatchSize];
+
+  for (size_t sent = 0; sent < count;) {
+    size_t n = std::min(kBatchSize, count - sent);
+    size_t filled = 0;
+    for (size_t i = 0; i < n; ++i) {
+      if (VehicleControlGetLogFrame(sent + i, &batch[filled])) {
+        ++filled;
+      }
+    }
+    if (filled > 0) {
+      err = httpd_resp_send_chunk(
+          req, reinterpret_cast<const char*>(batch),
+          filled * sizeof(TelemetryLogFrame));
+      if (err != ESP_OK) return err;
+    }
+    sent += n;
+  }
+
+  // End chunked response
+  httpd_resp_send_chunk(req, nullptr, 0);
+  ESP_LOGI(TAG, "Binary log download: %zu frames, %zu bytes", count,
+           count * sizeof(TelemetryLogFrame) + sizeof(header));
+  return ESP_OK;
+}
+
 esp_err_t HttpServerInit(void) {
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
   config.server_port = HTTP_SERVER_PORT;
@@ -820,6 +878,19 @@ esp_err_t HttpServerInit(void) {
 #endif
     };
     httpd_register_uri_handler(server_handle, &wifi_scan_uri);
+
+    httpd_uri_t log_bin_uri = {
+        .uri = "/api/log.bin",
+        .method = HTTP_GET,
+        .handler = log_bin_handler,
+        .user_ctx = NULL,
+#if CONFIG_HTTPD_WS_SUPPORT
+        .is_websocket = false,
+        .handle_ws_control_frames = false,
+        .supported_subprotocol = NULL,
+#endif
+    };
+    httpd_register_uri_handler(server_handle, &log_bin_uri);
 
     // Captive portal probes (iOS/Android/Windows/macOS).
     httpd_uri_t captive_android_uri = {

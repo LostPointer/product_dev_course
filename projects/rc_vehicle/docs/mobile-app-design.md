@@ -419,11 +419,11 @@ class TelemetryFrame {
   final bool oversteerActive;
 
   factory TelemetryFrame.fromBytes(Uint8List data) {
-    // data.length == 79
+    // data.length == 87
     // [0..1] = magic 0x52, 0x54
     // [2]    = version 0x01
     // [3..6] = seq (uint32 LE)
-    // [7..78] = TelemetryLogFrame (72 bytes, all LE)
+    // [7..86] = TelemetryLogFrame (80 bytes, all LE)
     final bd = ByteData.sublistView(data);
     return TelemetryFrame(
       seqNum: bd.getUint32(3, Endian.little),

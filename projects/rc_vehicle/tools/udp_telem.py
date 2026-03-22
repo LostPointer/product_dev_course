@@ -40,15 +40,15 @@ from pathlib import Path
 MAGIC = b"\x52\x54"  # "RT"
 PACKET_VERSION = 1
 HEADER_SIZE = 7  # 2 magic + 1 version + 4 seq
-FRAME_SIZE = 72  # sizeof(TelemetryLogFrame)
-PACKET_SIZE = HEADER_SIZE + FRAME_SIZE  # 79 bytes
+FRAME_SIZE = 80  # sizeof(TelemetryLogFrame)
+PACKET_SIZE = HEADER_SIZE + FRAME_SIZE  # 87 bytes
 
 CONTROL_PORT = 5556
 DEFAULT_DATA_PORT = 5555
 
 # struct format for TelemetryLogFrame (little-endian):
-# uint32_t ts_ms + 17 x float
-FRAME_FMT = "<I17f"
+# uint32_t ts_ms + 19 x float
+FRAME_FMT = "<I19f"
 assert struct.calcsize(FRAME_FMT) == FRAME_SIZE
 
 HEADER_FMT = "<2sBIx"  # We'll parse header manually for clarity
@@ -63,6 +63,7 @@ FIELD_NAMES = [
     "pitch_deg", "roll_deg", "yaw_deg",
     "yaw_rate_dps",
     "oversteer_active",
+    "rc_throttle", "rc_steering",
 ]
 
 

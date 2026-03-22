@@ -302,6 +302,13 @@ void VehicleControlUnified::ControlTaskLoop() {
         madgwick_.GetEulerDeg(frame.pitch_deg, frame.roll_deg, frame.yaw_deg);
         frame.yaw_rate_dps = imu_handler_->GetFilteredGyroZ();
         frame.oversteer_active = oversteer_guard_.IsActive() ? 1.0f : 0.0f;
+        if (rc_handler_ && rc_handler_->IsActive()) {
+          auto rc_cmd = rc_handler_->GetCommand();
+          if (rc_cmd) {
+            frame.rc_throttle = rc_cmd->throttle;
+            frame.rc_steering = rc_cmd->steering;
+          }
+        }
         telem_mgr_->Push(frame);
         telem_mgr_->SetLastLogTime(now);
 
@@ -396,7 +403,7 @@ PlatformError VehicleControlUnified::Init() {
 
   // ───────────────────────────────────────────────────────────────────────
   // Инициализация кольцевого буфера телеметрии (Phase 4.3)
-  // 18000 кадров × 72 байта ≈ 1.3 МБ → выделяется из PSRAM
+  // 60000 кадров × 80 байт ≈ 4.6 МБ → выделяется из PSRAM
   // ───────────────────────────────────────────────────────────────────────
 
   if (!telem_mgr_->Init(config::TelemetryLogConfig::kCapacityFrames)) {

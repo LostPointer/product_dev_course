@@ -631,15 +631,81 @@ function handleLogData(frames) {
 
 function exportLogCsv(frames) {
     if (!frames || !frames.length) { alert('Нет данных'); return; }
-    const hdr = 'ts_ms,ax,ay,az,gx,gy,gz,vx,vy,slip_deg,speed_ms,throttle,steering,pitch_deg,roll_deg,yaw_deg,yaw_rate_dps,oversteer_active\n';
+    const hdr = 'ts_ms,ax,ay,az,gx,gy,gz,vx,vy,slip_deg,speed_ms,throttle,steering,pitch_deg,roll_deg,yaw_deg,yaw_rate_dps,oversteer_active,rc_throttle,rc_steering\n';
     const rows = frames.map(f =>
-        `${f.ts_ms},${f.ax},${f.ay},${f.az},${f.gx},${f.gy},${f.gz},${f.vx},${f.vy},${f.slip_deg},${f.speed_ms},${f.throttle},${f.steering},${f.pitch_deg},${f.roll_deg},${f.yaw_deg},${f.yaw_rate_dps},${f.oversteer_active}`
+        `${f.ts_ms},${f.ax},${f.ay},${f.az},${f.gx},${f.gy},${f.gz},${f.vx},${f.vy},${f.slip_deg},${f.speed_ms},${f.throttle},${f.steering},${f.pitch_deg},${f.roll_deg},${f.yaw_deg},${f.yaw_rate_dps},${f.oversteer_active},${f.rc_throttle},${f.rc_steering}`
     ).join('\n');
     const blob = new Blob([hdr + rows], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = 'telemetry_log.csv'; a.click();
     URL.revokeObjectURL(url);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Binary log download via HTTP (replaces slow WebSocket JSON pagination)
+// Protocol: [4B frame_count][4B frame_size][count × frame_size raw bytes]
+// ─────────────────────────────────────────────────────────────
+
+async function downloadBinaryLog() {
+    const btn = $('btn-log-csv');
+    if (btn) { btn.disabled = true; btn.textContent = 'Скачивание...'; }
+    try {
+        const resp = await fetch('/api/log.bin', { cache: 'no-store' });
+        if (!resp.ok) { alert('Ошибка: ' + resp.status); return; }
+        const buf = await resp.arrayBuffer();
+        const view = new DataView(buf);
+        if (buf.byteLength < 8) { alert('Нет данных'); return; }
+        const frameCount = view.getUint32(0, true);
+        const frameSize = view.getUint32(4, true);
+        if (frameCount === 0) { alert('Нет данных'); return; }
+
+        const FIELD_OFFSETS = [
+            { name: 'ts_ms',   off: 0, type: 'u32' },
+            { name: 'ax',      off: 4, type: 'f32' },
+            { name: 'ay',      off: 8, type: 'f32' },
+            { name: 'az',      off: 12, type: 'f32' },
+            { name: 'gx',      off: 16, type: 'f32' },
+            { name: 'gy',      off: 20, type: 'f32' },
+            { name: 'gz',      off: 24, type: 'f32' },
+            { name: 'vx',      off: 28, type: 'f32' },
+            { name: 'vy',      off: 32, type: 'f32' },
+            { name: 'slip_deg',off: 36, type: 'f32' },
+            { name: 'speed_ms',off: 40, type: 'f32' },
+            { name: 'throttle',off: 44, type: 'f32' },
+            { name: 'steering',off: 48, type: 'f32' },
+            { name: 'pitch_deg',off: 52, type: 'f32' },
+            { name: 'roll_deg', off: 56, type: 'f32' },
+            { name: 'yaw_deg',  off: 60, type: 'f32' },
+            { name: 'yaw_rate_dps', off: 64, type: 'f32' },
+            { name: 'oversteer_active', off: 68, type: 'f32' },
+            { name: 'rc_throttle', off: 72, type: 'f32' },
+            { name: 'rc_steering', off: 76, type: 'f32' },
+        ];
+
+        const hdr = FIELD_OFFSETS.map(f => f.name).join(',') + '\n';
+        const lines = [];
+        const dataOffset = 8; // after header
+        for (let i = 0; i < frameCount; i++) {
+            const base = dataOffset + i * frameSize;
+            if (base + frameSize > buf.byteLength) break;
+            const vals = FIELD_OFFSETS.map(f => {
+                const o = base + f.off;
+                return f.type === 'u32' ? view.getUint32(o, true) : view.getFloat32(o, true);
+            });
+            lines.push(vals.join(','));
+        }
+        const csv = hdr + lines.join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'telemetry_log.csv'; a.click();
+        URL.revokeObjectURL(url);
+    } catch (e) {
+        alert('Ошибка скачивания: ' + e.message);
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'CSV'; }
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -819,11 +885,7 @@ const btnLogClear = $('btn-log-clear');
 const btnLogCsv   = $('btn-log-csv');
 if (btnLogInfo)  btnLogInfo.addEventListener('click', () => wsSend({ type: 'get_log_info' }));
 if (btnLogClear) btnLogClear.addEventListener('click', () => wsSend({ type: 'clear_log' }));
-if (btnLogCsv)   btnLogCsv.addEventListener('click', () => {
-    pendingLogFrames = [];
-    pendingLogTotal = -2;
-    wsSend({ type: 'get_log_info' });
-});
+if (btnLogCsv)   btnLogCsv.addEventListener('click', () => downloadBinaryLog());
 
 // Self-test
 if (btnSelfTest) btnSelfTest.addEventListener('click', () => {

@@ -10,7 +10,7 @@ void main() {
       double throttle = 0.5,
       double steering = -0.3,
     }) {
-      final data = Uint8List(79);
+      final data = Uint8List(87);
       final bd = ByteData.sublistView(data);
       data[0] = 0x52; // R
       data[1] = 0x54; // T
@@ -43,6 +43,9 @@ void main() {
       // yaw_rate, oversteer_active
       bd.setFloat32(o + 64, 15.0, Endian.little);
       bd.setFloat32(o + 68, 0.0, Endian.little);
+      // rc_throttle, rc_steering
+      bd.setFloat32(o + 72, 0.6, Endian.little);
+      bd.setFloat32(o + 76, -0.4, Endian.little);
       return data;
     }
 
@@ -60,6 +63,8 @@ void main() {
       expect(frame.speedMs, closeTo(2.0, 0.001));
       expect(frame.yawDeg, closeTo(90.0, 0.001));
       expect(frame.oversteerActive, false);
+      expect(frame.rcThrottle, closeTo(0.6, 0.001));
+      expect(frame.rcSteering, closeTo(-0.4, 0.001));
     });
 
     test('returns null on wrong magic bytes', () {
@@ -108,11 +113,15 @@ void main() {
         'yaw_deg': 90.0,
         'yaw_rate_dps': 15.0,
         'oversteer_active': false,
+        'rc_throttle': 0.8,
+        'rc_steering': -0.5,
       };
       final frame = TelemetryFrame.fromJson(json);
       expect(frame.tsMs, 1234);
       expect(frame.throttle, closeTo(0.5, 0.001));
       expect(frame.oversteerActive, false);
+      expect(frame.rcThrottle, closeTo(0.8, 0.001));
+      expect(frame.rcSteering, closeTo(-0.5, 0.001));
     });
   });
 }

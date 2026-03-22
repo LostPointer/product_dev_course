@@ -7,10 +7,10 @@
 /**
  * @brief Кадр телеметрии для кольцевого буфера логов
  *
- * Размер: 72 байта (17 × float + uint32_t).
+ * Размер: 80 байт (19 × float + uint32_t).
  * Хранится в PSRAM при наличии (ESP_PLATFORM), иначе в обычной heap.
  *
- * Буфер 18000 кадров × 72 байта ≈ 1.3 МБ (PSRAM).
+ * Буфер 60000 кадров × 80 байт ≈ 4.6 МБ (PSRAM).
  */
 struct TelemetryLogFrame {
   uint32_t ts_ms{0};           // Метка времени [мс]
@@ -26,10 +26,12 @@ struct TelemetryLogFrame {
   float yaw_deg{0};             // Madgwick: yaw [градусы]
   float yaw_rate_dps{0};        // Отфильтрованный gyro Z [дпс]
   float oversteer_active{0};    // OversteerGuard: 1.0 = занос, 0.0 = нет
-};  // sizeof == 72 bytes (uint32_t + 17 × float)
+  float rc_throttle{0};         // Сырой газ с RC-приёмника [-1..1], 0 если нет сигнала
+  float rc_steering{0};         // Сырой руль с RC-приёмника [-1..1], 0 если нет сигнала
+};  // sizeof == 80 bytes (uint32_t + 19 × float)
 
 // Compile-time проверка размера структуры
-static_assert(sizeof(TelemetryLogFrame) == 72,
+static_assert(sizeof(TelemetryLogFrame) == 80,
               "TelemetryLogFrame size mismatch");
 
 /**

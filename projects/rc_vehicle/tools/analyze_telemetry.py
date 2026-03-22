@@ -25,6 +25,7 @@ EXPECTED_COLUMNS = [
     "ts_ms", "ax", "ay", "az", "gx", "gy", "gz",
     "vx", "vy", "slip_deg", "speed_ms", "throttle", "steering",
     "pitch_deg", "roll_deg", "yaw_deg", "yaw_rate_dps", "oversteer_active",
+    "rc_throttle", "rc_steering",
 ]
 
 # Stationary detection: |throttle| < 0.05 for at least this many consecutive samples.

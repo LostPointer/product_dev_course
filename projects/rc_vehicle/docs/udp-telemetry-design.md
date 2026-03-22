@@ -17,18 +17,18 @@
 
 - Нет потокового экспорта телеметрии в реальном времени на ПК.
 - Выгрузка из ring buffer -- пакетная, медленная (JSON over WebSocket), теряет данные при переполнении буфера.
-- JSON overhead: ~600 байт на кадр (vs 72 байта бинарных).
+- JSON overhead: ~600 байт на кадр (vs 80 байт бинарных).
 - WebSocket работает поверх TCP -- ретрансмиты добавляют латентность, непригодную для real-time визуализации.
 
 **Решение:** UDP-стриминг бинарных `TelemetryLogFrame` с частотой 100 Hz. UDP идеален для телеметрии: потеря пакета допустима (следующий придет через 10 мс), а латентность минимальна.
 
-**Пропускная способность:** 79 байт x 100 Hz = 7.9 КБ/с (~63 кбит/с) -- пренебрежимо мало для WiFi.
+**Пропускная способность:** 87 байт x 100 Hz = 8.7 КБ/с (~70 кбит/с) -- пренебрежимо мало для WiFi.
 
 ---
 
 ## 2. Формат пакета телеметрии
 
-### 2.1 Бинарный фрейм (79 байт)
+### 2.1 Бинарный фрейм (87 байт)
 
 ```
 Offset  Size  Type        Field
@@ -36,12 +36,12 @@ Offset  Size  Type        Field
 0       2     uint8[2]    Magic: 0x52, 0x54 ("RT")
 2       1     uint8       Version: 0x01
 3       4     uint32_t    Sequence number (LE, monotonic)
-7       72    bytes       TelemetryLogFrame (memcpy, LE)
+7       80    bytes       TelemetryLogFrame (memcpy, LE)
 ──────────────────────────────────────────────────────────
-Total: 79 bytes
+Total: 87 bytes
 ```
 
-**Структура `TelemetryLogFrame` (72 байта, little-endian):**
+**Структура `TelemetryLogFrame` (80 байт, little-endian):**
 
 | Offset (от начала frame) | Тип      | Поле              | Описание                       |
 |--------------------------|----------|-------------------|--------------------------------|
@@ -58,6 +58,8 @@ Total: 79 bytes
 | 60                       | float    | yaw_deg           | Yaw [deg]                      |
 | 64                       | float    | yaw_rate_dps      | Gyro Z filtered [dps]          |
 | 68                       | float    | oversteer_active  | 1.0 = занос, 0.0 = нет        |
+| 72                       | float    | rc_throttle       | Сырой газ с RC-приёмника [-1..1] |
+| 76                       | float    | rc_steering       | Сырой руль с RC-приёмника [-1..1] |
 
 **Обоснование формата:**
 
@@ -304,7 +306,7 @@ if (imu_handler_ && imu_handler_->IsEnabled()) {
 ### 7.3 Влияние на control loop
 
 - `UdpTelemEnqueue` при неактивном стриминге: проверка `std::atomic<bool>` -- ~1 нс, пренебрежимо.
-- `UdpTelemEnqueue` при активном стриминге: `xQueueSend` с `timeout=0` (no-wait). Копирует 72 байта в очередь. Типичное время: <5 мкс. При бюджете итерации 2000 мкс (500 Hz) это 0.25%.
+- `UdpTelemEnqueue` при активном стриминге: `xQueueSend` с `timeout=0` (no-wait). Копирует 80 байт в очередь. Типичное время: <5 мкс. При бюджете итерации 2000 мкс (500 Hz) это 0.25%.
 - Никаких аллокаций, мьютексов или блокирующих вызовов в control loop.
 
 ---
@@ -322,7 +324,7 @@ if (imu_handler_ && imu_handler_->IsEnabled()) {
                               ▼
                      ┌──────────────────┐
                      │  FreeRTOS Queue  │
-                     │   64 x 72 bytes  │  ← 4.5 КБ RAM
+                     │   64 x 80 bytes  │  ← 5 КБ RAM
                      └────────┬─────────┘
                               │ xQueueReceive (portMAX_DELAY)
                               ▼

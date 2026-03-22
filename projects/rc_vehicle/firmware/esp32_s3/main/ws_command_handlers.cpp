@@ -208,6 +208,8 @@ void HandleGetLogData(cJSON* json, httpd_req_t* req) {
             cJSON_AddNumberToObject(f, "yaw_deg", frame.yaw_deg);
             cJSON_AddNumberToObject(f, "yaw_rate_dps", frame.yaw_rate_dps);
             cJSON_AddBoolToObject(f, "oversteer_active", frame.oversteer_active);
+            cJSON_AddNumberToObject(f, "rc_throttle", frame.rc_throttle);
+            cJSON_AddNumberToObject(f, "rc_steering", frame.rc_steering);
             cJSON_AddItemToArray(frames_arr, f);
           }
         }

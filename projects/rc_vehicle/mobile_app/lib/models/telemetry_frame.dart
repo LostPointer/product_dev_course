@@ -5,7 +5,7 @@ import 'dart:typed_data';
 ///   [0..1]  magic 0x52, 0x54 ("RT")
 ///   [2]     version 0x01
 ///   [3..6]  seq (uint32 LE)
-///   [7..78] TelemetryLogFrame (72 bytes, all LE)
+///   [7..86] TelemetryLogFrame (80 bytes, all LE)
 class TelemetryFrame {
   final int seqNum;
   final int tsMs;
@@ -19,6 +19,8 @@ class TelemetryFrame {
   final double pitchDeg, rollDeg, yawDeg;
   final double yawRateDps;
   final bool oversteerActive;
+  final double rcThrottle;
+  final double rcSteering;
 
   const TelemetryFrame({
     required this.seqNum,
@@ -40,9 +42,11 @@ class TelemetryFrame {
     required this.yawDeg,
     required this.yawRateDps,
     required this.oversteerActive,
+    required this.rcThrottle,
+    required this.rcSteering,
   });
 
-  static const int packetSize = 79;
+  static const int packetSize = 87;
   static const int magicByte0 = 0x52; // 'R'
   static const int magicByte1 = 0x54; // 'T'
   static const int currentVersion = 0x01;
@@ -77,6 +81,8 @@ class TelemetryFrame {
       yawDeg: bd.getFloat32(o + 60, Endian.little),
       yawRateDps: bd.getFloat32(o + 64, Endian.little),
       oversteerActive: bd.getFloat32(o + 68, Endian.little) >= 0.5,
+      rcThrottle: bd.getFloat32(o + 72, Endian.little),
+      rcSteering: bd.getFloat32(o + 76, Endian.little),
     );
   }
 
@@ -105,6 +111,8 @@ class TelemetryFrame {
           j['oversteer_active'] == 1 ||
           (j['oversteer_active'] is num &&
               (j['oversteer_active'] as num) >= 0.5),
+      rcThrottle: (j['rc_throttle'] as num?)?.toDouble() ?? 0,
+      rcSteering: (j['rc_steering'] as num?)?.toDouble() ?? 0,
     );
   }
 }
