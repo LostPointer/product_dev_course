@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +8,7 @@ import '../providers/connection_provider.dart';
 import '../providers/drive_input_provider.dart';
 import '../widgets/connection_indicator.dart';
 import '../widgets/joystick.dart';
+import '../widgets/mini_chart.dart';
 import '../widgets/throttle_zone.dart';
 
 class DriveTab extends ConsumerStatefulWidget {
@@ -17,20 +19,37 @@ class DriveTab extends ConsumerStatefulWidget {
 }
 
 class _DriveTabState extends ConsumerState<DriveTab> {
+  bool _showOverlay = false;
+
+  // Mini-chart ring buffers (200 points ~ 10s at 20Hz).
+  final _speedData = MiniChartData(color: Colors.cyanAccent);
+  final _slipData = MiniChartData(color: Colors.orangeAccent);
+  final _pitchData = MiniChartData(color: Colors.redAccent);
+  final _rollData = MiniChartData(color: Colors.greenAccent);
+  final _thrData = MiniChartData(color: Colors.lightGreenAccent);
+  final _strData = MiniChartData(color: Colors.amberAccent);
+
+  Timer? _refreshTimer;
+  TelemetryFrame? _lastFrame;
+
   @override
   void initState() {
     super.initState();
     _enterDriveMode();
+    // Cap overlay refresh at 15 fps to save battery.
+    _refreshTimer = Timer.periodic(const Duration(milliseconds: 66), (_) {
+      if (_showOverlay && mounted) setState(() {});
+    });
   }
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     _exitDriveMode();
     super.dispose();
   }
 
   void _enterDriveMode() {
-    // Landscape + immersive + wake lock.
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
@@ -43,7 +62,6 @@ class _DriveTabState extends ConsumerState<DriveTab> {
     SystemChrome.setPreferredOrientations(DeviceOrientation.values);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     WakelockPlus.disable();
-    // Reset drive input on exit.
     ref.read(driveInputProvider.notifier).reset();
     ref.read(connectionProvider.notifier).setDriveInput(0, 0);
   }
@@ -66,20 +84,31 @@ class _DriveTabState extends ConsumerState<DriveTab> {
     );
   }
 
+  void _feedCharts(TelemetryFrame? frame) {
+    if (frame == null || frame == _lastFrame) return;
+    _lastFrame = frame;
+    _speedData.add(frame.speedMs);
+    _slipData.add(frame.slipDeg);
+    _pitchData.add(frame.pitchDeg);
+    _rollData.add(frame.rollDeg);
+    _thrData.add(frame.throttle);
+    _strData.add(frame.steering);
+  }
+
   @override
   Widget build(BuildContext context) {
     final telem = ref.watch(telemetryProvider);
     final input = ref.watch(driveInputProvider);
     final conn = ref.watch(connectionProvider);
 
+    // Feed chart data on every telemetry update.
+    _feedCharts(telem);
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: Column(
         children: [
-          // Status bar (thin).
           _StatusBar(telemetry: telem, connected: conn.isConnected),
-
-          // Main controls area.
           Expanded(
             child: Row(
               children: [
@@ -92,12 +121,27 @@ class _DriveTabState extends ConsumerState<DriveTab> {
                   ),
                 ),
 
-                // Center: telemetry info.
+                // Center: info + overlay charts.
                 Expanded(
-                  child: _CenterInfo(
-                    telemetry: telem,
-                    throttle: input.throttle,
-                    steering: input.steering,
+                  child: Stack(
+                    children: [
+                      _CenterInfo(
+                        telemetry: telem,
+                        throttle: input.throttle,
+                        steering: input.steering,
+                      ),
+                      if (_showOverlay)
+                        Positioned.fill(
+                          child: _TelemetryOverlay(
+                            speedData: _speedData,
+                            slipData: _slipData,
+                            pitchData: _pitchData,
+                            rollData: _rollData,
+                            thrData: _thrData,
+                            strData: _strData,
+                          ),
+                        ),
+                    ],
                   ),
                 ),
 
@@ -112,14 +156,106 @@ class _DriveTabState extends ConsumerState<DriveTab> {
               ],
             ),
           ),
-
-          // Bottom bar.
-          _BottomBar(connected: conn.isConnected),
+          _BottomBar(
+            connected: conn.isConnected,
+            overlayActive: _showOverlay,
+            onToggleOverlay: () => setState(() => _showOverlay = !_showOverlay),
+          ),
         ],
       ),
     );
   }
 }
+
+// --- Telemetry overlay ---
+
+class _TelemetryOverlay extends StatelessWidget {
+  final MiniChartData speedData;
+  final MiniChartData slipData;
+  final MiniChartData pitchData;
+  final MiniChartData rollData;
+  final MiniChartData thrData;
+  final MiniChartData strData;
+
+  const _TelemetryOverlay({
+    required this.speedData,
+    required this.slipData,
+    required this.pitchData,
+    required this.rollData,
+    required this.thrData,
+    required this.strData,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            _OverlayRow(
+              label: 'SPD / SLIP',
+              chart: MiniChart(
+                series: [speedData, slipData],
+                minY: -5,
+                maxY: 5,
+                height: 36,
+              ),
+            ),
+            _OverlayRow(
+              label: 'PITCH / ROLL',
+              chart: MiniChart(
+                series: [pitchData, rollData],
+                minY: -30,
+                maxY: 30,
+                height: 36,
+              ),
+            ),
+            _OverlayRow(
+              label: 'THR / STR',
+              chart: MiniChart(
+                series: [thrData, strData],
+                minY: -1,
+                maxY: 1,
+                height: 36,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OverlayRow extends StatelessWidget {
+  final String label;
+  final Widget chart;
+
+  const _OverlayRow({required this.label, required this.chart});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 64,
+          child: Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.4),
+              fontSize: 8,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        Expanded(child: chart),
+      ],
+    );
+  }
+}
+
+// --- Status bar ---
 
 class _StatusBar extends StatelessWidget {
   final TelemetryFrame? telemetry;
@@ -167,6 +303,8 @@ class _StatusBar extends StatelessWidget {
     );
   }
 }
+
+// --- Center info ---
 
 class _CenterInfo extends StatelessWidget {
   final TelemetryFrame? telemetry;
@@ -235,15 +373,15 @@ class _InfoChip extends StatelessWidget {
   }
 }
 
+// --- E-Stop ---
+
 class _EStopButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return TextButton(
       onPressed: () {
-        // Zero drive input immediately.
         ref.read(driveInputProvider.notifier).reset();
         ref.read(connectionProvider.notifier).setDriveInput(0, 0);
-        // Send explicit emergency stop command.
         ref.read(connectionProvider.notifier).sendCommand({
           'type': 'cmd',
           'throttle': 0.0,
@@ -260,10 +398,18 @@ class _EStopButton extends ConsumerWidget {
   }
 }
 
+// --- Bottom bar ---
+
 class _BottomBar extends StatelessWidget {
   final bool connected;
+  final bool overlayActive;
+  final VoidCallback onToggleOverlay;
 
-  const _BottomBar({required this.connected});
+  const _BottomBar({
+    required this.connected,
+    required this.overlayActive,
+    required this.onToggleOverlay,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -273,10 +419,20 @@ class _BottomBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Row(
         children: [
-          // E-Stop button.
           _EStopButton(),
+          const SizedBox(width: 8),
+          // Overlay toggle.
+          GestureDetector(
+            onTap: onToggleOverlay,
+            child: Icon(
+              Icons.show_chart,
+              size: 20,
+              color: overlayActive
+                  ? Colors.cyanAccent
+                  : Colors.white30,
+            ),
+          ),
           const Spacer(),
-          // Back button to exit drive mode.
           TextButton(
             onPressed: () => Navigator.of(context).maybePop(),
             style: TextButton.styleFrom(
