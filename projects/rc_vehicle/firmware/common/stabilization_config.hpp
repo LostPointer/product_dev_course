@@ -101,6 +101,21 @@ struct FilterConfig {
   float imu_sample_rate_hz{500.0f};
 
   /**
+   * Включён ли Madgwick AHRS фильтр.
+   * При выключении: pitch/roll/yaw = 0, pitch compensation не работает.
+   * По умолчанию включён.
+   */
+  bool madgwick_enabled{true};
+
+  /**
+   * Включён ли EKF (Extended Kalman Filter) для оценки скорости и slip angle.
+   * При выключении: vx/vy/speed/slip = 0, adaptive PID и slip angle PID
+   * не получают данных, oversteer guard не срабатывает по slip.
+   * По умолчанию включён.
+   */
+  bool ekf_enabled{true};
+
+  /**
    * Адаптивный beta: отключить коррекцию акселерометра при линейном ускорении.
    * При включении: если |a| - 1g| > adaptive_accel_threshold_g, beta=0.
    * Предотвращает ошибки ориентации при разгоне/торможении/поворотах.

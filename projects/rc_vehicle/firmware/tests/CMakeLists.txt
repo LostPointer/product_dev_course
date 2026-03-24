@@ -52,6 +52,9 @@ set(COMMON_SOURCES
     ${COMMON_DIR}/self_test.cpp
     ${COMMON_DIR}/drive_modes.cpp
     ${COMMON_DIR}/drive_mode_registry.cpp
+    ${COMMON_DIR}/calibration_manager.cpp
+    ${COMMON_DIR}/stabilization_manager.cpp
+    ${COMMON_DIR}/telemetry_manager.cpp
 )
 
 # Include directories
@@ -92,6 +95,9 @@ add_executable(unit_tests
     unit/test_control_source.cpp
     unit/test_telemetry_handler.cpp
     unit/test_drive_modes.cpp
+    unit/test_telemetry_manager.cpp
+    unit/test_calibration_manager.cpp
+    unit/test_stabilization_manager.cpp
 )
 
 target_link_libraries(unit_tests

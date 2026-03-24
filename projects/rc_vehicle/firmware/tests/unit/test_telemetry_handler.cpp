@@ -33,46 +33,46 @@ class TelemetryHandlerTest : public ::testing::Test {
 };
 
 TEST_F(TelemetryHandlerTest, DoesNotSend_BeforeInterval) {
-  handler_->Update(10, MakeSnap());
+  handler_->SendTelemetry(10, MakeSnap());
   EXPECT_EQ(platform_.GetTelemSendCount(), 0);
 }
 
 TEST_F(TelemetryHandlerTest, Sends_AtInterval) {
-  handler_->Update(50, MakeSnap());
+  handler_->SendTelemetry(50, MakeSnap());
   EXPECT_EQ(platform_.GetTelemSendCount(), 1);
 }
 
 TEST_F(TelemetryHandlerTest, Sends_AtExactMultiples) {
-  handler_->Update(50, MakeSnap());
+  handler_->SendTelemetry(50, MakeSnap());
   EXPECT_EQ(platform_.GetTelemSendCount(), 1);
 
   // Too early
-  handler_->Update(80, MakeSnap());
+  handler_->SendTelemetry(80, MakeSnap());
   EXPECT_EQ(platform_.GetTelemSendCount(), 1);
 
   // At next interval
-  handler_->Update(100, MakeSnap());
+  handler_->SendTelemetry(100, MakeSnap());
   EXPECT_EQ(platform_.GetTelemSendCount(), 2);
 }
 
 TEST_F(TelemetryHandlerTest, DoesNotSend_WhenNoClients) {
   platform_.SetWebSocketClientCount(0);
-  handler_->Update(50, MakeSnap());
+  handler_->SendTelemetry(50, MakeSnap());
   EXPECT_EQ(platform_.GetTelemSendCount(), 0);
 }
 
 TEST_F(TelemetryHandlerTest, Sends_WhenClientsReappear) {
   platform_.SetWebSocketClientCount(0);
-  handler_->Update(50, MakeSnap());
+  handler_->SendTelemetry(50, MakeSnap());
   EXPECT_EQ(platform_.GetTelemSendCount(), 0);
 
   platform_.SetWebSocketClientCount(2);
-  handler_->Update(100, MakeSnap());
+  handler_->SendTelemetry(100, MakeSnap());
   EXPECT_EQ(platform_.GetTelemSendCount(), 1);
 }
 
 TEST_F(TelemetryHandlerTest, JsonContainsType) {
-  handler_->Update(50, MakeSnap());
+  handler_->SendTelemetry(50, MakeSnap());
   const auto& json_str = platform_.GetLastTelem();
   ASSERT_FALSE(json_str.empty());
 
@@ -91,7 +91,7 @@ TEST_F(TelemetryHandlerTest, JsonContainsLinkStatus) {
   snap.rc_ok = true;
   snap.wifi_ok = false;
 
-  handler_->Update(50, snap);
+  handler_->SendTelemetry(50, snap);
   cJSON* root = cJSON_Parse(platform_.GetLastTelem().c_str());
   ASSERT_NE(root, nullptr);
 
@@ -112,7 +112,7 @@ TEST_F(TelemetryHandlerTest, JsonContainsImu_WhenEnabled) {
   snap.pitch_deg = 5.0f;
   snap.roll_deg = -2.0f;
 
-  handler_->Update(50, snap);
+  handler_->SendTelemetry(50, snap);
   cJSON* root = cJSON_Parse(platform_.GetLastTelem().c_str());
   ASSERT_NE(root, nullptr);
 
@@ -132,7 +132,7 @@ TEST_F(TelemetryHandlerTest, JsonNoImu_WhenDisabled) {
   auto snap = MakeSnap();
   snap.imu_enabled = false;
 
-  handler_->Update(50, snap);
+  handler_->SendTelemetry(50, snap);
   cJSON* root = cJSON_Parse(platform_.GetLastTelem().c_str());
   ASSERT_NE(root, nullptr);
 
@@ -149,7 +149,7 @@ TEST_F(TelemetryHandlerTest, JsonContainsEkf_WhenAvailable) {
   snap.ekf_vy = 0.1f;
   snap.ekf_speed_ms = 1.503f;
 
-  handler_->Update(50, snap);
+  handler_->SendTelemetry(50, snap);
   cJSON* root = cJSON_Parse(platform_.GetLastTelem().c_str());
   ASSERT_NE(root, nullptr);
 
@@ -166,7 +166,7 @@ TEST_F(TelemetryHandlerTest, JsonContainsKidsMode) {
   snap.kids_mode_active = true;
   snap.kids_throttle_limit = 0.15f;
 
-  handler_->Update(50, snap);
+  handler_->SendTelemetry(50, snap);
   cJSON* root = cJSON_Parse(platform_.GetLastTelem().c_str());
   ASSERT_NE(root, nullptr);
 

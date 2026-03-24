@@ -170,6 +170,8 @@ void StabilizationConfig::Reset() noexcept {
   filter.madgwick_beta = 0.1f;
   filter.lpf_cutoff_hz = 30.0f;
   filter.imu_sample_rate_hz = 500.0f;
+  filter.madgwick_enabled = true;
+  filter.ekf_enabled = true;
   filter.adaptive_beta_enabled = true;
   filter.adaptive_accel_threshold_g = 0.2f;
 

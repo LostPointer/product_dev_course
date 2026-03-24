@@ -34,8 +34,8 @@ namespace rc_vehicle {
  */
 class VehicleControlUnified {
  public:
-  /** Единственный экземпляр */
-  static VehicleControlUnified& Instance();
+  VehicleControlUnified() = default;
+  ~VehicleControlUnified() = default;
 
   /**
    * @brief Установить платформу (должно быть вызвано до Init)
@@ -192,8 +192,6 @@ class VehicleControlUnified {
   VehicleControlUnified& operator=(const VehicleControlUnified&) = delete;
 
  private:
-  VehicleControlUnified() = default;
-  ~VehicleControlUnified() = default;
 
   /**
    * @brief Точка входа для control loop задачи

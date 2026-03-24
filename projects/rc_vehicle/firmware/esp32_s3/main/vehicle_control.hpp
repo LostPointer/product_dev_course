@@ -4,7 +4,8 @@
  * @file vehicle_control.hpp
  * @brief ESP32-совместимый API управления машиной
  *
- * Прямые обёртки над rc_vehicle::VehicleControlUnified::Instance().
+ * Обёртки над глобальным экземпляром rc_vehicle::VehicleControlUnified.
+ * Экземпляр создаётся в этом модуле (ESP32-слой владеет lifetime).
  */
 
 #include "esp_err.h"
@@ -12,89 +13,93 @@
 #include "vehicle_control_platform_esp32.hpp"
 #include "vehicle_control_unified.hpp"
 
+namespace detail {
+inline rc_vehicle::VehicleControlUnified& GetVehicleControl() {
+  static rc_vehicle::VehicleControlUnified instance;
+  return instance;
+}
+}  // namespace detail
+
 inline esp_err_t VehicleControlInit(void) {
+  auto& vc = detail::GetVehicleControl();
   static bool platform_set = false;
   if (!platform_set) {
     auto platform = std::make_unique<rc_vehicle::VehicleControlPlatformEsp32>();
-    rc_vehicle::VehicleControlUnified::Instance().SetPlatform(
-        std::move(platform));
+    vc.SetPlatform(std::move(platform));
     platform_set = true;
   }
-  auto result = rc_vehicle::VehicleControlUnified::Instance().Init();
+  auto result = vc.Init();
   return (result == rc_vehicle::PlatformError::Ok) ? ESP_OK : ESP_FAIL;
 }
 
 inline void VehicleControlOnWifiCommand(float throttle, float steering) {
-  rc_vehicle::VehicleControlUnified::Instance().OnWifiCommand(throttle,
-                                                              steering);
+  detail::GetVehicleControl().OnWifiCommand(throttle, steering);
 }
 
 inline void VehicleControlStartCalibration(bool full) {
-  rc_vehicle::VehicleControlUnified::Instance().StartCalibration(full);
+  detail::GetVehicleControl().StartCalibration(full);
 }
 
 inline bool VehicleControlStartForwardCalibration(void) {
-  return rc_vehicle::VehicleControlUnified::Instance()
-      .StartForwardCalibration();
+  return detail::GetVehicleControl().StartForwardCalibration();
 }
 
 inline bool VehicleControlStartAutoForwardCalibration(
     float target_accel_g = 0.1f) {
-  return rc_vehicle::VehicleControlUnified::Instance()
-      .StartAutoForwardCalibration(target_accel_g);
+  return detail::GetVehicleControl().StartAutoForwardCalibration(target_accel_g);
 }
 
 inline const char* VehicleControlGetCalibStatus(void) {
-  return rc_vehicle::VehicleControlUnified::Instance().GetCalibStatus();
+  return detail::GetVehicleControl().GetCalibStatus();
 }
 
 inline int VehicleControlGetCalibStage(void) {
-  return rc_vehicle::VehicleControlUnified::Instance().GetCalibStage();
+  return detail::GetVehicleControl().GetCalibStage();
 }
 
 inline void VehicleControlSetForwardDirection(float fx, float fy, float fz) {
-  rc_vehicle::VehicleControlUnified::Instance().SetForwardDirection(fx, fy, fz);
+  detail::GetVehicleControl().SetForwardDirection(fx, fy, fz);
 }
 
 inline rc_vehicle::StabilizationConfig VehicleControlGetStabilizationConfig(
     void) {
-  return rc_vehicle::VehicleControlUnified::Instance().GetStabilizationConfig();
+  return detail::GetVehicleControl().GetStabilizationConfig();
 }
 
 inline bool VehicleControlSetStabilizationConfig(
     const rc_vehicle::StabilizationConfig& config, bool save_to_nvs = true) {
-  return rc_vehicle::VehicleControlUnified::Instance().SetStabilizationConfig(
-      config, save_to_nvs);
+  return detail::GetVehicleControl().SetStabilizationConfig(config,
+                                                            save_to_nvs);
 }
 
 inline void VehicleControlGetLogInfo(size_t* count_out, size_t* cap_out) {
   size_t cnt = 0, cap = 0;
-  rc_vehicle::VehicleControlUnified::Instance().GetLogInfo(cnt, cap);
+  detail::GetVehicleControl().GetLogInfo(cnt, cap);
   if (count_out) *count_out = cnt;
   if (cap_out) *cap_out = cap;
 }
 
 inline bool VehicleControlGetLogFrame(size_t idx, TelemetryLogFrame* out) {
   if (!out) return false;
-  return rc_vehicle::VehicleControlUnified::Instance().GetLogFrame(idx, *out);
+  return detail::GetVehicleControl().GetLogFrame(idx, *out);
 }
 
 inline void VehicleControlSetKidsModeActive(bool active) {
-  rc_vehicle::VehicleControlUnified::Instance().SetKidsModeActive(active);
+  detail::GetVehicleControl().SetKidsModeActive(active);
 }
 
 inline bool VehicleControlIsKidsModeActive(void) {
-  return rc_vehicle::VehicleControlUnified::Instance().IsKidsModeActive();
+  return detail::GetVehicleControl().IsKidsModeActive();
 }
 
 inline void VehicleControlClearLog() {
-  rc_vehicle::VehicleControlUnified::Instance().ClearLog();
+  detail::GetVehicleControl().ClearLog();
 }
 
 inline std::vector<rc_vehicle::SelfTestItem> VehicleControlRunSelfTest() {
-  return rc_vehicle::VehicleControlUnified::Instance().RunSelfTest();
+  return detail::GetVehicleControl().RunSelfTest();
 }
 
 inline bool VehicleControlIsReady() {
-  return rc_vehicle::VehicleControlUnified::Instance().IsReady();
+  return detail::GetVehicleControl().IsReady();
 }

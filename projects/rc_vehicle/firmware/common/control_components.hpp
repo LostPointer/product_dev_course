@@ -186,6 +186,12 @@ class ImuHandler : public ControlComponent {
    */
   void SetEnabled(bool enabled) noexcept { enabled_ = enabled; }
 
+  /**
+   * @brief Включить/выключить обновление фильтра Madgwick
+   * @param enabled false — IMU читается и LPF работает, но Madgwick не обновляется
+   */
+  void SetMadgwickEnabled(bool enabled) noexcept { madgwick_enabled_ = enabled; }
+
  private:
   VehicleControlPlatform& platform_;
   ImuCalibration& calib_;
@@ -195,9 +201,36 @@ class ImuHandler : public ControlComponent {
   bool first_read_{true};
   ImuData data_{};
   bool enabled_{false};
+  bool madgwick_enabled_{true};
   LpfButterworth2 lpf_gyro_z_{};
   float filtered_gz_{0.f};
   bool veh_frame_set_{false};  ///< Vehicle frame уже передан в фильтр
+};
+
+// ═════════════════════════════════════════════════════════════════════════
+// SensorSnapshot — атомарный снимок состояния датчиков
+// ═════════════════════════════════════════════════════════════════════════
+
+/**
+ * @brief Атомарный снимок состояния всех датчиков за одну итерацию control loop
+ *
+ * Собирается один раз после Update() всех компонентов и используется
+ * во всех последующих этапах итерации. Предотвращает многократные вызовы
+ * IsActive()/GetData()/GetFilteredGyroZ() и гарантирует согласованность данных.
+ */
+struct SensorSnapshot {
+  // RC input
+  bool rc_active{false};
+  std::optional<RcCommand> rc_cmd;
+
+  // Wi-Fi
+  bool wifi_active{false};
+  std::optional<RcCommand> wifi_cmd;
+
+  // IMU
+  bool imu_enabled{false};
+  ImuData imu_data{};
+  float filtered_gz{0.0f};
 };
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -207,7 +240,7 @@ class ImuHandler : public ControlComponent {
 /**
  * @brief Снимок данных для телеметрии
  *
- * Заполняется в ControlTaskLoop() и передаётся в TelemetryHandler::Update(),
+ * Заполняется в ControlTaskLoop() и передаётся в TelemetryHandler::SendTelemetry(),
  * устраняя прямые зависимости от отдельных компонентов.
  */
 struct TelemetrySnapshot {
@@ -268,8 +301,11 @@ struct TelemetrySnapshot {
  *
  * Получает снимок данных (TelemetrySnapshot) и отправляет телеметрию
  * по WebSocket с заданной частотой.
+ *
+ * Не наследует ControlComponent — использует собственный интерфейс
+ * SendTelemetry() вместо Update(now, dt).
  */
-class TelemetryHandler : public ControlComponent {
+class TelemetryHandler {
  public:
   /**
    * @brief Конструктор
@@ -281,16 +317,12 @@ class TelemetryHandler : public ControlComponent {
                    uint32_t send_interval_ms = 50)
       : platform_(platform), send_interval_ms_(send_interval_ms) {}
 
-  // Удовлетворяет интерфейсу ControlComponent; использовать перегрузку со
-  // snapshot.
-  void Update(uint32_t /*now_ms*/, uint32_t /*dt_ms*/) override {}
-
   /**
    * @brief Отправить телеметрию с переданным снимком данных
    * @param now_ms Текущее время в миллисекундах
    * @param snap Снимок данных телеметрии
    */
-  void Update(uint32_t now_ms, const TelemetrySnapshot& snap);
+  void SendTelemetry(uint32_t now_ms, const TelemetrySnapshot& snap);
 
  private:
   VehicleControlPlatform& platform_;

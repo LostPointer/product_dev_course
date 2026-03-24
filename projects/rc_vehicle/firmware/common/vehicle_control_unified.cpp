@@ -20,11 +20,6 @@ namespace rc_vehicle {
 // VehicleControlUnified Implementation
 // ═════════════════════════════════════════════════════════════════════════
 
-VehicleControlUnified& VehicleControlUnified::Instance() {
-  static VehicleControlUnified s_instance;
-  return s_instance;
-}
-
 void VehicleControlUnified::SetPlatform(
     std::unique_ptr<VehicleControlPlatform> platform) {
   platform_ = std::move(platform);
@@ -100,7 +95,9 @@ void VehicleControlUnified::ControlTaskLoop() {
     // EKF: оценка динамического состояния (vx, vy, r → slip angle)
     // ─────────────────────────────────────────────────────────────────────
 
-    if (sensors.imu_enabled && dt_ms > 0) {
+    // EKF-фильтр можно отключить через конфиг для отладки
+    const bool ekf_active = stab_mgr_ && stab_mgr_->GetConfig().filter.ekf_enabled;
+    if (ekf_active && sensors.imu_enabled && dt_ms > 0) {
       const float dt_sec = static_cast<float>(dt_ms) * 0.001f;
       // ax, ay в IMU после калибровки в g → конвертируем в м/с²
       constexpr float kG = 9.80665f;

@@ -103,7 +103,9 @@ void ImuHandler::Update(uint32_t now_ms, [[maybe_unused]] uint32_t dt_ms) {
                            ? (read_interval_ms_ / 1000.0f)
                            : (static_cast<float>(now_ms - prev_read_ms) / 1000.0f);
   first_read_ = false;
-  filter_.Update(raw_ax, raw_ay, raw_az, data_.gx, data_.gy, data_.gz, dt_sec);
+  if (madgwick_enabled_) {
+    filter_.Update(raw_ax, raw_ay, raw_az, data_.gx, data_.gy, data_.gz, dt_sec);
+  }
 }
 
 void ImuHandler::SetLpfCutoff(float cutoff_hz) {
@@ -120,7 +122,8 @@ void ImuHandler::SetLpfCutoff(float cutoff_hz) {
 // TelemetryHandler
 // ═════════════════════════════════════════════════════════════════════════
 
-void TelemetryHandler::Update(uint32_t now_ms, const TelemetrySnapshot& snap) {
+void TelemetryHandler::SendTelemetry(uint32_t now_ms,
+                                     const TelemetrySnapshot& snap) {
   if (now_ms - last_send_ms_ < send_interval_ms_) {
     return;
   }
