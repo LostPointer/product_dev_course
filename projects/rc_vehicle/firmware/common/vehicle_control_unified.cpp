@@ -157,6 +157,71 @@ void VehicleControlUnified::ControlTaskLoop() {
     }
 
     // ─────────────────────────────────────────────────────────────────────
+    // Авто-калибровка steering trim
+    // RC-пульт имеет приоритет (безопасность).
+    // ─────────────────────────────────────────────────────────────────────
+
+    if (trim_calib_.IsActive() && !sensors.rc_active) {
+      const float dt_sec = static_cast<float>(dt_ms) * 0.001f;
+      float fwd_accel = 0.0f;
+      float accel_mag = 1.0f;
+      float gyro_z = 0.0f;
+      if (sensors.imu_enabled) {
+        fwd_accel = imu_calib_.GetForwardAccel(sensors.imu_data);
+        accel_mag = std::sqrt(
+            sensors.imu_data.ax * sensors.imu_data.ax +
+            sensors.imu_data.ay * sensors.imu_data.ay +
+            sensors.imu_data.az * sensors.imu_data.az);
+        gyro_z = sensors.filtered_gz;
+      }
+      float trim_throttle = 0.0f;
+      float trim_steering = 0.0f;
+      trim_calib_.Update(fwd_accel, accel_mag, gyro_z, dt_sec, trim_throttle,
+                         trim_steering);
+      commanded_throttle = trim_throttle;
+      commanded_steering = trim_steering;
+
+      // Калибровка завершена — применить результат
+      if (trim_calib_.IsFinished()) {
+        const auto& result = trim_calib_.GetResult();
+        if (result.valid && stab_mgr_) {
+          auto cfg = stab_mgr_->GetConfig();
+          cfg.steering_trim = result.trim;
+          stab_mgr_->SetConfig(cfg, true);
+          platform_->Log(LogLevel::Info, "Steering trim calibration done");
+        } else if (!result.valid) {
+          platform_->Log(LogLevel::Warning, "Steering trim calibration failed");
+        }
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Автоматический тестовый манёвр (TestRunner)
+    // RC-пульт имеет приоритет (безопасность).
+    // ─────────────────────────────────────────────────────────────────────
+
+    if (test_runner_.IsActive() && !sensors.rc_active) {
+      const float dt_sec = static_cast<float>(dt_ms) * 0.001f;
+      float fwd_accel = 0.0f;
+      float accel_mag = 1.0f;
+      float gyro_z = 0.0f;
+      if (sensors.imu_enabled) {
+        fwd_accel = imu_calib_.GetForwardAccel(sensors.imu_data);
+        accel_mag = std::sqrt(
+            sensors.imu_data.ax * sensors.imu_data.ax +
+            sensors.imu_data.ay * sensors.imu_data.ay +
+            sensors.imu_data.az * sensors.imu_data.az);
+        gyro_z = sensors.filtered_gz;
+      }
+      float test_throttle = 0.0f;
+      float test_steering = 0.0f;
+      test_runner_.Update(fwd_accel, accel_mag, gyro_z, dt_sec, test_throttle,
+                          test_steering);
+      commanded_throttle = test_throttle;
+      commanded_steering = test_steering;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
     // Снимок конфигурации стабилизации (atomic snapshot — один вызов
     // GetConfig() за итерацию вместо нескольких)
     // ─────────────────────────────────────────────────────────────────────
@@ -226,6 +291,8 @@ void VehicleControlUnified::ControlTaskLoop() {
       stab_mgr_->ResetWeights();       // Сброс весов стабилизации
       telem_mgr_->ResetLastLogTime();  // Сброс таймера лога
       calib_mgr_->StopAutoForward();   // Прервать авто-движение при failsafe
+      trim_calib_.Stop();              // Прервать калибровку trim при failsafe
+      test_runner_.Stop();             // Прервать тестовый манёвр при failsafe
       platform_->SetPwmNeutral();
     }
 
@@ -253,45 +320,9 @@ void VehicleControlUnified::ControlTaskLoop() {
     // ─────────────────────────────────────────────────────────────────────
 
     if (telem_handler_) {
-      TelemetrySnapshot snap;
-      snap.uptime_ms = now;
-      snap.rc_ok = sensors.rc_active;
-      snap.wifi_ok = sensors.wifi_active;
-      snap.throttle = applied_throttle;
-      snap.steering = applied_steering;
-
-      // Raw RC input (до стабилизации)
-      if (sensors.rc_active && sensors.rc_cmd) {
-        snap.rc_throttle = sensors.rc_cmd->throttle;
-        snap.rc_steering = sensors.rc_cmd->steering;
-      }
-
-      // Kids Mode status (routing определяется drive_mode/traits)
-      snap.kids_mode_active = (drive_mode == DriveMode::Kids);
-      snap.kids_anti_spin_active = kids_processor_.IsAntiSpinActive();
-      snap.kids_throttle_limit = stab_cfg.kids_mode.throttle_limit;
-
-      if (sensors.imu_enabled) {
-        snap.imu_enabled = true;
-        snap.imu_data = sensors.imu_data;
-        snap.filtered_gz = sensors.filtered_gz;
-        snap.forward_accel = imu_calib_.GetForwardAccel(sensors.imu_data);
-        madgwick_.GetEulerDeg(snap.pitch_deg, snap.roll_deg, snap.yaw_deg);
-        snap.calib_status = imu_calib_.GetStatus();
-        snap.calib_stage = imu_calib_.GetCalibStage();
-        snap.calib_valid = imu_calib_.IsValid();
-        if (snap.calib_valid) {
-          snap.calib_data = imu_calib_.GetData();
-        }
-        snap.ekf_available = true;
-        snap.ekf_vx = ekf_.GetVx();
-        snap.ekf_vy = ekf_.GetVy();
-        snap.ekf_yaw_rate = ekf_.GetYawRate();
-        snap.ekf_slip_deg = ekf_.GetSlipAngleDeg();
-        snap.ekf_speed_ms = ekf_.GetSpeedMs();
-        snap.oversteer_available = true;
-        snap.oversteer_active = oversteer_guard_.IsActive();
-      }
+      auto snap = BuildTelemetrySnapshot(now, sensors, stab_cfg, drive_mode,
+                                         applied_throttle, applied_steering,
+                                         commanded_throttle, commanded_steering);
       telem_handler_->SendTelemetry(now, snap);
     }
 
@@ -302,27 +333,9 @@ void VehicleControlUnified::ControlTaskLoop() {
     if (sensors.imu_enabled) {
       const uint32_t last_log = telem_mgr_->GetLastLogTime();
       if (now - last_log >= config::TelemetryLogConfig::kLogIntervalMs) {
-        TelemetryLogFrame frame;
-        frame.ts_ms = now;
-        frame.ax = sensors.imu_data.ax;
-        frame.ay = sensors.imu_data.ay;
-        frame.az = sensors.imu_data.az;
-        frame.gx = sensors.imu_data.gx;
-        frame.gy = sensors.imu_data.gy;
-        frame.gz = sensors.imu_data.gz;
-        frame.vx = ekf_.GetVx();
-        frame.vy = ekf_.GetVy();
-        frame.slip_deg = ekf_.GetSlipAngleDeg();
-        frame.speed_ms = ekf_.GetSpeedMs();
-        frame.throttle = applied_throttle;
-        frame.steering = applied_steering;
-        madgwick_.GetEulerDeg(frame.pitch_deg, frame.roll_deg, frame.yaw_deg);
-        frame.yaw_rate_dps = sensors.filtered_gz;
-        frame.oversteer_active = oversteer_guard_.IsActive() ? 1.0f : 0.0f;
-        if (sensors.rc_active && sensors.rc_cmd) {
-          frame.rc_throttle = sensors.rc_cmd->throttle;
-          frame.rc_steering = sensors.rc_cmd->steering;
-        }
+        auto frame = BuildLogFrame(now, sensors, applied_throttle,
+                                   applied_steering, commanded_throttle,
+                                   commanded_steering);
         telem_mgr_->Push(frame);
         telem_mgr_->SetLastLogTime(now);
 
@@ -589,6 +602,122 @@ void VehicleControlUnified::PrintDiagnostics(uint32_t now_ms,
     diag_loop_count = 0;
     diag_start_ms = now_ms;
   }
+}
+
+TelemetrySnapshot VehicleControlUnified::BuildTelemetrySnapshot(
+    uint32_t now, const SensorSnapshot& sensors,
+    const StabilizationConfig& stab_cfg, DriveMode drive_mode,
+    float applied_throttle, float applied_steering,
+    float commanded_throttle, float commanded_steering) const {
+  TelemetrySnapshot snap;
+  snap.uptime_ms = now;
+  snap.rc_ok = sensors.rc_active;
+  snap.wifi_ok = sensors.wifi_active;
+  snap.throttle = applied_throttle;
+  snap.steering = applied_steering;
+
+  if (sensors.rc_active && sensors.rc_cmd) {
+    snap.rc_throttle = sensors.rc_cmd->throttle;
+    snap.rc_steering = sensors.rc_cmd->steering;
+  }
+
+  snap.cmd_throttle = commanded_throttle;
+  snap.cmd_steering = commanded_steering;
+
+  snap.kids_mode_active = (drive_mode == DriveMode::Kids);
+  snap.kids_anti_spin_active = kids_processor_.IsAntiSpinActive();
+  snap.kids_throttle_limit = stab_cfg.kids_mode.throttle_limit;
+
+  if (sensors.imu_enabled) {
+    snap.imu_enabled = true;
+    snap.imu_data = sensors.imu_data;
+    snap.filtered_gz = sensors.filtered_gz;
+    snap.forward_accel = imu_calib_.GetForwardAccel(sensors.imu_data);
+    madgwick_.GetEulerDeg(snap.pitch_deg, snap.roll_deg, snap.yaw_deg);
+    snap.calib_status = imu_calib_.GetStatus();
+    snap.calib_stage = imu_calib_.GetCalibStage();
+    snap.calib_valid = imu_calib_.IsValid();
+    if (snap.calib_valid) {
+      snap.calib_data = imu_calib_.GetData();
+    }
+    snap.ekf_available = true;
+    snap.ekf_vx = ekf_.GetVx();
+    snap.ekf_vy = ekf_.GetVy();
+    snap.ekf_yaw_rate = ekf_.GetYawRate();
+    snap.ekf_slip_deg = ekf_.GetSlipAngleDeg();
+    snap.ekf_speed_ms = ekf_.GetSpeedMs();
+    snap.ekf_vx_var = ekf_.GetVxVariance();
+    snap.ekf_vy_var = ekf_.GetVyVariance();
+    snap.ekf_r_var = ekf_.GetRVariance();
+    snap.oversteer_available = true;
+    snap.oversteer_active = oversteer_guard_.IsActive();
+  }
+  return snap;
+}
+
+TelemetryLogFrame VehicleControlUnified::BuildLogFrame(
+    uint32_t now, const SensorSnapshot& sensors, float applied_throttle,
+    float applied_steering, float commanded_throttle,
+    float commanded_steering) const {
+  TelemetryLogFrame frame;
+  frame.ts_ms = now;
+  frame.ax = sensors.imu_data.ax;
+  frame.ay = sensors.imu_data.ay;
+  frame.az = sensors.imu_data.az;
+  frame.gx = sensors.imu_data.gx;
+  frame.gy = sensors.imu_data.gy;
+  frame.gz = sensors.imu_data.gz;
+  frame.vx = ekf_.GetVx();
+  frame.vy = ekf_.GetVy();
+  frame.slip_deg = ekf_.GetSlipAngleDeg();
+  frame.speed_ms = ekf_.GetSpeedMs();
+  frame.throttle = applied_throttle;
+  frame.steering = applied_steering;
+  madgwick_.GetEulerDeg(frame.pitch_deg, frame.roll_deg, frame.yaw_deg);
+  frame.yaw_rate_dps = sensors.filtered_gz;
+  frame.oversteer_active = oversteer_guard_.IsActive() ? 1.0f : 0.0f;
+  if (sensors.rc_active && sensors.rc_cmd) {
+    frame.rc_throttle = sensors.rc_cmd->throttle;
+    frame.rc_steering = sensors.rc_cmd->steering;
+  }
+  frame.cmd_throttle = commanded_throttle;
+  frame.cmd_steering = commanded_steering;
+  frame.ekf_vx_var = ekf_.GetVxVariance();
+  frame.ekf_vy_var = ekf_.GetVyVariance();
+  frame.ekf_r_var = ekf_.GetRVariance();
+  frame.test_marker = test_runner_.GetTestMarker();
+  return frame;
+}
+
+bool VehicleControlUnified::StartTest(const TestParams& params) {
+  if (!stab_mgr_ || !imu_enabled_) {
+    return false;
+  }
+  // Нельзя запускать если идёт другая автоматическая процедура
+  if (calib_mgr_ && calib_mgr_->IsAutoForwardActive()) {
+    return false;
+  }
+  if (trim_calib_.IsActive()) {
+    return false;
+  }
+  return test_runner_.Start(params);
+}
+
+bool VehicleControlUnified::StartSteeringTrimCalibration(
+    float target_accel_g) {
+  if (!stab_mgr_ || !imu_enabled_) {
+    return false;
+  }
+  // Нельзя запускать если идёт другая автоматическая процедура
+  if (calib_mgr_ && calib_mgr_->IsAutoForwardActive()) {
+    return false;
+  }
+  if (test_runner_.IsActive()) {
+    return false;
+  }
+  const auto& cfg = stab_mgr_->GetConfig();
+  return trim_calib_.Start(target_accel_g, cfg.steering_trim,
+                           cfg.yaw_rate.steer_to_yaw_rate_dps);
 }
 
 void VehicleControlUnified::OnWifiCommand(float throttle, float steering) {

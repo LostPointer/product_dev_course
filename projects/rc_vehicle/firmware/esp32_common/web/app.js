@@ -50,6 +50,8 @@ const btnCalibGyro     = $('btn-calib-gyro');
 const btnCalibFull     = $('btn-calib-full');
 const btnCalibForward  = $('btn-calib-forward');
 const btnCalibAutoFwd  = $('btn-calib-auto-forward');
+const btnCalibTrim     = $('btn-calib-trim');
+const trimCalibStatusEl = $('trim-calib-status');
 const calibFwdAccelSlider    = $('calib-fwd-accel');
 const calibFwdAccelValueEl   = $('calib-fwd-accel-value');
 // Backward compat
@@ -135,6 +137,16 @@ function connectWebSocket() {
                     updateCalibStatus(data.status, null);
                 } else if (data.type === 'calib_status') {
                     updateCalibStatus(data.status, null);
+                } else if (data.type === 'calibrate_steering_trim_ack') {
+                    updateTrimCalibStatus(data);
+                } else if (data.type === 'steering_trim_status') {
+                    updateTrimCalibStatus(data);
+                } else if (data.type === 'start_test_ack') {
+                    updateTestStatus(data);
+                } else if (data.type === 'test_status') {
+                    updateTestStatus(data);
+                } else if (data.type === 'stop_test_ack') {
+                    updateTestStatus(data);
                 } else if (data.type === 'stab_config' || data.type === 'set_stab_config_ack') {
                     if (data.type === 'stab_config') {
                         applyStabConfig(data);
@@ -426,6 +438,10 @@ function updateTelem(data) {
         html += row('RC Throttle', data.rc.throttle?.toFixed(2) ?? 'N/A');
         html += row('RC Steering', data.rc.steering?.toFixed(2) ?? 'N/A');
     }
+    if (data.cmd) {
+        html += row('Cmd Throttle', data.cmd.throttle?.toFixed(2) ?? 'N/A');
+        html += row('Cmd Steering', data.cmd.steering?.toFixed(2) ?? 'N/A');
+    }
     if (data.act) {
         html += row('Throttle', data.act.throttle?.toFixed(2) ?? 'N/A');
         html += row('Steering', data.act.steering?.toFixed(2) ?? 'N/A');
@@ -434,6 +450,7 @@ function updateTelem(data) {
         html += row('EKF Slip', (data.ekf.slip_deg?.toFixed(1) ?? 'N/A') + ' °');
         html += row('EKF Speed', (data.ekf.speed_ms?.toFixed(2) ?? 'N/A') + ' m/s');
         html += row('EKF Vx/Vy', `${data.ekf.vx?.toFixed(2) ?? '?'} / ${data.ekf.vy?.toFixed(2) ?? '?'} m/s`);
+        html += row('EKF σ²(vx/vy/r)', `${data.ekf.vx_var?.toExponential(1) ?? '?'} / ${data.ekf.vy_var?.toExponential(1) ?? '?'} / ${data.ekf.r_var?.toExponential(1) ?? '?'}`);
     }
     if (data.imu?.orientation) {
         const o = data.imu.orientation;
@@ -649,9 +666,9 @@ function handleLogData(frames) {
 
 function exportLogCsv(frames) {
     if (!frames || !frames.length) { alert('Нет данных'); return; }
-    const hdr = 'ts_ms,ax,ay,az,gx,gy,gz,vx,vy,slip_deg,speed_ms,throttle,steering,pitch_deg,roll_deg,yaw_deg,yaw_rate_dps,oversteer_active,rc_throttle,rc_steering\n';
+    const hdr = 'ts_ms,ax,ay,az,gx,gy,gz,vx,vy,slip_deg,speed_ms,throttle,steering,pitch_deg,roll_deg,yaw_deg,yaw_rate_dps,oversteer_active,rc_throttle,rc_steering,cmd_throttle,cmd_steering,ekf_vx_var,ekf_vy_var,ekf_r_var,test_marker\n';
     const rows = frames.map(f =>
-        `${f.ts_ms},${f.ax},${f.ay},${f.az},${f.gx},${f.gy},${f.gz},${f.vx},${f.vy},${f.slip_deg},${f.speed_ms},${f.throttle},${f.steering},${f.pitch_deg},${f.roll_deg},${f.yaw_deg},${f.yaw_rate_dps},${f.oversteer_active},${f.rc_throttle},${f.rc_steering}`
+        `${f.ts_ms},${f.ax},${f.ay},${f.az},${f.gx},${f.gy},${f.gz},${f.vx},${f.vy},${f.slip_deg},${f.speed_ms},${f.throttle},${f.steering},${f.pitch_deg},${f.roll_deg},${f.yaw_deg},${f.yaw_rate_dps},${f.oversteer_active},${f.rc_throttle},${f.rc_steering},${f.cmd_throttle??0},${f.cmd_steering??0},${f.ekf_vx_var??0},${f.ekf_vy_var??0},${f.ekf_r_var??0},${f.test_marker??0}`
     ).join('\n');
     const blob = new Blob([hdr + rows], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -699,6 +716,12 @@ async function downloadBinaryLog() {
             { name: 'oversteer_active', off: 68, type: 'f32' },
             { name: 'rc_throttle', off: 72, type: 'f32' },
             { name: 'rc_steering', off: 76, type: 'f32' },
+            { name: 'cmd_throttle', off: 80, type: 'f32' },
+            { name: 'cmd_steering', off: 84, type: 'f32' },
+            { name: 'ekf_vx_var',  off: 88, type: 'f32' },
+            { name: 'ekf_vy_var',  off: 92, type: 'f32' },
+            { name: 'ekf_r_var',   off: 96, type: 'f32' },
+            { name: 'test_marker', off: 100, type: 'u8' },
         ];
 
         const hdr = FIELD_OFFSETS.map(f => f.name).join(',') + '\n';
@@ -709,7 +732,9 @@ async function downloadBinaryLog() {
             if (base + frameSize > buf.byteLength) break;
             const vals = FIELD_OFFSETS.map(f => {
                 const o = base + f.off;
-                return f.type === 'u32' ? view.getUint32(o, true) : view.getFloat32(o, true);
+                if (f.type === 'u32') return view.getUint32(o, true);
+                if (f.type === 'u8') return view.getUint8(o);
+                return view.getFloat32(o, true);
             });
             lines.push(vals.join(','));
         }
@@ -791,6 +816,42 @@ btnStop.addEventListener('click', () => { throttleSlider.value = 0; throttleValu
 if (btnCalibGyro)  btnCalibGyro.addEventListener('click', () => sendCalibrate('gyro'));
 if (btnCalibFull)  btnCalibFull.addEventListener('click', () => sendCalibrate('full'));
 if (btnCalibForward) btnCalibForward.addEventListener('click', () => sendCalibrate('forward'));
+// Steering trim calibration
+function updateTrimCalibStatus(data) {
+    if (!trimCalibStatusEl) return;
+    trimCalibStatusEl.style.display = 'block';
+    if (data.status === 'started' || data.active) {
+        trimCalibStatusEl.textContent = 'Калибровка trim идёт...';
+        if (btnCalibTrim) btnCalibTrim.disabled = true;
+        // Poll status
+        if (data.active) setTimeout(() => wsSend({ type: 'get_steering_trim_status' }), 1000);
+    } else if (data.result && data.result.valid) {
+        trimCalibStatusEl.textContent = `Trim = ${data.result.trim.toFixed(4)}, yaw drift = ${data.result.mean_yaw_rate.toFixed(2)} dps (${data.result.samples} samples)`;
+        if (btnCalibTrim) btnCalibTrim.disabled = false;
+        // Refresh config to show new trim value
+        wsSend({ type: 'get_stab_config' });
+    } else if (data.result && !data.result.valid) {
+        trimCalibStatusEl.textContent = `Не удалось: yaw = ${data.result.mean_yaw_rate?.toFixed(1) ?? '?'} dps (${data.result.samples ?? 0} samples)`;
+        if (btnCalibTrim) btnCalibTrim.disabled = false;
+    } else if (data.ok === false) {
+        trimCalibStatusEl.textContent = data.error || 'Ошибка запуска';
+        if (btnCalibTrim) btnCalibTrim.disabled = false;
+    }
+}
+if (btnCalibTrim) btnCalibTrim.addEventListener('click', () => {
+    let target_accel = 0.1;
+    if (calibFwdAccelSlider) {
+        target_accel = parseInt(calibFwdAccelSlider.value) / 1000;
+    }
+    wsSend({ type: 'calibrate_steering_trim', target_accel });
+    if (trimCalibStatusEl) {
+        trimCalibStatusEl.style.display = 'block';
+        trimCalibStatusEl.textContent = 'Запуск...';
+    }
+    // Start polling after a delay
+    setTimeout(() => wsSend({ type: 'get_steering_trim_status' }), 2000);
+});
+
 if (btnCalibAutoFwd) btnCalibAutoFwd.addEventListener('click', () => {
     let target_accel = 0.1;
     if (calibFwdAccelSlider) {
@@ -806,6 +867,87 @@ if (calibFwdAccelSlider) {
 if (calibFwdThrottleSlider) {
     calibFwdThrottleSlider.addEventListener('input', (e) => { if (calibFwdThrottleValueEl) calibFwdThrottleValueEl.textContent = e.target.value; });
 }
+
+// ── Test Maneuvers ──
+const testTypeSelect    = $('test-type');
+const testAccelSlider   = $('test-accel');
+const testAccelValueEl  = $('test-accel-value');
+const testDurSlider     = $('test-duration');
+const testDurValueEl    = $('test-duration-value');
+const testSteerSlider   = $('test-steering');
+const testSteerValueEl  = $('test-steering-value');
+const testSteerGroup    = $('test-steering-group');
+const btnTestStart      = $('btn-test-start');
+const btnTestStop       = $('btn-test-stop');
+const testRunStatusEl   = $('test-run-status');
+const testStatusBadgeEl = $('test-status-badge');
+
+function updateTestStatus(data) {
+    if (!testRunStatusEl) return;
+    testRunStatusEl.style.display = 'block';
+
+    if (data.type === 'start_test_ack') {
+        if (data.ok) {
+            testRunStatusEl.textContent = `Тест "${data.test_type}" запущен`;
+            if (btnTestStart) btnTestStart.disabled = true;
+            if (testStatusBadgeEl) { testStatusBadgeEl.textContent = 'RUN'; testStatusBadgeEl.className = 'badge badge-warn'; }
+            setTimeout(() => wsSend({ type: 'get_test_status' }), 1000);
+        } else {
+            testRunStatusEl.textContent = data.error || 'Ошибка запуска';
+            if (testStatusBadgeEl) { testStatusBadgeEl.textContent = 'ERR'; testStatusBadgeEl.className = 'badge badge-off'; }
+        }
+        return;
+    }
+
+    if (data.type === 'stop_test_ack') {
+        testRunStatusEl.textContent = 'Тест остановлен';
+        if (btnTestStart) btnTestStart.disabled = false;
+        if (testStatusBadgeEl) { testStatusBadgeEl.textContent = 'STOP'; testStatusBadgeEl.className = 'badge badge-off'; }
+        return;
+    }
+
+    // test_status
+    if (data.active) {
+        const phaseNames = { accelerate: 'Разгон', cruise: 'Круиз', step_exec: 'Step', brake: 'Торможение' };
+        testRunStatusEl.textContent = `${data.test_type}: ${phaseNames[data.phase] || data.phase} (${data.elapsed.toFixed(1)}с)`;
+        if (btnTestStart) btnTestStart.disabled = true;
+        if (testStatusBadgeEl) { testStatusBadgeEl.textContent = data.phase.toUpperCase(); testStatusBadgeEl.className = 'badge badge-warn'; }
+        setTimeout(() => wsSend({ type: 'get_test_status' }), 500);
+    } else if (data.phase === 'done') {
+        testRunStatusEl.textContent = `Тест завершён (${data.elapsed.toFixed(1)}с)`;
+        if (btnTestStart) btnTestStart.disabled = false;
+        if (testStatusBadgeEl) { testStatusBadgeEl.textContent = 'DONE'; testStatusBadgeEl.className = 'badge badge-on'; }
+    } else if (data.phase === 'failed') {
+        testRunStatusEl.textContent = `Тест прерван`;
+        if (btnTestStart) btnTestStart.disabled = false;
+        if (testStatusBadgeEl) { testStatusBadgeEl.textContent = 'FAIL'; testStatusBadgeEl.className = 'badge badge-off'; }
+    } else {
+        testRunStatusEl.textContent = '';
+        testRunStatusEl.style.display = 'none';
+        if (btnTestStart) btnTestStart.disabled = false;
+        if (testStatusBadgeEl) { testStatusBadgeEl.textContent = '—'; testStatusBadgeEl.className = 'badge badge-unknown'; }
+    }
+}
+
+if (testTypeSelect) testTypeSelect.addEventListener('change', () => {
+    if (testSteerGroup) testSteerGroup.style.display = (testTypeSelect.value === 'straight') ? 'none' : '';
+});
+if (testAccelSlider) testAccelSlider.addEventListener('input', (e) => { if (testAccelValueEl) testAccelValueEl.textContent = e.target.value; });
+if (testDurSlider) testDurSlider.addEventListener('input', (e) => { if (testDurValueEl) testDurValueEl.textContent = parseFloat(e.target.value).toFixed(1); });
+if (testSteerSlider) testSteerSlider.addEventListener('input', (e) => { if (testSteerValueEl) testSteerValueEl.textContent = parseFloat(e.target.value).toFixed(2); });
+
+if (btnTestStart) btnTestStart.addEventListener('click', () => {
+    const target_accel = testAccelSlider ? parseInt(testAccelSlider.value) / 1000 : 0.1;
+    const duration = testDurSlider ? parseFloat(testDurSlider.value) : 3.0;
+    const steering = testSteerSlider ? parseFloat(testSteerSlider.value) : 0.3;
+    const test_type = testTypeSelect ? testTypeSelect.value : 'straight';
+    wsSend({ type: 'start_test', test_type, target_accel, duration, steering });
+    if (testRunStatusEl) { testRunStatusEl.style.display = 'block'; testRunStatusEl.textContent = 'Запуск...'; }
+});
+
+if (btnTestStop) btnTestStop.addEventListener('click', () => {
+    wsSend({ type: 'stop_test' });
+});
 
 // Wi-Fi scan list
 if (staScanList) {

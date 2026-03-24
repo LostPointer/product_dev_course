@@ -7,6 +7,7 @@
 #include "stabilization_config.hpp"
 #include "stabilization_config_json.hpp"
 #include "telemetry_log.hpp"
+#include "test_runner.hpp"
 #include "udp_telem_sender.hpp"
 #include "vehicle_control.hpp"
 #include "ws_command_registry.hpp"
@@ -210,6 +211,12 @@ void HandleGetLogData(cJSON* json, httpd_req_t* req) {
             cJSON_AddBoolToObject(f, "oversteer_active", frame.oversteer_active);
             cJSON_AddNumberToObject(f, "rc_throttle", frame.rc_throttle);
             cJSON_AddNumberToObject(f, "rc_steering", frame.rc_steering);
+            cJSON_AddNumberToObject(f, "cmd_throttle", frame.cmd_throttle);
+            cJSON_AddNumberToObject(f, "cmd_steering", frame.cmd_steering);
+            cJSON_AddNumberToObject(f, "ekf_vx_var", frame.ekf_vx_var);
+            cJSON_AddNumberToObject(f, "ekf_vy_var", frame.ekf_vy_var);
+            cJSON_AddNumberToObject(f, "ekf_r_var", frame.ekf_r_var);
+            cJSON_AddNumberToObject(f, "test_marker", frame.test_marker);
             cJSON_AddItemToArray(frames_arr, f);
           }
         }
@@ -351,6 +358,165 @@ void HandleGetKidsPresets(cJSON* json, httpd_req_t* req) {
 
       cJSON_AddItemToObject(reply, "presets", presets);
     }
+
+    WsSendJsonReply(req, reply);
+    cJSON_Delete(reply);
+  }
+}
+
+void HandleCalibrateSteeringTrim(cJSON* json, httpd_req_t* req) {
+  cJSON* accel_item = cJSON_GetObjectItem(json, "target_accel");
+  float target_accel = 0.1f;
+  if (accel_item && cJSON_IsNumber(accel_item)) {
+    target_accel = (float)accel_item->valuedouble;
+  }
+
+  bool ok = VehicleControlStartSteeringTrimCalibration(target_accel);
+
+  cJSON* reply = cJSON_CreateObject();
+  if (reply) {
+    cJSON_AddStringToObject(reply, "type", "calibrate_steering_trim_ack");
+    cJSON_AddBoolToObject(reply, "ok", ok);
+    cJSON_AddStringToObject(reply, "status", ok ? "started" : "failed");
+    if (!ok) {
+      cJSON_AddStringToObject(
+          reply, "error",
+          "IMU not ready, another calibration active, or already running");
+    }
+    cJSON_AddNumberToObject(reply, "target_accel", target_accel);
+    WsSendJsonReply(req, reply);
+    cJSON_Delete(reply);
+  }
+
+  ESP_LOGI(TAG, "calibrate_steering_trim target_accel=%.3fg -> %s",
+           target_accel, ok ? "started" : "failed");
+}
+
+void HandleGetSteeringTrimStatus(cJSON* json, httpd_req_t* req) {
+  (void)json;
+
+  bool active = VehicleControlIsSteeringTrimCalibActive();
+  auto result = VehicleControlGetSteeringTrimCalibResult();
+
+  cJSON* reply = cJSON_CreateObject();
+  if (reply) {
+    cJSON_AddStringToObject(reply, "type", "steering_trim_status");
+    cJSON_AddBoolToObject(reply, "active", active);
+
+    cJSON* res = cJSON_CreateObject();
+    if (res) {
+      cJSON_AddBoolToObject(res, "valid", result.valid);
+      cJSON_AddNumberToObject(res, "trim", result.trim);
+      cJSON_AddNumberToObject(res, "mean_yaw_rate", result.mean_yaw_rate);
+      cJSON_AddNumberToObject(res, "samples", result.samples);
+      cJSON_AddItemToObject(reply, "result", res);
+    }
+
+    WsSendJsonReply(req, reply);
+    cJSON_Delete(reply);
+  }
+}
+
+void HandleStartTest(cJSON* json, httpd_req_t* req) {
+  TestParams params;
+
+  cJSON* type_item = cJSON_GetObjectItem(json, "test_type");
+  if (type_item && cJSON_IsString(type_item)) {
+    const char* t = type_item->valuestring;
+    if (strcmp(t, "circle") == 0)
+      params.type = TestType::Circle;
+    else if (strcmp(t, "step") == 0)
+      params.type = TestType::Step;
+    else
+      params.type = TestType::Straight;
+  }
+
+  cJSON* accel_item = cJSON_GetObjectItem(json, "target_accel");
+  if (accel_item && cJSON_IsNumber(accel_item)) {
+    params.target_accel_g = (float)accel_item->valuedouble;
+  }
+
+  cJSON* dur_item = cJSON_GetObjectItem(json, "duration");
+  if (dur_item && cJSON_IsNumber(dur_item)) {
+    params.duration_sec = (float)dur_item->valuedouble;
+  }
+
+  cJSON* steer_item = cJSON_GetObjectItem(json, "steering");
+  if (steer_item && cJSON_IsNumber(steer_item)) {
+    params.steering = (float)steer_item->valuedouble;
+  }
+
+  bool ok = VehicleControlStartTest(params);
+
+  cJSON* reply = cJSON_CreateObject();
+  if (reply) {
+    cJSON_AddStringToObject(reply, "type", "start_test_ack");
+    cJSON_AddBoolToObject(reply, "ok", ok);
+    const char* type_str = "straight";
+    if (params.type == TestType::Circle) type_str = "circle";
+    else if (params.type == TestType::Step) type_str = "step";
+    cJSON_AddStringToObject(reply, "test_type", type_str);
+    if (!ok) {
+      cJSON_AddStringToObject(reply, "error",
+          "IMU not ready, another procedure active, or test already running");
+    }
+    WsSendJsonReply(req, reply);
+    cJSON_Delete(reply);
+  }
+
+  ESP_LOGI(TAG, "start_test type=%s accel=%.3fg dur=%.1fs steer=%.2f -> %s",
+           params.type == TestType::Circle ? "circle" :
+           params.type == TestType::Step ? "step" : "straight",
+           params.target_accel_g, params.duration_sec, params.steering,
+           ok ? "started" : "failed");
+}
+
+void HandleStopTest(cJSON* json, httpd_req_t* req) {
+  (void)json;
+  VehicleControlStopTest();
+
+  cJSON* reply = cJSON_CreateObject();
+  if (reply) {
+    cJSON_AddStringToObject(reply, "type", "stop_test_ack");
+    cJSON_AddBoolToObject(reply, "ok", true);
+    WsSendJsonReply(req, reply);
+    cJSON_Delete(reply);
+  }
+
+  ESP_LOGI(TAG, "stop_test");
+}
+
+void HandleGetTestStatus(cJSON* json, httpd_req_t* req) {
+  (void)json;
+
+  bool active = VehicleControlIsTestActive();
+  auto status = VehicleControlGetTestStatus();
+
+  cJSON* reply = cJSON_CreateObject();
+  if (reply) {
+    cJSON_AddStringToObject(reply, "type", "test_status");
+    cJSON_AddBoolToObject(reply, "active", active);
+
+    const char* phase_str = "idle";
+    switch (status.phase) {
+      case TestRunner::Phase::Accelerate: phase_str = "accelerate"; break;
+      case TestRunner::Phase::Cruise: phase_str = "cruise"; break;
+      case TestRunner::Phase::StepExec: phase_str = "step_exec"; break;
+      case TestRunner::Phase::Brake: phase_str = "brake"; break;
+      case TestRunner::Phase::Done: phase_str = "done"; break;
+      case TestRunner::Phase::Failed: phase_str = "failed"; break;
+      default: break;
+    }
+    cJSON_AddStringToObject(reply, "phase", phase_str);
+
+    const char* type_str = "straight";
+    if (status.type == TestType::Circle) type_str = "circle";
+    else if (status.type == TestType::Step) type_str = "step";
+    cJSON_AddStringToObject(reply, "test_type", type_str);
+
+    cJSON_AddNumberToObject(reply, "elapsed", status.elapsed_sec);
+    cJSON_AddNumberToObject(reply, "phase_elapsed", status.phase_elapsed_sec);
+    cJSON_AddBoolToObject(reply, "valid", status.valid);
 
     WsSendJsonReply(req, reply);
     cJSON_Delete(reply);

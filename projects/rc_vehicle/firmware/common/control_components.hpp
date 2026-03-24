@@ -288,6 +288,15 @@ struct TelemetrySnapshot {
   float throttle{0.0f};
   float steering{0.0f};
 
+  // Commanded (до trim/slew rate, после стабилизации)
+  float cmd_throttle{0.0f};
+  float cmd_steering{0.0f};
+
+  // EKF covariance (для оценки качества фильтра)
+  float ekf_vx_var{0.0f};
+  float ekf_vy_var{0.0f};
+  float ekf_r_var{0.0f};
+
   // Uptime (ms since boot, for reboot diagnostics)
   uint32_t uptime_ms{0};
 };

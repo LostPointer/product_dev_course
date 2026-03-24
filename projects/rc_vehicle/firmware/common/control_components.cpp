@@ -237,6 +237,9 @@ std::string TelemetryHandler::BuildTelemJson(
         cJSON_AddNumberToObject(ekf, "yaw_rate", snap.ekf_yaw_rate);
         cJSON_AddNumberToObject(ekf, "slip_deg", snap.ekf_slip_deg);
         cJSON_AddNumberToObject(ekf, "speed_ms", snap.ekf_speed_ms);
+        cJSON_AddNumberToObject(ekf, "vx_var", snap.ekf_vx_var);
+        cJSON_AddNumberToObject(ekf, "vy_var", snap.ekf_vy_var);
+        cJSON_AddNumberToObject(ekf, "r_var", snap.ekf_r_var);
       }
     }
 
@@ -269,7 +272,14 @@ std::string TelemetryHandler::BuildTelemJson(
     }
   }
 
-  // Actuators
+  // Commanded (до trim/slew)
+  cJSON* cmd = cJSON_AddObjectToObject(root, "cmd");
+  if (cmd) {
+    cJSON_AddNumberToObject(cmd, "throttle", snap.cmd_throttle);
+    cJSON_AddNumberToObject(cmd, "steering", snap.cmd_steering);
+  }
+
+  // Actuators (после trim/slew)
   cJSON* act = cJSON_AddObjectToObject(root, "act");
   if (act) {
     cJSON_AddNumberToObject(act, "throttle", snap.throttle);

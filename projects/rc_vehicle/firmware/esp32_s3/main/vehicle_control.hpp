@@ -14,14 +14,17 @@
 #include "vehicle_control_unified.hpp"
 
 namespace detail {
-inline rc_vehicle::VehicleControlUnified& GetVehicleControl() {
+inline rc_vehicle::VehicleControlUnified& GetVehicleControlImpl() {
   static rc_vehicle::VehicleControlUnified instance;
   return instance;
+}
+inline rc_vehicle::IVehicleControl& GetVehicleControl() {
+  return GetVehicleControlImpl();
 }
 }  // namespace detail
 
 inline esp_err_t VehicleControlInit(void) {
-  auto& vc = detail::GetVehicleControl();
+  auto& vc = detail::GetVehicleControlImpl();
   static bool platform_set = false;
   if (!platform_set) {
     auto platform = std::make_unique<rc_vehicle::VehicleControlPlatformEsp32>();
@@ -94,6 +97,41 @@ inline bool VehicleControlIsKidsModeActive(void) {
 
 inline void VehicleControlClearLog() {
   detail::GetVehicleControl().ClearLog();
+}
+
+inline bool VehicleControlStartSteeringTrimCalibration(
+    float target_accel_g = 0.1f) {
+  return detail::GetVehicleControl().StartSteeringTrimCalibration(
+      target_accel_g);
+}
+
+inline void VehicleControlStopSteeringTrimCalibration() {
+  detail::GetVehicleControl().StopSteeringTrimCalibration();
+}
+
+inline bool VehicleControlIsSteeringTrimCalibActive() {
+  return detail::GetVehicleControl().IsSteeringTrimCalibActive();
+}
+
+inline rc_vehicle::SteeringTrimCalibration::Result
+VehicleControlGetSteeringTrimCalibResult() {
+  return detail::GetVehicleControl().GetSteeringTrimCalibResult();
+}
+
+inline bool VehicleControlStartTest(const rc_vehicle::TestParams& params) {
+  return detail::GetVehicleControl().StartTest(params);
+}
+
+inline void VehicleControlStopTest() {
+  detail::GetVehicleControl().StopTest();
+}
+
+inline bool VehicleControlIsTestActive() {
+  return detail::GetVehicleControl().IsTestActive();
+}
+
+inline rc_vehicle::TestRunner::Status VehicleControlGetTestStatus() {
+  return detail::GetVehicleControl().GetTestStatus();
 }
 
 inline std::vector<rc_vehicle::SelfTestItem> VehicleControlRunSelfTest() {

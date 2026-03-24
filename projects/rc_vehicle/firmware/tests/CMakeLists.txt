@@ -55,6 +55,9 @@ set(COMMON_SOURCES
     ${COMMON_DIR}/calibration_manager.cpp
     ${COMMON_DIR}/stabilization_manager.cpp
     ${COMMON_DIR}/telemetry_manager.cpp
+    ${COMMON_DIR}/vehicle_control_unified.cpp
+    ${COMMON_DIR}/steering_trim_calibration.cpp
+    ${COMMON_DIR}/test_runner.cpp
 )
 
 # Include directories
@@ -98,6 +101,9 @@ add_executable(unit_tests
     unit/test_telemetry_manager.cpp
     unit/test_calibration_manager.cpp
     unit/test_stabilization_manager.cpp
+    unit/test_steering_trim_calibration.cpp
+    unit/test_test_runner.cpp
+    integration/test_control_loop.cpp
 )
 
 target_link_libraries(unit_tests

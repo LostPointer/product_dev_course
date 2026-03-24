@@ -100,6 +100,13 @@ extern "C" void app_main(void) {
                               rc_vehicle::HandleGetKidsPresets);
   g_command_registry.Register("toggle_kids_mode",
                               rc_vehicle::HandleToggleKidsMode);
+  g_command_registry.Register("calibrate_steering_trim",
+                              rc_vehicle::HandleCalibrateSteeringTrim);
+  g_command_registry.Register("get_steering_trim_status",
+                              rc_vehicle::HandleGetSteeringTrimStatus);
+  g_command_registry.Register("start_test", rc_vehicle::HandleStartTest);
+  g_command_registry.Register("stop_test", rc_vehicle::HandleStopTest);
+  g_command_registry.Register("get_test_status", rc_vehicle::HandleGetTestStatus);
   g_command_registry.Register("run_self_test", rc_vehicle::HandleRunSelfTest);
   g_command_registry.Register("udp_stream_start",
                               rc_vehicle::HandleUdpStreamStart);

@@ -6,6 +6,7 @@
 #include "calibration_manager.hpp"
 #include "control_components.hpp"
 #include "drive_mode_registry.hpp"
+#include "i_vehicle_control.hpp"
 #include "imu_calibration.hpp"
 #include "self_test.hpp"
 #include "kids_mode_processor.hpp"
@@ -13,7 +14,9 @@
 #include "stabilization_config.hpp"
 #include "stabilization_manager.hpp"
 #include "stabilization_pipeline.hpp"
+#include "steering_trim_calibration.hpp"
 #include "telemetry_manager.hpp"
+#include "test_runner.hpp"
 #include "vehicle_control_platform.hpp"
 #include "vehicle_ekf.hpp"
 
@@ -32,10 +35,10 @@ namespace rc_vehicle {
  * @note Эта версия заменяет старую common/vehicle_control.hpp и
  *       esp32_s3/main/vehicle_control.hpp, объединяя их функциональность.
  */
-class VehicleControlUnified {
+class VehicleControlUnified : public IVehicleControl {
  public:
   VehicleControlUnified() = default;
-  ~VehicleControlUnified() = default;
+  ~VehicleControlUnified() override = default;
 
   /**
    * @brief Установить платформу (должно быть вызвано до Init)
@@ -54,19 +57,19 @@ class VehicleControlUnified {
    * @param throttle Газ [-1..1]
    * @param steering Руль [-1..1]
    */
-  void OnWifiCommand(float throttle, float steering);
+  void OnWifiCommand(float throttle, float steering) override;
 
   /**
    * @brief Запуск калибровки IMU, этап 1
    * @param full true — полная (gyro+accel+g), false — только гироскоп
    */
-  void StartCalibration(bool full) { calib_mgr_->StartCalibration(full); }
+  void StartCalibration(bool full) override { calib_mgr_->StartCalibration(full); }
 
   /**
    * @brief Запуск этапа 2 калибровки (движение вперёд/назад)
    * @return true при успешном запуске
    */
-  bool StartForwardCalibration() {
+  bool StartForwardCalibration() override {
     return calib_mgr_->StartForwardCalibration();
   }
 
@@ -75,7 +78,7 @@ class VehicleControlUnified {
    * @param target_accel_g Целевое ускорение в g [0.02..0.3], по умолчанию 0.1
    * @return true при успешном запуске
    */
-  bool StartAutoForwardCalibration(float target_accel_g = 0.1f) {
+  bool StartAutoForwardCalibration(float target_accel_g = 0.1f) override {
     return calib_mgr_->StartAutoForwardCalibration(target_accel_g);
   }
 
@@ -83,7 +86,7 @@ class VehicleControlUnified {
    * @brief Строковый статус калибровки
    * @return "idle", "collecting", "done", "failed"
    */
-  [[nodiscard]] const char* GetCalibStatus() const {
+  [[nodiscard]] const char* GetCalibStatus() const override {
     return calib_mgr_->GetStatus();
   }
 
@@ -91,7 +94,7 @@ class VehicleControlUnified {
    * @brief Текущий этап калибровки
    * @return 0, 1 (стояние), 2 (вперёд/назад)
    */
-  [[nodiscard]] int GetCalibStage() const { return calib_mgr_->GetStage(); }
+  [[nodiscard]] int GetCalibStage() const override { return calib_mgr_->GetStage(); }
 
   /**
    * @brief Задать направление «вперёд» единичным вектором в СК датчика
@@ -99,8 +102,49 @@ class VehicleControlUnified {
    * @param fy Y компонента вектора
    * @param fz Z компонента вектора
    */
-  void SetForwardDirection(float fx, float fy, float fz) {
+  void SetForwardDirection(float fx, float fy, float fz) override {
     calib_mgr_->SetForwardDirection(fx, fy, fz);
+  }
+
+  /**
+   * @brief Запуск автокалибровки steering trim
+   * @param target_accel_g Целевое ускорение при разгоне [0.02..0.3 g]
+   * @return true при успешном запуске
+   */
+  bool StartSteeringTrimCalibration(float target_accel_g = 0.1f) override;
+
+  /** Прервать калибровку trim руля. */
+  void StopSteeringTrimCalibration() override { trim_calib_.Stop(); }
+
+  /** true пока идёт калибровка trim. */
+  [[nodiscard]] bool IsSteeringTrimCalibActive() const override {
+    return trim_calib_.IsActive();
+  }
+
+  /** Результат калибровки trim (валиден после завершения). */
+  [[nodiscard]] SteeringTrimCalibration::Result
+  GetSteeringTrimCalibResult() const override {
+    return trim_calib_.GetResult();
+  }
+
+  /**
+   * @brief Запустить автоматический тестовый манёвр
+   * @param params Параметры теста
+   * @return true при успешном запуске
+   */
+  bool StartTest(const TestParams& params) override;
+
+  /** Прервать тестовый манёвр. */
+  void StopTest() override { test_runner_.Stop(); }
+
+  /** true пока тест активен. */
+  [[nodiscard]] bool IsTestActive() const override {
+    return test_runner_.IsActive();
+  }
+
+  /** Статус текущего теста. */
+  [[nodiscard]] TestRunner::Status GetTestStatus() const override {
+    return test_runner_.GetStatus();
   }
 
   /**
@@ -112,7 +156,7 @@ class VehicleControlUnified {
    *
    * @param active true — включить (DriveMode::Kids), false — Normal
    */
-  void SetKidsModeActive(bool active) {
+  void SetKidsModeActive(bool active) override {
     if (!stab_mgr_) return;
     auto cfg = stab_mgr_->GetConfig();
     cfg.mode = active ? DriveMode::Kids : DriveMode::Normal;
@@ -123,7 +167,7 @@ class VehicleControlUnified {
    * @brief Проверить, активен ли детский режим
    * @return true если текущий режим == DriveMode::Kids
    */
-  [[nodiscard]] bool IsKidsModeActive() const {
+  [[nodiscard]] bool IsKidsModeActive() const override {
     return stab_mgr_ && stab_mgr_->GetConfig().mode == DriveMode::Kids;
   }
 
@@ -131,7 +175,7 @@ class VehicleControlUnified {
    * @brief Получить текущую конфигурацию стабилизации
    * @return Конфигурация стабилизации
    */
-  [[nodiscard]] StabilizationConfig GetStabilizationConfig() const {
+  [[nodiscard]] StabilizationConfig GetStabilizationConfig() const override {
     return stab_mgr_->GetConfig();
   }
 
@@ -142,7 +186,7 @@ class VehicleControlUnified {
    * @return true при успехе
    */
   bool SetStabilizationConfig(const StabilizationConfig& config,
-                              bool save_to_nvs = true) {
+                              bool save_to_nvs = true) override {
     return stab_mgr_->SetConfig(config, save_to_nvs);
   }
 
@@ -151,7 +195,7 @@ class VehicleControlUnified {
    * @param count_out Текущее количество кадров
    * @param cap_out   Ёмкость буфера
    */
-  void GetLogInfo(size_t& count_out, size_t& cap_out) const {
+  void GetLogInfo(size_t& count_out, size_t& cap_out) const override {
     telem_mgr_->GetLogInfo(count_out, cap_out);
   }
 
@@ -161,20 +205,20 @@ class VehicleControlUnified {
    * @param out Выходной кадр
    * @return true если idx < Count()
    */
-  bool GetLogFrame(size_t idx, TelemetryLogFrame& out) const {
+  bool GetLogFrame(size_t idx, TelemetryLogFrame& out) const override {
     return telem_mgr_->GetLogFrame(idx, out);
   }
 
   /**
    * @brief Очистить буфер телеметрии
    */
-  void ClearLog() { telem_mgr_->Clear(); }
+  void ClearLog() override { telem_mgr_->Clear(); }
 
   /**
    * @brief Запустить self-test (проверка подсистем)
    * @return Вектор результатов проверок
    */
-  [[nodiscard]] std::vector<SelfTestItem> RunSelfTest() const;
+  [[nodiscard]] std::vector<SelfTestItem> RunSelfTest() const override;
 
   /**
    * @brief Проверить, готов ли control loop к обработке команд
@@ -184,7 +228,7 @@ class VehicleControlUnified {
    * обработкой команд, чтобы не обращаться к неинициализированным
    * компонентам.
    */
-  [[nodiscard]] bool IsReady() const noexcept {
+  [[nodiscard]] bool IsReady() const noexcept override {
     return control_task_ready_.load(std::memory_order_acquire);
   }
 
@@ -247,6 +291,20 @@ class VehicleControlUnified {
   void PrintDiagnostics(uint32_t now_ms, uint32_t& diag_loop_count,
                         uint32_t& diag_start_ms);
 
+  /** @brief Формирование снимка телеметрии для WebSocket-стриминга */
+  TelemetrySnapshot BuildTelemetrySnapshot(
+      uint32_t now, const SensorSnapshot& sensors,
+      const StabilizationConfig& stab_cfg, DriveMode drive_mode,
+      float applied_throttle, float applied_steering,
+      float commanded_throttle, float commanded_steering) const;
+
+  /** @brief Формирование кадра для кольцевого буфера телеметрии */
+  TelemetryLogFrame BuildLogFrame(uint32_t now, const SensorSnapshot& sensors,
+                                  float applied_throttle,
+                                  float applied_steering,
+                                  float commanded_throttle,
+                                  float commanded_steering) const;
+
   // ─────────────────────────────────────────────────────────────────────────
   // Члены класса
   // ─────────────────────────────────────────────────────────────────────────
@@ -269,6 +327,12 @@ class VehicleControlUnified {
 
   // EKF оценки динамического состояния (vx, vy, r → slip angle)
   VehicleEkf ekf_;
+
+  // Автокалибровка steering trim
+  SteeringTrimCalibration trim_calib_;
+
+  // Тестовые автоматические манёвры
+  TestRunner test_runner_;
 
   // Control components
   std::unique_ptr<RcInputHandler> rc_handler_;

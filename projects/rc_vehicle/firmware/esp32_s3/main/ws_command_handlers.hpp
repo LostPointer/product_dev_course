@@ -111,6 +111,49 @@ void HandleGetKidsPresets(cJSON* json, httpd_req_t* req);
 void HandleToggleKidsMode(cJSON* json, httpd_req_t* req);
 
 /**
+ * @brief Start steering trim auto-calibration
+ *
+ * Drives straight, measures yaw rate drift, computes optimal trim.
+ *
+ * Request: {"type":"calibrate_steering_trim","target_accel":0.1}
+ * Response: {"type":"calibrate_steering_trim_ack","ok":true,"status":"started"}
+ */
+void HandleCalibrateSteeringTrim(cJSON* json, httpd_req_t* req);
+
+/**
+ * @brief Get steering trim calibration status/result
+ *
+ * Request: {"type":"get_steering_trim_status"}
+ * Response: {"type":"steering_trim_status","active":bool,"phase":"...","result":{...}}
+ */
+void HandleGetSteeringTrimStatus(cJSON* json, httpd_req_t* req);
+
+/**
+ * @brief Start automated test maneuver
+ *
+ * Request: {"type":"start_test","test_type":"straight"|"circle"|"step",
+ *           "target_accel":0.1,"duration":3.0,"steering":0.5}
+ * Response: {"type":"start_test_ack","ok":true,"test_type":"..."}
+ */
+void HandleStartTest(cJSON* json, httpd_req_t* req);
+
+/**
+ * @brief Stop running test maneuver
+ *
+ * Request: {"type":"stop_test"}
+ * Response: {"type":"stop_test_ack","ok":true}
+ */
+void HandleStopTest(cJSON* json, httpd_req_t* req);
+
+/**
+ * @brief Get test maneuver status
+ *
+ * Request: {"type":"get_test_status"}
+ * Response: {"type":"test_status","active":bool,"phase":"...","type":"...","elapsed":N,"valid":bool}
+ */
+void HandleGetTestStatus(cJSON* json, httpd_req_t* req);
+
+/**
  * @brief Run self-test (hardware diagnostics)
  *
  * Checks 10 subsystems: control loop, IMU, gyro, accel, Madgwick,
