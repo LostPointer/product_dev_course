@@ -1,7 +1,6 @@
 """Audit log API routes."""
 from __future__ import annotations
 
-from datetime import datetime
 from uuid import UUID
 
 import structlog
@@ -12,27 +11,11 @@ from auth_service.core.exceptions import ForbiddenError, InvalidCredentialsError
 from auth_service.domain.dto import AuditLogEntry
 from auth_service.repositories.audit import AuditRepository
 from auth_service.services.dependencies import get_permission_service
+from backend_common.aiohttp_app import read_json
+from backend_common.api.parsers import parse_optional_uuid, parse_datetime
 from backend_common.db.pool import get_pool_service as get_pool
 
 logger = structlog.get_logger(__name__)
-
-
-def _parse_optional_uuid(value: str | None) -> UUID | None:
-    if not value:
-        return None
-    try:
-        return UUID(value)
-    except ValueError:
-        raise web.HTTPBadRequest(reason=f"Invalid UUID: {value}")
-
-
-def _parse_optional_datetime(value: str | None, field: str) -> datetime | None:
-    if not value:
-        return None
-    try:
-        return datetime.fromisoformat(value)
-    except ValueError:
-        raise web.HTTPBadRequest(reason=f"Invalid datetime for '{field}': {value}")
 
 
 async def list_audit_log(request: web.Request) -> web.Response:
@@ -58,14 +41,14 @@ async def list_audit_log(request: web.Request) -> web.Response:
         await perm_svc.ensure_permission(requester_id, "audit.read")
 
         q = request.query
-        actor_id = _parse_optional_uuid(q.get("actor_id"))
+        actor_id = parse_optional_uuid(q.get("actor_id"))
         action = q.get("action") or None
         scope_type = q.get("scope_type") or None
-        scope_id = _parse_optional_uuid(q.get("scope_id"))
+        scope_id = parse_optional_uuid(q.get("scope_id"))
         target_type = q.get("target_type") or None
         target_id = q.get("target_id") or None
-        from_date = _parse_optional_datetime(q.get("from"), "from")
-        to_date = _parse_optional_datetime(q.get("to"), "to")
+        from_date = parse_datetime(q.get("from"), "from")
+        to_date = parse_datetime(q.get("to"), "to")
 
         try:
             limit = min(max(int(q.get("limit", 50)), 1), 500)
@@ -108,7 +91,7 @@ async def ingest_audit_entry(request: web.Request) -> web.Response:
     No authentication required — must only be accessible within the internal network.
     """
     try:
-        data = await request.json()
+        data = await read_json(request)
     except Exception:
         raise web.HTTPBadRequest(reason="Invalid JSON")
 

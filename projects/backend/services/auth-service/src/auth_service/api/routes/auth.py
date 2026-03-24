@@ -6,6 +6,8 @@ from uuid import UUID
 import structlog
 from aiohttp import web
 
+from backend_common.aiohttp_app import read_json
+
 from auth_service.api.utils import extract_bearer_token, extract_client_ip, extract_user_agent
 from auth_service.core.exceptions import AuthError, handle_auth_error
 from auth_service.domain.dto import (
@@ -45,7 +47,7 @@ async def bootstrap_admin(request: web.Request) -> web.Response:
         return web.json_response({"error": "Bootstrap is disabled"}, status=404)
 
     try:
-        data = await request.json()
+        data = await read_json(request)
         req = BootstrapAdminRequest(**data)
     except Exception as e:
         return web.json_response({"error": f"Invalid request: {e}"}, status=400)
@@ -80,7 +82,7 @@ async def bootstrap_admin(request: web.Request) -> web.Response:
 async def register(request: web.Request) -> web.Response:
     """Register a new user."""
     try:
-        data = await request.json()
+        data = await read_json(request)
         req = UserRegisterRequest(**data)
     except Exception as e:
         return web.json_response({"error": f"Invalid request: {e}"}, status=400)
@@ -114,7 +116,7 @@ async def register(request: web.Request) -> web.Response:
 async def login(request: web.Request) -> web.Response:
     """Login user."""
     try:
-        data = await request.json()
+        data = await read_json(request)
         req = UserLoginRequest(**data)
     except Exception as e:
         return web.json_response({"error": f"Invalid request: {e}"}, status=400)
@@ -146,7 +148,7 @@ async def login(request: web.Request) -> web.Response:
 async def refresh(request: web.Request) -> web.Response:
     """Refresh access token."""
     try:
-        data = await request.json()
+        data = await read_json(request)
         req = TokenRefreshRequest(**data)
     except Exception as e:
         return web.json_response({"error": f"Invalid request: {e}"}, status=400)
@@ -183,7 +185,7 @@ async def me(request: web.Request) -> web.Response:
 async def logout(request: web.Request) -> web.Response:
     """Logout user — revokes the provided refresh token."""
     try:
-        data = await request.json()
+        data = await read_json(request)
         req = LogoutRequest(**data)
     except Exception as e:
         return web.json_response({"error": f"Invalid request: {e}"}, status=400)
@@ -210,7 +212,7 @@ async def change_password(request: web.Request) -> web.Response:
         return web.json_response({"error": "Unauthorized"}, status=401)
 
     try:
-        data = await request.json()
+        data = await read_json(request)
         req = PasswordChangeRequest(**data)
     except Exception as e:
         return web.json_response({"error": f"Invalid request: {e}"}, status=400)
@@ -242,7 +244,7 @@ async def change_password(request: web.Request) -> web.Response:
 async def password_reset_request(request: web.Request) -> web.Response:
     """Request a password reset token."""
     try:
-        data = await request.json()
+        data = await read_json(request)
         req = PasswordResetRequestDto(**data)
     except Exception as e:
         return web.json_response({"error": f"Invalid request: {e}"}, status=400)
@@ -264,7 +266,7 @@ async def password_reset_request(request: web.Request) -> web.Response:
 async def password_reset_confirm(request: web.Request) -> web.Response:
     """Confirm a password reset using a token."""
     try:
-        data = await request.json()
+        data = await read_json(request)
         req = PasswordResetConfirmRequest(**data)
     except Exception as e:
         return web.json_response({"error": f"Invalid request: {e}"}, status=400)
@@ -289,7 +291,7 @@ async def admin_reset_user(request: web.Request) -> web.Response:
     user_id_str = request.match_info.get("user_id", "")
 
     try:
-        data = await request.json()
+        data = await read_json(request)
         req = AdminUserResetRequest(**data)
     except Exception as e:
         return web.json_response({"error": f"Invalid request: {e}"}, status=400)
@@ -320,7 +322,7 @@ async def admin_reset_user(request: web.Request) -> web.Response:
 async def create_invite(request: web.Request) -> web.Response:
     """Create a new invite token. Requires 'users.create' permission."""
     try:
-        data = await request.json()
+        data = await read_json(request)
         req = InviteCreateRequest(**data)
     except Exception as e:
         return web.json_response({"error": f"Invalid request: {e}"}, status=400)
@@ -409,7 +411,7 @@ async def update_user(request: web.Request) -> web.Response:
         return web.json_response({"error": "Invalid user_id"}, status=400)
 
     try:
-        data = await request.json()
+        data = await read_json(request)
         req = AdminUserUpdateRequest(**data)
     except Exception as e:
         return web.json_response({"error": f"Invalid request: {e}"}, status=400)

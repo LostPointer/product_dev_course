@@ -1,8 +1,6 @@
 """Pytest configuration and fixtures for RBAC tests."""
 import asyncio
 from pathlib import Path
-from uuid import UUID
-
 import pytest
 from testsuite.databases.pgsql import discover
 import asyncpg
@@ -52,81 +50,8 @@ async def pool(database_url):
 @pytest.fixture
 async def pool_with_seed(database_url):
     """Create asyncpg pool and seed permissions and roles."""
+    await _ensure_rbac_seeds(database_url)
     pool = await asyncpg.create_pool(database_url, min_size=2, max_size=5)
-    
-    # Seed permissions and roles if not present
-    async with pool.acquire() as conn:
-        count = await conn.fetchval("SELECT count(*) FROM permissions")
-        if count == 0:
-            await conn.execute("""
-                INSERT INTO permissions (id, scope_type, category, description) VALUES
-                ('users.list', 'system', 'users', 'List users'),
-                ('users.create', 'system', 'users', 'Create users'),
-                ('users.update', 'system', 'users', 'Update users'),
-                ('users.delete', 'system', 'users', 'Delete users'),
-                ('users.reset_password', 'system', 'users', 'Reset password'),
-                ('users.deactivate', 'system', 'users', 'Deactivate users'),
-                ('roles.manage', 'system', 'roles', 'Manage roles'),
-                ('roles.assign', 'system', 'roles', 'Assign roles'),
-                ('audit.read', 'system', 'audit', 'Read audit log'),
-                ('projects.create', 'system', 'projects', 'Create projects'),
-                ('scripts.manage', 'system', 'scripts', 'Manage scripts'),
-                ('scripts.execute', 'system', 'scripts', 'Execute scripts'),
-                ('scripts.view_logs', 'system', 'scripts', 'View script logs'),
-                ('configs.read', 'system', 'configs', 'Read configs'),
-                ('configs.write', 'system', 'configs', 'Write configs'),
-                ('configs.publish', 'system', 'configs', 'Publish configs'),
-                ('experiments.view', 'project', 'experiments', 'View experiments'),
-                ('experiments.create', 'project', 'experiments', 'Create experiments'),
-                ('experiments.update', 'project', 'experiments', 'Update experiments'),
-                ('experiments.delete', 'project', 'experiments', 'Delete experiments'),
-                ('experiments.archive', 'project', 'experiments', 'Archive experiments'),
-                ('runs.create', 'project', 'runs', 'Create runs'),
-                ('runs.update', 'project', 'runs', 'Update runs'),
-                ('project.settings.update', 'project', 'settings', 'Update project settings'),
-                ('project.settings.delete', 'project', 'settings', 'Delete project'),
-                ('project.members.view', 'project', 'members', 'View members'),
-                ('project.members.invite', 'project', 'members', 'Invite members'),
-                ('project.members.remove', 'project', 'members', 'Remove members'),
-                ('project.members.change_role', 'project', 'members', 'Change member role'),
-                ('project.roles.manage', 'project', 'roles', 'Manage project roles')
-            """)
-        
-        # Seed built-in system roles
-        role_count = await conn.fetchval("SELECT count(*) FROM roles WHERE is_builtin = true")
-        if role_count == 0:
-            await conn.execute("""
-                INSERT INTO roles (id, name, scope_type, project_id, is_builtin, description) VALUES
-                ('00000000-0000-0000-0000-000000000001', 'superadmin', 'system', NULL, true, 'Superadmin'),
-                ('00000000-0000-0000-0000-000000000002', 'admin', 'system', NULL, true, 'Admin'),
-                ('00000000-0000-0000-0000-000000000003', 'operator', 'system', NULL, true, 'Operator'),
-                ('00000000-0000-0000-0000-000000000004', 'auditor', 'system', NULL, true, 'Auditor'),
-                ('00000000-0000-0000-0000-000000000010', 'owner', 'project', NULL, true, 'Owner'),
-                ('00000000-0000-0000-0000-000000000011', 'editor', 'project', NULL, true, 'Editor'),
-                ('00000000-0000-0000-0000-000000000012', 'viewer', 'project', NULL, true, 'Viewer')
-            """)
-            
-            # Seed role_permissions for built-in roles
-            await conn.execute("""
-                INSERT INTO role_permissions (role_id, permission_id) VALUES
-                ('00000000-0000-0000-0000-000000000002', 'users.list'),
-                ('00000000-0000-0000-0000-000000000002', 'users.create'),
-                ('00000000-0000-0000-0000-000000000002', 'users.update'),
-                ('00000000-0000-0000-0000-000000000002', 'users.delete'),
-                ('00000000-0000-0000-0000-000000000002', 'users.reset_password'),
-                ('00000000-0000-0000-0000-000000000002', 'roles.manage'),
-                ('00000000-0000-0000-0000-000000000002', 'roles.assign'),
-                ('00000000-0000-0000-0000-000000000002', 'audit.read'),
-                ('00000000-0000-0000-0000-000000000010', 'project.members.view'),
-                ('00000000-0000-0000-0000-000000000010', 'project.members.invite'),
-                ('00000000-0000-0000-0000-000000000010', 'project.members.remove'),
-                ('00000000-0000-0000-0000-000000000010', 'project.members.change_role'),
-                ('00000000-0000-0000-0000-000000000010', 'experiments.view'),
-                ('00000000-0000-0000-0000-000000000010', 'experiments.create'),
-                ('00000000-0000-0000-0000-000000000012', 'project.members.view'),
-                ('00000000-0000-0000-0000-000000000012', 'experiments.view')
-            """)
-    
     yield pool
     await pool.close()
 

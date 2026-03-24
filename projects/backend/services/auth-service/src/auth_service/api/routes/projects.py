@@ -18,6 +18,7 @@ from auth_service.domain.dto import (
     ProjectUpdateRequest,
 )
 from auth_service.services.dependencies import get_permission_service, get_project_service
+from backend_common.aiohttp_app import read_json
 
 logger = structlog.get_logger(__name__)
 
@@ -39,7 +40,7 @@ async def create_project(request: web.Request) -> web.Response:
         return handle_auth_error(request, e)
 
     try:
-        data = await request.json()
+        data = await read_json(request)
         req = ProjectCreateRequest(**data)
     except Exception as e:
         return web.json_response({"error": f"Invalid request: {e}"}, status=400)
@@ -152,7 +153,7 @@ async def update_project(request: web.Request) -> web.Response:
         return web.json_response({"error": "Invalid project ID"}, status=400)
 
     try:
-        data = await request.json()
+        data = await read_json(request)
         req = ProjectUpdateRequest(**data)
     except Exception as e:
         return web.json_response({"error": f"Invalid request: {e}"}, status=400)
@@ -268,7 +269,7 @@ async def add_member(request: web.Request) -> web.Response:
         return web.json_response({"error": "Invalid project ID"}, status=400)
 
     try:
-        data = await request.json()
+        data = await read_json(request)
         req = ProjectMemberAddRequest(**data)
     except Exception as e:
         return web.json_response({"error": f"Invalid request: {e}"}, status=400)
@@ -327,7 +328,7 @@ async def remove_member(request: web.Request) -> web.Response:
 
     # Get role_id from query param or body
     try:
-        data = await request.json() if request.can_read_body else {}
+        data = await read_json(request) if request.can_read_body else {}
         role_id_str = data.get("role_id") or request.query.get("role_id")
         if not role_id_str:
             return web.json_response({"error": "role_id required"}, status=400)
@@ -372,7 +373,7 @@ async def update_member_role(request: web.Request) -> web.Response:
         return web.json_response({"error": "Invalid ID"}, status=400)
 
     try:
-        data = await request.json()
+        data = await read_json(request)
         req = ProjectMemberUpdateRequest(**data)
     except Exception as e:
         return web.json_response({"error": f"Invalid request: {e}"}, status=400)

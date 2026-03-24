@@ -13,6 +13,7 @@ from auth_service.domain.models import ScopeType
 from auth_service.repositories.roles import RoleRepository
 from auth_service.repositories.user_roles import UserRoleRepository
 from auth_service.services.dependencies import get_permission_service
+from backend_common.aiohttp_app import read_json
 from backend_common.db.pool import get_pool_service as get_pool
 
 logger = structlog.get_logger(__name__)
@@ -101,7 +102,7 @@ async def create_project_role(request: web.Request) -> web.Response:
         requester_id = await get_requester_id(request, perm_svc)
         
         project_id = UUID(request.match_info["project_id"])
-        data = await request.json()
+        data = await read_json(request)
         req = CreateRoleRequest(**data)
         
         role = await perm_svc.create_custom_role(
@@ -137,7 +138,7 @@ async def update_project_role(request: web.Request) -> web.Response:
         
         project_id = UUID(request.match_info["project_id"])
         role_id = UUID(request.match_info["role_id"])
-        data = await request.json()
+        data = await read_json(request)
         req = UpdateRoleRequest(**data)
 
         # Verify role belongs to this project BEFORE making changes
@@ -257,7 +258,7 @@ async def grant_role_to_member(request: web.Request) -> web.Response:
         project_id = UUID(request.match_info["project_id"])
         user_id = UUID(request.match_info["user_id"])
         
-        data = await request.json()
+        data = await read_json(request)
         role_id = UUID(data["role_id"])
         expires_at = data.get("expires_at")
         if expires_at:
