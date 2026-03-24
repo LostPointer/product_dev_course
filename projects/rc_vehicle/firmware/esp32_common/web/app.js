@@ -486,6 +486,8 @@ function applyStabConfig(cfg) {
     set('stab-max-corr', pid?.max_correction ?? '');
     setChk('adapt-pid-enabled', cfg.adaptive?.enabled);
     set('adapt-speed-ref', cfg.adaptive?.speed_ref_ms ?? '');
+    setChk('madgwick-enabled', cfg.filter?.madgwick_enabled ?? true);
+    setChk('ekf-enabled', cfg.filter?.ekf_enabled ?? true);
     setChk('adaptive-beta-enabled', cfg.filter?.adaptive_beta_enabled ?? true);
     set('adaptive-accel-thresh', cfg.filter?.adaptive_accel_threshold_g ?? '');
     setChk('pitch-comp-enabled', cfg.pitch_comp?.enabled);
@@ -495,6 +497,18 @@ function applyStabConfig(cfg) {
     set('ow-slip-thresh', cfg.oversteer?.slip_thresh_deg ?? '');
     set('ow-rate-thresh', cfg.oversteer?.rate_thresh_deg_s ?? '');
     set('ow-throttle-red', cfg.oversteer?.throttle_reduction ?? '');
+
+    // Slew rate
+    {
+        const ss = cfg.slew_steering ?? 3.0;
+        const st = cfg.slew_throttle ?? 0.5;
+        set('slew-steering', ss);
+        set('slew-throttle', st);
+        const ssEl = $('slew-steering-value');
+        const stEl = $('slew-throttle-value');
+        if (ssEl) ssEl.textContent = ss.toFixed(1);
+        if (stEl) stEl.textContent = st.toFixed(1);
+    }
 
     // Trim
     setTrimValue('steering-trim', cfg.steering_trim ?? 0);
@@ -563,6 +577,8 @@ function saveStabConfig() {
         mode: currentMode,
         enabled: getChk('stab-enabled'),
         filter: {
+            madgwick_enabled: getChk('madgwick-enabled'),
+            ekf_enabled: getChk('ekf-enabled'),
             adaptive_beta_enabled: getChk('adaptive-beta-enabled'),
             adaptive_accel_threshold_g: getF('adaptive-accel-thresh'),
         },
@@ -583,6 +599,8 @@ function saveStabConfig() {
             reverse_limit: kidsThrottleLimit,
             steering_limit: kidsSteeringLimit,
         },
+        slew_steering: getF('slew-steering'),
+        slew_throttle: getF('slew-throttle'),
         steering_trim: getF('steering-trim'),
         throttle_trim: getF('throttle-trim'),
     });
@@ -877,6 +895,20 @@ if (kidsSteeringSliderEl) kidsSteeringSliderEl.addEventListener('input', (e) => 
     const pct = parseInt(e.target.value);
     kidsSteeringLimit = pct / 100;
     if (kidsSteeringValueEl) kidsSteeringValueEl.textContent = pct;
+});
+
+// Slew rate sliders
+const slewSteeringSliderEl = $('slew-steering');
+const slewThrottleSliderEl = $('slew-throttle');
+if (slewSteeringSliderEl) slewSteeringSliderEl.addEventListener('input', (e) => {
+    const v = parseFloat(e.target.value);
+    const el = $('slew-steering-value');
+    if (el) el.textContent = v.toFixed(1);
+});
+if (slewThrottleSliderEl) slewThrottleSliderEl.addEventListener('input', (e) => {
+    const v = parseFloat(e.target.value);
+    const el = $('slew-throttle-value');
+    if (el) el.textContent = v.toFixed(1);
 });
 
 // Log buttons

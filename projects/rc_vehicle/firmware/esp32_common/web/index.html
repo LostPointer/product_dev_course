@@ -119,6 +119,14 @@
                 </div>
 
                 <div class="field-row">
+                    <label class="chk"><input type="checkbox" id="madgwick-enabled" checked> Madgwick AHRS (ориентация)</label>
+                </div>
+
+                <div class="field-row">
+                    <label class="chk"><input type="checkbox" id="ekf-enabled" checked> EKF (скорость, slip angle)</label>
+                </div>
+
+                <div class="field-row">
                     <label class="chk"><input type="checkbox" id="adaptive-beta-enabled"> Адаптивный Madgwick</label>
                     <div class="inline-param">
                         <label>Порог |a| (g) <input type="text" id="adaptive-accel-thresh" size="6"></label>
@@ -133,6 +141,20 @@
                         <label>ThrottleRed <input type="text" id="ow-throttle-red" size="6"></label>
                     </div>
                 </div>
+
+                <fieldset class="param-set">
+                    <legend>Отзывчивость (slew rate)</legend>
+                    <div class="mini-slider-row">
+                        <label for="slew-steering">Руль</label>
+                        <input type="range" id="slew-steering" min="0.5" max="10" step="0.1" value="3.0" class="mini-slider">
+                        <span id="slew-steering-value" class="mini-val">3.0</span>
+                    </div>
+                    <div class="mini-slider-row">
+                        <label for="slew-throttle">Газ</label>
+                        <input type="range" id="slew-throttle" min="0.1" max="10" step="0.1" value="0.5" class="mini-slider">
+                        <span id="slew-throttle-value" class="mini-val">0.5</span>
+                    </div>
+                </fieldset>
 
                 <fieldset class="param-set">
                     <legend>Trim (нейтраль)</legend>
