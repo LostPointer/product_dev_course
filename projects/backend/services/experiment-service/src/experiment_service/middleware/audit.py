@@ -8,7 +8,8 @@ from uuid import UUID
 
 import structlog
 from aiohttp import web
-from aiohttp.typedefs import Handler
+from aiohttp.typedefs import Handler, Middleware
+from aiohttp.web import middleware
 from aiohttp.web_response import StreamResponse
 
 from experiment_service.services.audit_client import AuditClient
@@ -28,7 +29,7 @@ _AUDIT_MAP: dict[tuple[str, str], tuple[str, str]] = {
     ("DELETE", "/api/v1/runs/{run_id}"):                                       ("run",              "run.delete"),
     ("POST",   "/api/v1/sensors"):                                             ("sensor",           "sensor.create"),
     ("PATCH",  "/api/v1/sensors/{sensor_id}"):                                 ("sensor",           "sensor.update"),
-    ("DELETE", "/api/v1/sensors/{sensor_id}"):                                 ("sensor",           "sensor.delete"),
+    ("DELETE",  "/api/v1/sensors/{sensor_id}"):                                 ("sensor",           "sensor.delete"),
     ("POST",   "/api/v1/runs/{run_id}/capture-sessions"):                      ("capture_session",  "capture_session.create"),
     ("POST",   "/api/v1/runs/{run_id}/capture-sessions/{session_id}/stop"):    ("capture_session",  "capture_session.stop"),
     ("DELETE", "/api/v1/runs/{run_id}/capture-sessions/{session_id}"):         ("capture_session",  "capture_session.delete"),
@@ -64,8 +65,8 @@ def _extract_client_ip(request: web.Request) -> str | None:
     return request.remote or None
 
 
-@web.middleware
-async def audit_middleware(
+@middleware
+async def audit_middleware(  # type: ignore[misc]
     request: web.Request,
     handler: Handler,
 ) -> StreamResponse:

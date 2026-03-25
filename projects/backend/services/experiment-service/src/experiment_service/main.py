@@ -89,7 +89,7 @@ def create_app() -> web.Application:
     app, cors = create_base_app(settings)
     app.middlewares.append(error_handling_middleware)
     app.middlewares.append(metrics_middleware("experiment-service"))
-    app.middlewares.append(audit_middleware)  # type: ignore[arg-type]
+    app.middlewares.append(audit_middleware)
 
     app.add_routes(health_routes)
     add_openapi_spec(app, OPENAPI_PATH)
