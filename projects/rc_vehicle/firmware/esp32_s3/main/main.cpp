@@ -33,7 +33,8 @@ static void ws_cmd_handler(float throttle, float steering) {
  * Использует registry pattern для диспетчеризации команд.
  */
 static void ws_json_handler(const char* type, cJSON* json, httpd_req_t* req) {
-  if (!g_command_registry.Handle(type, json, req)) {
+  auto& vc = detail::GetVehicleControl();
+  if (!g_command_registry.Handle(vc, type, json, req)) {
     ESP_LOGW(TAG, "Unknown WebSocket command type: %s", type);
   }
 }

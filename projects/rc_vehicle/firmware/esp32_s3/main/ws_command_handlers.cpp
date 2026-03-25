@@ -3,6 +3,7 @@
 #include <cstring>
 
 #include "esp_log.h"
+#include "i_vehicle_control.hpp"
 #include "self_test.hpp"
 #include "stabilization_config.hpp"
 #include "stabilization_config_json.hpp"
@@ -10,14 +11,13 @@
 #include "com_offset_calibration.hpp"
 #include "test_runner.hpp"
 #include "udp_telem_sender.hpp"
-#include "vehicle_control.hpp"
 #include "ws_command_registry.hpp"
 
 static const char* TAG = "ws_handlers";
 
 namespace rc_vehicle {
 
-void HandleCalibrateImu(cJSON* json, httpd_req_t* req) {
+void HandleCalibrateImu(IVehicleControl& vc, cJSON* json, httpd_req_t* req) {
   cJSON* mode_item = cJSON_GetObjectItem(json, "mode");
   const char* mode_str = (mode_item && cJSON_IsString(mode_item))
                              ? mode_item->valuestring
@@ -40,7 +40,7 @@ void HandleCalibrateImu(cJSON* json, httpd_req_t* req) {
         // Обратная совместимость: throttle 0.25 ≈ 0.1g
         target_accel = (float)thr_item->valuedouble * 0.4f;
       }
-      bool ok = VehicleControlStartAutoForwardCalibration(target_accel);
+      bool ok = vc.StartAutoForwardCalibration(target_accel);
       cJSON_AddStringToObject(reply, "status", ok ? "collecting" : "failed");
       cJSON_AddNumberToObject(reply, "stage", 2);
       cJSON_AddBoolToObject(reply, "ok", ok);
@@ -50,14 +50,14 @@ void HandleCalibrateImu(cJSON* json, httpd_req_t* req) {
                "calibrate_imu mode=auto_forward target_accel=%.3fg -> %s",
                target_accel, ok ? "started" : "failed (need stage 1 full)");
     } else if (is_forward) {
-      bool ok = VehicleControlStartForwardCalibration();
+      bool ok = vc.StartForwardCalibration();
       cJSON_AddStringToObject(reply, "status", ok ? "collecting" : "failed");
       cJSON_AddNumberToObject(reply, "stage", 2);
       cJSON_AddBoolToObject(reply, "ok", ok);
       ESP_LOGI(TAG, "calibrate_imu mode=forward -> %s",
                ok ? "stage 2 started" : "failed (need stage 1 full)");
     } else {
-      VehicleControlStartCalibration(full);
+      vc.StartCalibration(full);
       cJSON_AddStringToObject(reply, "status", "collecting");
       cJSON_AddNumberToObject(reply, "stage", 1);
       cJSON_AddBoolToObject(reply, "ok", true);
@@ -69,20 +69,21 @@ void HandleCalibrateImu(cJSON* json, httpd_req_t* req) {
   }
 }
 
-void HandleGetCalibStatus(cJSON* json, httpd_req_t* req) {
-  (void)json;  // Unused parameter
+void HandleGetCalibStatus(IVehicleControl& vc, cJSON* json, httpd_req_t* req) {
+  (void)json;
 
   cJSON* reply = cJSON_CreateObject();
   if (reply) {
     cJSON_AddStringToObject(reply, "type", "calib_status");
-    cJSON_AddStringToObject(reply, "status", VehicleControlGetCalibStatus());
-    cJSON_AddNumberToObject(reply, "stage", VehicleControlGetCalibStage());
+    cJSON_AddStringToObject(reply, "status", vc.GetCalibStatus());
+    cJSON_AddNumberToObject(reply, "stage", vc.GetCalibStage());
     WsSendJsonReply(req, reply);
     cJSON_Delete(reply);
   }
 }
 
-void HandleSetForwardDirection(cJSON* json, httpd_req_t* req) {
+void HandleSetForwardDirection(IVehicleControl& vc, cJSON* json,
+                               httpd_req_t* req) {
   cJSON* vec_arr = cJSON_GetObjectItem(json, "vec");
   float fx = 1.f, fy = 0.f, fz = 0.f;
   if (cJSON_IsArray(vec_arr) && cJSON_GetArraySize(vec_arr) >= 3) {
@@ -93,7 +94,7 @@ void HandleSetForwardDirection(cJSON* json, httpd_req_t* req) {
     if (cJSON_IsNumber(ey)) fy = (float)ey->valuedouble;
     if (cJSON_IsNumber(ez)) fz = (float)ez->valuedouble;
   }
-  VehicleControlSetForwardDirection(fx, fy, fz);
+  vc.SetForwardDirection(fx, fy, fz);
 
   cJSON* reply = cJSON_CreateObject();
   if (reply) {
@@ -104,10 +105,10 @@ void HandleSetForwardDirection(cJSON* json, httpd_req_t* req) {
   }
 }
 
-void HandleGetStabConfig(cJSON* json, httpd_req_t* req) {
-  (void)json;  // Unused parameter
+void HandleGetStabConfig(IVehicleControl& vc, cJSON* json, httpd_req_t* req) {
+  (void)json;
 
-  const auto& cfg = VehicleControlGetStabilizationConfig();
+  const auto& cfg = vc.GetStabilizationConfig();
   cJSON* reply = StabilizationConfigToJson(cfg);
   if (reply) {
     cJSON_AddStringToObject(reply, "type", "stab_config");
@@ -116,23 +117,23 @@ void HandleGetStabConfig(cJSON* json, httpd_req_t* req) {
   }
 }
 
-void HandleSetStabConfig(cJSON* json, httpd_req_t* req) {
+void HandleSetStabConfig(IVehicleControl& vc, cJSON* json, httpd_req_t* req) {
   // Получаем текущую конфигурацию
-  StabilizationConfig cfg = VehicleControlGetStabilizationConfig();
-  
+  StabilizationConfig cfg = vc.GetStabilizationConfig();
+
   // Обновляем только переданные поля
   cJSON* mode_item = cJSON_GetObjectItem(json, "mode");
   if (mode_item && cJSON_IsNumber(mode_item)) {
     cfg.mode = static_cast<DriveMode>(static_cast<int>(mode_item->valuedouble));
   }
-  
+
   // Остальные поля обновляем только если они есть в JSON
   StabilizationConfigFromJson(cfg, json);
-  
-  bool ok = VehicleControlSetStabilizationConfig(cfg, true);
+
+  bool ok = vc.SetStabilizationConfig(cfg, true);
 
   // Get applied configuration (mode defaults may be applied)
-  const auto& applied = VehicleControlGetStabilizationConfig();
+  const auto& applied = vc.GetStabilizationConfig();
   cJSON* reply = ok ? StabilizationConfigToJson(applied) : cJSON_CreateObject();
   if (reply) {
     cJSON_AddStringToObject(reply, "type", "set_stab_config_ack");
@@ -150,11 +151,11 @@ void HandleSetStabConfig(cJSON* json, httpd_req_t* req) {
            applied.yaw_rate.pid.ki, applied.yaw_rate.pid.kd);
 }
 
-void HandleGetLogInfo(cJSON* json, httpd_req_t* req) {
-  (void)json;  // Unused parameter
+void HandleGetLogInfo(IVehicleControl& vc, cJSON* json, httpd_req_t* req) {
+  (void)json;
 
   size_t count = 0, cap = 0;
-  VehicleControlGetLogInfo(&count, &cap);
+  vc.GetLogInfo(count, cap);
 
   cJSON* reply = cJSON_CreateObject();
   if (reply) {
@@ -166,9 +167,9 @@ void HandleGetLogInfo(cJSON* json, httpd_req_t* req) {
   }
 }
 
-void HandleGetLogData(cJSON* json, httpd_req_t* req) {
+void HandleGetLogData(IVehicleControl& vc, cJSON* json, httpd_req_t* req) {
   size_t total_count = 0, cap = 0;
-  VehicleControlGetLogInfo(&total_count, &cap);
+  vc.GetLogInfo(total_count, cap);
 
   cJSON* offset_j = cJSON_GetObjectItem(json, "offset");
   cJSON* count_j = cJSON_GetObjectItem(json, "count");
@@ -187,9 +188,9 @@ void HandleGetLogData(cJSON* json, httpd_req_t* req) {
     cJSON_AddStringToObject(reply, "type", "log_data");
     cJSON* frames_arr = cJSON_CreateArray();
     if (frames_arr) {
+      TelemetryLogFrame frame;
       for (size_t i = 0; i < req_count; ++i) {
-        TelemetryLogFrame frame;
-        if (VehicleControlGetLogFrame(offset + i, &frame)) {
+        if (vc.GetLogFrame(offset + i, frame)) {
           cJSON* f = cJSON_CreateObject();
           if (f) {
             cJSON_AddNumberToObject(f, "ts_ms", frame.ts_ms);
@@ -229,10 +230,10 @@ void HandleGetLogData(cJSON* json, httpd_req_t* req) {
   }
 }
 
-void HandleClearLog(cJSON* json, httpd_req_t* req) {
-  (void)json;  // Unused parameter
+void HandleClearLog(IVehicleControl& vc, cJSON* json, httpd_req_t* req) {
+  (void)json;
 
-  VehicleControlClearLog();
+  vc.ClearLog();
 
   cJSON* reply = cJSON_CreateObject();
   if (reply) {
@@ -243,7 +244,7 @@ void HandleClearLog(cJSON* json, httpd_req_t* req) {
   }
 }
 
-void HandleSetKidsPreset(cJSON* json, httpd_req_t* req) {
+void HandleSetKidsPreset(IVehicleControl& vc, cJSON* json, httpd_req_t* req) {
   cJSON* preset_item = cJSON_GetObjectItem(json, "preset");
   if (!preset_item || !cJSON_IsNumber(preset_item)) {
     cJSON* reply = cJSON_CreateObject();
@@ -270,11 +271,11 @@ void HandleSetKidsPreset(cJSON* json, httpd_req_t* req) {
     return;
   }
 
-  StabilizationConfig cfg = VehicleControlGetStabilizationConfig();
+  StabilizationConfig cfg = vc.GetStabilizationConfig();
   cfg.kids_mode.ApplyPreset(static_cast<KidsPreset>(preset_val));
-  bool ok = VehicleControlSetStabilizationConfig(cfg, true);
+  bool ok = vc.SetStabilizationConfig(cfg, true);
 
-  const auto& applied = VehicleControlGetStabilizationConfig();
+  const auto& applied = vc.GetStabilizationConfig();
   cJSON* reply = ok ? StabilizationConfigToJson(applied) : cJSON_CreateObject();
   if (reply) {
     cJSON_AddStringToObject(reply, "type", "set_kids_preset_ack");
@@ -287,13 +288,13 @@ void HandleSetKidsPreset(cJSON* json, httpd_req_t* req) {
            ok ? "OK" : "FAILED");
 }
 
-void HandleToggleKidsMode(cJSON* json, httpd_req_t* req) {
+void HandleToggleKidsMode(IVehicleControl& vc, cJSON* json, httpd_req_t* req) {
   cJSON* active_item = cJSON_GetObjectItem(json, "active");
   bool active = (active_item && cJSON_IsBool(active_item))
                     ? cJSON_IsTrue(active_item)
                     : false;
 
-  VehicleControlSetKidsModeActive(active);
+  vc.SetKidsModeActive(active);
 
   cJSON* reply = cJSON_CreateObject();
   if (reply) {
@@ -306,8 +307,9 @@ void HandleToggleKidsMode(cJSON* json, httpd_req_t* req) {
   ESP_LOGI(TAG, "toggle_kids_mode active=%s -> OK", active ? "true" : "false");
 }
 
-void HandleGetKidsPresets(cJSON* json, httpd_req_t* req) {
-  (void)json;  // Unused parameter
+void HandleGetKidsPresets(IVehicleControl& vc, cJSON* json, httpd_req_t* req) {
+  (void)vc;
+  (void)json;
 
   cJSON* reply = cJSON_CreateObject();
   if (reply) {
@@ -365,14 +367,15 @@ void HandleGetKidsPresets(cJSON* json, httpd_req_t* req) {
   }
 }
 
-void HandleCalibrateSteeringTrim(cJSON* json, httpd_req_t* req) {
+void HandleCalibrateSteeringTrim(IVehicleControl& vc, cJSON* json,
+                                 httpd_req_t* req) {
   cJSON* accel_item = cJSON_GetObjectItem(json, "target_accel");
   float target_accel = 0.1f;
   if (accel_item && cJSON_IsNumber(accel_item)) {
     target_accel = (float)accel_item->valuedouble;
   }
 
-  bool ok = VehicleControlStartSteeringTrimCalibration(target_accel);
+  bool ok = vc.StartSteeringTrimCalibration(target_accel);
 
   cJSON* reply = cJSON_CreateObject();
   if (reply) {
@@ -393,11 +396,12 @@ void HandleCalibrateSteeringTrim(cJSON* json, httpd_req_t* req) {
            target_accel, ok ? "started" : "failed");
 }
 
-void HandleGetSteeringTrimStatus(cJSON* json, httpd_req_t* req) {
+void HandleGetSteeringTrimStatus(IVehicleControl& vc, cJSON* json,
+                                 httpd_req_t* req) {
   (void)json;
 
-  bool active = VehicleControlIsSteeringTrimCalibActive();
-  auto result = VehicleControlGetSteeringTrimCalibResult();
+  bool active = vc.IsSteeringTrimCalibActive();
+  auto result = vc.GetSteeringTrimCalibResult();
 
   cJSON* reply = cJSON_CreateObject();
   if (reply) {
@@ -418,7 +422,8 @@ void HandleGetSteeringTrimStatus(cJSON* json, httpd_req_t* req) {
   }
 }
 
-void HandleCalibrateComOffset(cJSON* json, httpd_req_t* req) {
+void HandleCalibrateComOffset(IVehicleControl& vc, cJSON* json,
+                              httpd_req_t* req) {
   cJSON* accel_item = cJSON_GetObjectItem(json, "target_accel");
   cJSON* steer_item = cJSON_GetObjectItem(json, "steering");
   cJSON* dur_item = cJSON_GetObjectItem(json, "duration");
@@ -432,8 +437,7 @@ void HandleCalibrateComOffset(cJSON* json, httpd_req_t* req) {
   if (dur_item && cJSON_IsNumber(dur_item))
     duration = (float)dur_item->valuedouble;
 
-  bool ok = VehicleControlStartComOffsetCalibration(target_accel, steering,
-                                                     duration);
+  bool ok = vc.StartComOffsetCalibration(target_accel, steering, duration);
 
   cJSON* reply = cJSON_CreateObject();
   if (reply) {
@@ -454,11 +458,12 @@ void HandleCalibrateComOffset(cJSON* json, httpd_req_t* req) {
            target_accel, steering, duration, ok ? "started" : "failed");
 }
 
-void HandleGetComOffsetStatus(cJSON* json, httpd_req_t* req) {
+void HandleGetComOffsetStatus(IVehicleControl& vc, cJSON* json,
+                              httpd_req_t* req) {
   (void)json;
 
-  bool active = VehicleControlIsComOffsetCalibActive();
-  auto result = VehicleControlGetComOffsetCalibResult();
+  bool active = vc.IsComOffsetCalibActive();
+  auto result = vc.GetComOffsetCalibResult();
 
   cJSON* reply = cJSON_CreateObject();
   if (reply) {
@@ -482,7 +487,7 @@ void HandleGetComOffsetStatus(cJSON* json, httpd_req_t* req) {
   }
 }
 
-void HandleStartTest(cJSON* json, httpd_req_t* req) {
+void HandleStartTest(IVehicleControl& vc, cJSON* json, httpd_req_t* req) {
   TestParams params;
 
   cJSON* type_item = cJSON_GetObjectItem(json, "test_type");
@@ -511,7 +516,7 @@ void HandleStartTest(cJSON* json, httpd_req_t* req) {
     params.steering = (float)steer_item->valuedouble;
   }
 
-  bool ok = VehicleControlStartTest(params);
+  bool ok = vc.StartTest(params);
 
   cJSON* reply = cJSON_CreateObject();
   if (reply) {
@@ -536,9 +541,9 @@ void HandleStartTest(cJSON* json, httpd_req_t* req) {
            ok ? "started" : "failed");
 }
 
-void HandleStopTest(cJSON* json, httpd_req_t* req) {
+void HandleStopTest(IVehicleControl& vc, cJSON* json, httpd_req_t* req) {
   (void)json;
-  VehicleControlStopTest();
+  vc.StopTest();
 
   cJSON* reply = cJSON_CreateObject();
   if (reply) {
@@ -551,11 +556,11 @@ void HandleStopTest(cJSON* json, httpd_req_t* req) {
   ESP_LOGI(TAG, "stop_test");
 }
 
-void HandleGetTestStatus(cJSON* json, httpd_req_t* req) {
+void HandleGetTestStatus(IVehicleControl& vc, cJSON* json, httpd_req_t* req) {
   (void)json;
 
-  bool active = VehicleControlIsTestActive();
-  auto status = VehicleControlGetTestStatus();
+  bool active = vc.IsTestActive();
+  auto status = vc.GetTestStatus();
 
   cJSON* reply = cJSON_CreateObject();
   if (reply) {
@@ -588,10 +593,10 @@ void HandleGetTestStatus(cJSON* json, httpd_req_t* req) {
   }
 }
 
-void HandleRunSelfTest(cJSON* json, httpd_req_t* req) {
+void HandleRunSelfTest(IVehicleControl& vc, cJSON* json, httpd_req_t* req) {
   (void)json;
 
-  auto results = VehicleControlRunSelfTest();
+  auto results = vc.RunSelfTest();
   bool all_passed = rc_vehicle::SelfTest::AllPassed(results);
 
   cJSON* reply = cJSON_CreateObject();
@@ -621,7 +626,8 @@ void HandleRunSelfTest(cJSON* json, httpd_req_t* req) {
            all_passed ? "ALL PASS" : "FAIL", results.size());
 }
 
-void HandleUdpStreamStart(cJSON* json, httpd_req_t* req) {
+void HandleUdpStreamStart(IVehicleControl& vc, cJSON* json, httpd_req_t* req) {
+  (void)vc;
   cJSON* ip_item = cJSON_GetObjectItem(json, "ip");
   cJSON* port_item = cJSON_GetObjectItem(json, "port");
   cJSON* hz_item = cJSON_GetObjectItem(json, "hz");
@@ -659,7 +665,8 @@ void HandleUdpStreamStart(cJSON* json, httpd_req_t* req) {
            hz);
 }
 
-void HandleUdpStreamStop(cJSON* json, httpd_req_t* req) {
+void HandleUdpStreamStop(IVehicleControl& vc, cJSON* json, httpd_req_t* req) {
+  (void)vc;
   (void)json;
   UdpTelemStop();
 
@@ -674,7 +681,9 @@ void HandleUdpStreamStop(cJSON* json, httpd_req_t* req) {
   ESP_LOGI(TAG, "udp_stream_stop");
 }
 
-void HandleUdpStreamStatus(cJSON* json, httpd_req_t* req) {
+void HandleUdpStreamStatus(IVehicleControl& vc, cJSON* json,
+                           httpd_req_t* req) {
+  (void)vc;
   (void)json;
 
   cJSON* reply = cJSON_CreateObject();
