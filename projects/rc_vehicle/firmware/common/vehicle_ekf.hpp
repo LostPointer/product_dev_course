@@ -114,6 +114,21 @@ class VehicleEkf {
    */
   void UpdateZeroVelocity(float r_zupt = 0.1f) noexcept;
 
+  /**
+   * @brief Высокоуровневое обновление из IMU (Predict + GyroZ + ZUPT).
+   *
+   * Объединяет типичный цикл: предсказание по акселерометру,
+   * обновление по гироскопу и ZUPT при неподвижности.
+   *
+   * @param ax_g Ускорение по X в g (после калибровки)
+   * @param ay_g Ускорение по Y в g
+   * @param az_g Ускорение по Z в g
+   * @param gz_dps Угловая скорость Z после LPF в °/с
+   * @param dt_sec Шаг времени в секундах
+   */
+  void UpdateFromImu(float ax_g, float ay_g, float az_g, float gz_dps,
+                     float dt_sec) noexcept;
+
   // ─── Доступ к состоянию ───────────────────────────────────────────────
 
   /** Оценка продольной скорости [м/с]. */

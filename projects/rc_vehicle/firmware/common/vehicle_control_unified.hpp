@@ -306,28 +306,6 @@ class VehicleControlUnified : public IVehicleControl {
                              float slew_throttle_per_sec = 0.5f,
                              float slew_steering_per_sec = 3.0f);
 
-  /**
-   * @brief Вывод диагностической информации
-   * @param now_ms Текущее время
-   * @param diag_loop_count Счётчик итераций (in/out)
-   * @param diag_start_ms Время начала диагностики (in/out)
-   */
-  void PrintDiagnostics(uint32_t now_ms, uint32_t& diag_loop_count,
-                        uint32_t& diag_start_ms);
-
-  /** @brief Формирование снимка телеметрии для WebSocket-стриминга */
-  TelemetrySnapshot BuildTelemetrySnapshot(
-      uint32_t now, const SensorSnapshot& sensors,
-      const StabilizationConfig& stab_cfg, DriveMode drive_mode,
-      float applied_throttle, float applied_steering,
-      float commanded_throttle, float commanded_steering) const;
-
-  /** @brief Формирование кадра для кольцевого буфера телеметрии */
-  TelemetryLogFrame BuildLogFrame(uint32_t now, const SensorSnapshot& sensors,
-                                  float applied_throttle,
-                                  float applied_steering,
-                                  float commanded_throttle,
-                                  float commanded_steering) const;
 
   // ─────────────────────────────────────────────────────────────────────────
   // Члены класса

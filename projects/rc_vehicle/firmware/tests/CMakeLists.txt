@@ -60,6 +60,8 @@ set(COMMON_SOURCES
     ${COMMON_DIR}/test_runner.cpp
     ${COMMON_DIR}/com_offset_calibration.cpp
     ${COMMON_DIR}/auto_drive_coordinator.cpp
+    ${COMMON_DIR}/telemetry_builder.cpp
+    ${COMMON_DIR}/diagnostics_reporter.cpp
 )
 
 # Include directories

@@ -264,4 +264,26 @@ void VehicleEkf::SymmetrizeP(float P[9]) noexcept {
   }
 }
 
+void VehicleEkf::UpdateFromImu(float ax_g, float ay_g, float az_g,
+                               float gz_dps, float dt_sec) noexcept {
+  constexpr float kG = 9.80665f;
+  constexpr float kDegToRad = kPi / 180.0f;
+
+  // Predict: ax,ay в g → м/с²
+  Predict(ax_g * kG, ay_g * kG, dt_sec);
+
+  // Update: gz в °/с → рад/с
+  UpdateGyroZ(gz_dps * kDegToRad);
+
+  // ZUPT: если |a| ≈ 1g и |gyro_z| мал → машина стоит
+  const float accel_mag =
+      std::sqrt(ax_g * ax_g + ay_g * ay_g + az_g * az_g);
+  constexpr float kZuptAccelThresh = 0.05f;  // ||a| - 1g| < 0.05g
+  constexpr float kZuptGyroThresh = 3.0f;    // |gyro_z| < 3 dps
+  if (std::abs(accel_mag - 1.0f) < kZuptAccelThresh &&
+      std::abs(gz_dps) < kZuptGyroThresh) {
+    UpdateZeroVelocity(0.1f);
+  }
+}
+
 }  // namespace rc_vehicle

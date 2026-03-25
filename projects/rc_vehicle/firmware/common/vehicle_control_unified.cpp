@@ -5,10 +5,12 @@
 #include <iomanip>
 
 #include "config.hpp"
+#include "diagnostics_reporter.hpp"
 #include "drive_mode_registry.hpp"
 #include "log_format.hpp"
 #include "rc_vehicle_common.hpp"
 #include "slew_rate.hpp"
+#include "telemetry_builder.hpp"
 
 #ifdef ESP_PLATFORM
 #include "udp_telem_sender.hpp"
@@ -108,28 +110,12 @@ void VehicleControlUnified::ControlTaskLoop() {
     // EKF: оценка динамического состояния (vx, vy, r → slip angle)
     // ─────────────────────────────────────────────────────────────────────
 
-    // EKF-фильтр можно отключить через конфиг для отладки
-    const bool ekf_active = stab_mgr_ && stab_mgr_->GetConfig().filter.ekf_enabled;
+    const bool ekf_active =
+        stab_mgr_ && stab_mgr_->GetConfig().filter.ekf_enabled;
     if (ekf_active && sensors.imu_enabled && dt_ms > 0) {
-      const float dt_sec = static_cast<float>(dt_ms) * 0.001f;
-      // ax, ay в IMU после калибровки в g → конвертируем в м/с²
-      constexpr float kG = 9.80665f;
-      ekf_.Predict(sensors.imu_data.ax * kG, sensors.imu_data.ay * kG, dt_sec);
-      // gz отфильтрован LPF (dps) → рад/с для EKF
-      constexpr float kDegToRad = 3.14159265358979f / 180.0f;
-      ekf_.UpdateGyroZ(sensors.filtered_gz * kDegToRad);
-
-      // ZUPT: если |a| ≈ 1g и |gyro_z| мал → машина стоит → vx,vy → 0
-      const float accel_mag = std::sqrt(
-          sensors.imu_data.ax * sensors.imu_data.ax +
-          sensors.imu_data.ay * sensors.imu_data.ay +
-          sensors.imu_data.az * sensors.imu_data.az);
-      constexpr float kZuptAccelThresh = 0.05f;   // |a| - 1g| < 0.05g
-      constexpr float kZuptGyroThresh = 3.0f;     // |gyro_z| < 3 dps
-      if (std::abs(accel_mag - 1.0f) < kZuptAccelThresh &&
-          std::abs(sensors.filtered_gz) < kZuptGyroThresh) {
-        ekf_.UpdateZeroVelocity(0.1f);
-      }
+      ekf_.UpdateFromImu(sensors.imu_data.ax, sensors.imu_data.ay,
+                         sensors.imu_data.az, sensors.filtered_gz,
+                         static_cast<float>(dt_ms) * 0.001f);
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -298,9 +284,13 @@ void VehicleControlUnified::ControlTaskLoop() {
     // ─────────────────────────────────────────────────────────────────────
 
     if (telem_handler_) {
-      auto snap = BuildTelemetrySnapshot(now, sensors, stab_cfg, drive_mode,
-                                         applied_throttle, applied_steering,
-                                         commanded_throttle, commanded_steering);
+      const TelemetryContext tctx{ekf_, madgwick_, imu_calib_,
+                                  oversteer_guard_, kids_processor_,
+                                  auto_drive_};
+      auto snap = BuildTelemetrySnapshot(tctx, now, sensors, stab_cfg,
+                                         drive_mode, applied_throttle,
+                                         applied_steering, commanded_throttle,
+                                         commanded_steering);
       telem_handler_->SendTelemetry(now, snap);
     }
 
@@ -311,7 +301,10 @@ void VehicleControlUnified::ControlTaskLoop() {
     if (sensors.imu_enabled) {
       const uint32_t last_log = telem_mgr_->GetLastLogTime();
       if (now - last_log >= config::TelemetryLogConfig::kLogIntervalMs) {
-        auto frame = BuildLogFrame(now, sensors, applied_throttle,
+        const TelemetryContext tctx{ekf_, madgwick_, imu_calib_,
+                                    oversteer_guard_, kids_processor_,
+                                    auto_drive_};
+        auto frame = BuildLogFrame(tctx, now, sensors, applied_throttle,
                                    applied_steering, commanded_throttle,
                                    commanded_steering);
         telem_mgr_->Push(frame);
@@ -328,7 +321,11 @@ void VehicleControlUnified::ControlTaskLoop() {
     // Диагностика
     // ─────────────────────────────────────────────────────────────────────
 
-    PrintDiagnostics(now, diag_loop_count, diag_start_ms);
+    {
+      const DiagnosticsContext dctx{*platform_, *stab_mgr_, madgwick_, ekf_,
+                                    imu_handler_.get(), last_loop_hz_};
+      PrintDiagnostics(dctx, now, diag_loop_count, diag_start_ms);
+    }
 
     // Кормить watchdog — если цикл зависнет, WDT перезагрузит устройство
     platform_->FeedTaskWdt();
@@ -550,136 +547,7 @@ void VehicleControlUnified::UpdatePwmWithSlewRate(uint32_t now_ms,
   }
 }
 
-void VehicleControlUnified::PrintDiagnostics(uint32_t now_ms,
-                                             uint32_t& diag_loop_count,
-                                             uint32_t& diag_start_ms) {
-  const uint32_t elapsed = now_ms - diag_start_ms;
-  if (elapsed >= config::DiagnosticsConfig::kIntervalMs) {
-    const uint32_t loop_hz =
-        (elapsed > 0) ? (diag_loop_count * 1000u / elapsed) : 0u;
-    last_loop_hz_.store(loop_hz, std::memory_order_relaxed);
 
-    const auto& cfg = stab_mgr_->GetConfig();
-    const float stab_weight = stab_mgr_->GetStabilizationWeight();
-
-    {
-      LogFormat fmt;
-      fmt << "DIAG: loop=" << static_cast<unsigned>(loop_hz)
-          << " Hz  stab=" << (cfg.enabled ? "ON" : "OFF")
-          << " (w=" << std::fixed << std::setprecision(2) << stab_weight << ")";
-      platform_->Log(LogLevel::Info, fmt.str());
-    }
-
-    if (imu_handler_ && imu_handler_->IsEnabled()) {
-      float pitch_deg = 0.f, roll_deg = 0.f, yaw_deg = 0.f;
-      madgwick_.GetEulerDeg(pitch_deg, roll_deg, yaw_deg);
-
-      {
-        LogFormat fmt;
-        fmt << "IMU: P=" << std::fixed << std::setprecision(1) << pitch_deg
-            << " R=" << roll_deg << " Y=" << yaw_deg
-            << " deg  gz=" << imu_handler_->GetFilteredGyroZ() << " dps";
-        platform_->Log(LogLevel::Info, fmt.str());
-      }
-
-      {
-        LogFormat fmt;
-        fmt << "EKF: vx=" << std::fixed << std::setprecision(2) << ekf_.GetVx()
-            << " vy=" << ekf_.GetVy() << " m/s  slip=" << std::setprecision(1)
-            << ekf_.GetSlipAngleDeg() << " deg";
-        platform_->Log(LogLevel::Info, fmt.str());
-      }
-    }
-
-    diag_loop_count = 0;
-    diag_start_ms = now_ms;
-  }
-}
-
-TelemetrySnapshot VehicleControlUnified::BuildTelemetrySnapshot(
-    uint32_t now, const SensorSnapshot& sensors,
-    const StabilizationConfig& stab_cfg, DriveMode drive_mode,
-    float applied_throttle, float applied_steering,
-    float commanded_throttle, float commanded_steering) const {
-  TelemetrySnapshot snap;
-  snap.uptime_ms = now;
-  snap.rc_ok = sensors.rc_active;
-  snap.wifi_ok = sensors.wifi_active;
-  snap.throttle = applied_throttle;
-  snap.steering = applied_steering;
-
-  if (sensors.rc_active && sensors.rc_cmd) {
-    snap.rc_throttle = sensors.rc_cmd->throttle;
-    snap.rc_steering = sensors.rc_cmd->steering;
-  }
-
-  snap.cmd_throttle = commanded_throttle;
-  snap.cmd_steering = commanded_steering;
-
-  snap.kids_mode_active = (drive_mode == DriveMode::Kids);
-  snap.kids_anti_spin_active = kids_processor_.IsAntiSpinActive();
-  snap.kids_throttle_limit = stab_cfg.kids_mode.throttle_limit;
-
-  if (sensors.imu_enabled) {
-    snap.imu_enabled = true;
-    snap.imu_data = sensors.imu_data;
-    snap.filtered_gz = sensors.filtered_gz;
-    snap.forward_accel = imu_calib_.GetForwardAccel(sensors.imu_data);
-    madgwick_.GetEulerDeg(snap.pitch_deg, snap.roll_deg, snap.yaw_deg);
-    snap.calib_status = imu_calib_.GetStatus();
-    snap.calib_stage = imu_calib_.GetCalibStage();
-    snap.calib_valid = imu_calib_.IsValid();
-    if (snap.calib_valid) {
-      snap.calib_data = imu_calib_.GetData();
-    }
-    snap.ekf_available = true;
-    snap.ekf_vx = ekf_.GetVx();
-    snap.ekf_vy = ekf_.GetVy();
-    snap.ekf_yaw_rate = ekf_.GetYawRate();
-    snap.ekf_slip_deg = ekf_.GetSlipAngleDeg();
-    snap.ekf_speed_ms = ekf_.GetSpeedMs();
-    snap.ekf_vx_var = ekf_.GetVxVariance();
-    snap.ekf_vy_var = ekf_.GetVyVariance();
-    snap.ekf_r_var = ekf_.GetRVariance();
-    snap.oversteer_available = true;
-    snap.oversteer_active = oversteer_guard_.IsActive();
-  }
-  return snap;
-}
-
-TelemetryLogFrame VehicleControlUnified::BuildLogFrame(
-    uint32_t now, const SensorSnapshot& sensors, float applied_throttle,
-    float applied_steering, float commanded_throttle,
-    float commanded_steering) const {
-  TelemetryLogFrame frame;
-  frame.ts_ms = now;
-  frame.ax = sensors.imu_data.ax;
-  frame.ay = sensors.imu_data.ay;
-  frame.az = sensors.imu_data.az;
-  frame.gx = sensors.imu_data.gx;
-  frame.gy = sensors.imu_data.gy;
-  frame.gz = sensors.imu_data.gz;
-  frame.vx = ekf_.GetVx();
-  frame.vy = ekf_.GetVy();
-  frame.slip_deg = ekf_.GetSlipAngleDeg();
-  frame.speed_ms = ekf_.GetSpeedMs();
-  frame.throttle = applied_throttle;
-  frame.steering = applied_steering;
-  madgwick_.GetEulerDeg(frame.pitch_deg, frame.roll_deg, frame.yaw_deg);
-  frame.yaw_rate_dps = sensors.filtered_gz;
-  frame.oversteer_active = oversteer_guard_.IsActive() ? 1.0f : 0.0f;
-  if (sensors.rc_active && sensors.rc_cmd) {
-    frame.rc_throttle = sensors.rc_cmd->throttle;
-    frame.rc_steering = sensors.rc_cmd->steering;
-  }
-  frame.cmd_throttle = commanded_throttle;
-  frame.cmd_steering = commanded_steering;
-  frame.ekf_vx_var = ekf_.GetVxVariance();
-  frame.ekf_vy_var = ekf_.GetVyVariance();
-  frame.ekf_r_var = ekf_.GetRVariance();
-  frame.test_marker = auto_drive_.GetTestMarker();
-  return frame;
-}
 
 bool VehicleControlUnified::StartComOffsetCalibration(
     float target_accel_g, float steering_magnitude,
