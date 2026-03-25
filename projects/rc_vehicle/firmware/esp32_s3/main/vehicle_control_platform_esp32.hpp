@@ -53,6 +53,11 @@ class VehicleControlPlatformEsp32 : public VehicleControlPlatform {
   [[nodiscard]] Result<Unit, PlatformError> SaveCalib(
       const ImuCalibData& data) override;
 
+  // CoM offset
+  [[nodiscard]] Result<Unit, PlatformError> SaveComOffset(
+      const float offset[2]) override;
+  [[nodiscard]] bool LoadComOffset(float offset[2]) override;
+
   // Stabilization Config
   [[nodiscard]] std::optional<StabilizationConfig> LoadStabilizationConfig()
       override;

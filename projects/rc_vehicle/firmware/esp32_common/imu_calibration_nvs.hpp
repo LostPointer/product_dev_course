@@ -24,4 +24,11 @@ esp_err_t Load(rc_vehicle::ImuCalibData& data);
 /** Удалить калибровочные данные из NVS (сброс). */
 esp_err_t Erase();
 
+/** Сохранить смещение IMU→CoM в NVS (отдельный ключ "com_off"). */
+esp_err_t SaveComOffset(const float offset[2]);
+
+/** Загрузить смещение IMU→CoM из NVS.
+ *  Возвращает ESP_ERR_NOT_FOUND если данных нет. */
+esp_err_t LoadComOffset(float offset[2]);
+
 }  // namespace imu_nvs

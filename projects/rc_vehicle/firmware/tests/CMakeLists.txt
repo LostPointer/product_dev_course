@@ -58,6 +58,7 @@ set(COMMON_SOURCES
     ${COMMON_DIR}/vehicle_control_unified.cpp
     ${COMMON_DIR}/steering_trim_calibration.cpp
     ${COMMON_DIR}/test_runner.cpp
+    ${COMMON_DIR}/com_offset_calibration.cpp
 )
 
 # Include directories
@@ -103,6 +104,7 @@ add_executable(unit_tests
     unit/test_stabilization_manager.cpp
     unit/test_steering_trim_calibration.cpp
     unit/test_test_runner.cpp
+    unit/test_com_offset_calibration.cpp
     integration/test_control_loop.cpp
 )
 

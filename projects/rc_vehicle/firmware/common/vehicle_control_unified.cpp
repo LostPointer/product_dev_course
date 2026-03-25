@@ -222,6 +222,50 @@ void VehicleControlUnified::ControlTaskLoop() {
     }
 
     // ─────────────────────────────────────────────────────────────────────
+    // Круговая калибровка CoM offset
+    // RC-пульт имеет приоритет (безопасность).
+    // ─────────────────────────────────────────────────────────────────────
+
+    if (com_calib_.IsActive() && !sensors.rc_active) {
+      const float dt_sec = static_cast<float>(dt_ms) * 0.001f;
+      float fwd_accel = 0.0f;
+      float accel_mag = 1.0f;
+      float cal_ax = 0.0f, cal_ay = 0.0f;
+      float gyro_z = 0.0f;
+      if (sensors.imu_enabled) {
+        fwd_accel = imu_calib_.GetForwardAccel(sensors.imu_data);
+        accel_mag = std::sqrt(
+            sensors.imu_data.ax * sensors.imu_data.ax +
+            sensors.imu_data.ay * sensors.imu_data.ay +
+            sensors.imu_data.az * sensors.imu_data.az);
+        cal_ax = sensors.imu_data.ax;
+        cal_ay = sensors.imu_data.ay;
+        gyro_z = sensors.filtered_gz;
+      }
+      float com_throttle = 0.0f;
+      float com_steering = 0.0f;
+      com_calib_.Update(fwd_accel, accel_mag, cal_ax, cal_ay, gyro_z, dt_sec,
+                        com_throttle, com_steering);
+      commanded_throttle = com_throttle;
+      commanded_steering = com_steering;
+
+      // Калибровка завершена — применить результат
+      if (com_calib_.IsFinished()) {
+        const auto& result = com_calib_.GetResult();
+        if (result.valid) {
+          auto data = imu_calib_.GetData();
+          data.com_offset[0] = result.rx;
+          data.com_offset[1] = result.ry;
+          imu_calib_.SetData(data);
+          platform_->SaveComOffset(data.com_offset);
+          platform_->Log(LogLevel::Info, "CoM offset calibration done");
+        } else {
+          platform_->Log(LogLevel::Warning, "CoM offset calibration failed");
+        }
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
     // Снимок конфигурации стабилизации (atomic snapshot — один вызов
     // GetConfig() за итерацию вместо нескольких)
     // ─────────────────────────────────────────────────────────────────────
@@ -292,6 +336,7 @@ void VehicleControlUnified::ControlTaskLoop() {
       telem_mgr_->ResetLastLogTime();  // Сброс таймера лога
       calib_mgr_->StopAutoForward();   // Прервать авто-движение при failsafe
       trim_calib_.Stop();              // Прервать калибровку trim при failsafe
+      com_calib_.Stop();               // Прервать калибровку CoM при failsafe
       test_runner_.Stop();             // Прервать тестовый манёвр при failsafe
       platform_->SetPwmNeutral();
     }
@@ -406,6 +451,17 @@ PlatformError VehicleControlUnified::Init() {
 
     // Загрузка калибровки из NVS
     calib_mgr_->LoadFromNvs();
+
+    // Загрузка CoM offset из NVS (отдельный ключ)
+    {
+      float com_off[2]{0.f, 0.f};
+      if (platform_->LoadComOffset(com_off)) {
+        auto data = imu_calib_.GetData();
+        data.com_offset[0] = com_off[0];
+        data.com_offset[1] = com_off[1];
+        imu_calib_.SetData(data);
+      }
+    }
 
     // Загрузка конфигурации стабилизации из NVS
     stab_mgr_->LoadFromNvs();
@@ -689,6 +745,24 @@ TelemetryLogFrame VehicleControlUnified::BuildLogFrame(
   return frame;
 }
 
+bool VehicleControlUnified::StartComOffsetCalibration(
+    float target_accel_g, float steering_magnitude,
+    float cruise_duration_sec) {
+  if (!stab_mgr_ || !imu_enabled_) {
+    return false;
+  }
+  // Нельзя запускать если идёт другая автоматическая процедура
+  if (calib_mgr_ && calib_mgr_->IsAutoForwardActive()) {
+    return false;
+  }
+  if (trim_calib_.IsActive() || test_runner_.IsActive()) {
+    return false;
+  }
+  const auto& calib_data = imu_calib_.GetData();
+  return com_calib_.Start(target_accel_g, steering_magnitude,
+                          cruise_duration_sec, calib_data.gravity_vec);
+}
+
 bool VehicleControlUnified::StartTest(const TestParams& params) {
   if (!stab_mgr_ || !imu_enabled_) {
     return false;
@@ -697,7 +771,7 @@ bool VehicleControlUnified::StartTest(const TestParams& params) {
   if (calib_mgr_ && calib_mgr_->IsAutoForwardActive()) {
     return false;
   }
-  if (trim_calib_.IsActive()) {
+  if (trim_calib_.IsActive() || com_calib_.IsActive()) {
     return false;
   }
   return test_runner_.Start(params);
@@ -712,7 +786,7 @@ bool VehicleControlUnified::StartSteeringTrimCalibration(
   if (calib_mgr_ && calib_mgr_->IsAutoForwardActive()) {
     return false;
   }
-  if (test_runner_.IsActive()) {
+  if (test_runner_.IsActive() || com_calib_.IsActive()) {
     return false;
   }
   const auto& cfg = stab_mgr_->GetConfig();

@@ -143,6 +143,17 @@ Result<Unit, PlatformError> VehicleControlPlatformEsp32::SaveCalib(
              : Err<Unit, PlatformError>(PlatformError::CalibSaveFailed);
 }
 
+Result<Unit, PlatformError> VehicleControlPlatformEsp32::SaveComOffset(
+    const float offset[2]) {
+  return (imu_nvs::SaveComOffset(offset) == ESP_OK)
+             ? Ok<Unit, PlatformError>(Unit{})
+             : Err<Unit, PlatformError>(PlatformError::CalibSaveFailed);
+}
+
+bool VehicleControlPlatformEsp32::LoadComOffset(float offset[2]) {
+  return imu_nvs::LoadComOffset(offset) == ESP_OK;
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // Stabilization Config
 // ─────────────────────────────────────────────────────────────────────────

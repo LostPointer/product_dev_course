@@ -7,6 +7,7 @@
 #include "stabilization_config.hpp"
 #include "stabilization_config_json.hpp"
 #include "telemetry_log.hpp"
+#include "com_offset_calibration.hpp"
 #include "test_runner.hpp"
 #include "udp_telem_sender.hpp"
 #include "vehicle_control.hpp"
@@ -409,6 +410,70 @@ void HandleGetSteeringTrimStatus(cJSON* json, httpd_req_t* req) {
       cJSON_AddNumberToObject(res, "trim", result.trim);
       cJSON_AddNumberToObject(res, "mean_yaw_rate", result.mean_yaw_rate);
       cJSON_AddNumberToObject(res, "samples", result.samples);
+      cJSON_AddItemToObject(reply, "result", res);
+    }
+
+    WsSendJsonReply(req, reply);
+    cJSON_Delete(reply);
+  }
+}
+
+void HandleCalibrateComOffset(cJSON* json, httpd_req_t* req) {
+  cJSON* accel_item = cJSON_GetObjectItem(json, "target_accel");
+  cJSON* steer_item = cJSON_GetObjectItem(json, "steering");
+  cJSON* dur_item = cJSON_GetObjectItem(json, "duration");
+  float target_accel = 0.1f;
+  float steering = 0.5f;
+  float duration = 5.0f;
+  if (accel_item && cJSON_IsNumber(accel_item))
+    target_accel = (float)accel_item->valuedouble;
+  if (steer_item && cJSON_IsNumber(steer_item))
+    steering = (float)steer_item->valuedouble;
+  if (dur_item && cJSON_IsNumber(dur_item))
+    duration = (float)dur_item->valuedouble;
+
+  bool ok = VehicleControlStartComOffsetCalibration(target_accel, steering,
+                                                     duration);
+
+  cJSON* reply = cJSON_CreateObject();
+  if (reply) {
+    cJSON_AddStringToObject(reply, "type", "calibrate_com_offset_ack");
+    cJSON_AddBoolToObject(reply, "ok", ok);
+    cJSON_AddStringToObject(reply, "status", ok ? "started" : "failed");
+    if (!ok) {
+      cJSON_AddStringToObject(
+          reply, "error",
+          "IMU not ready, another procedure active, or already running");
+    }
+    WsSendJsonReply(req, reply);
+    cJSON_Delete(reply);
+  }
+
+  ESP_LOGI(TAG,
+           "calibrate_com_offset accel=%.3fg steer=%.2f dur=%.1fs -> %s",
+           target_accel, steering, duration, ok ? "started" : "failed");
+}
+
+void HandleGetComOffsetStatus(cJSON* json, httpd_req_t* req) {
+  (void)json;
+
+  bool active = VehicleControlIsComOffsetCalibActive();
+  auto result = VehicleControlGetComOffsetCalibResult();
+
+  cJSON* reply = cJSON_CreateObject();
+  if (reply) {
+    cJSON_AddStringToObject(reply, "type", "com_offset_status");
+    cJSON_AddBoolToObject(reply, "active", active);
+
+    cJSON* res = cJSON_CreateObject();
+    if (res) {
+      cJSON_AddBoolToObject(res, "valid", result.valid);
+      cJSON_AddNumberToObject(res, "rx", result.rx);
+      cJSON_AddNumberToObject(res, "ry", result.ry);
+      cJSON_AddNumberToObject(res, "omega_cw_dps", result.omega_cw_dps);
+      cJSON_AddNumberToObject(res, "omega_ccw_dps", result.omega_ccw_dps);
+      cJSON_AddNumberToObject(res, "samples_cw", result.samples_cw);
+      cJSON_AddNumberToObject(res, "samples_ccw", result.samples_ccw);
       cJSON_AddItemToObject(reply, "result", res);
     }
 

@@ -6,6 +6,7 @@
 #include "self_test.hpp"
 #include "stabilization_config.hpp"
 #include "steering_trim_calibration.hpp"
+#include "com_offset_calibration.hpp"
 #include "telemetry_log.hpp"
 #include "test_runner.hpp"
 
@@ -47,6 +48,15 @@ class IVehicleControl {
   [[nodiscard]] virtual bool IsSteeringTrimCalibActive() const = 0;
   [[nodiscard]] virtual SteeringTrimCalibration::Result
   GetSteeringTrimCalibResult() const = 0;
+
+  // Калибровка CoM offset
+  virtual bool StartComOffsetCalibration(float target_accel_g = 0.1f,
+                                         float steering_magnitude = 0.5f,
+                                         float cruise_duration_sec = 5.0f) = 0;
+  virtual void StopComOffsetCalibration() = 0;
+  [[nodiscard]] virtual bool IsComOffsetCalibActive() const = 0;
+  [[nodiscard]] virtual ComOffsetCalibration::Result
+  GetComOffsetCalibResult() const = 0;
 
   // Тестовые манёвры
   virtual bool StartTest(const TestParams& params) = 0;

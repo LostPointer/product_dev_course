@@ -104,6 +104,10 @@ extern "C" void app_main(void) {
                               rc_vehicle::HandleCalibrateSteeringTrim);
   g_command_registry.Register("get_steering_trim_status",
                               rc_vehicle::HandleGetSteeringTrimStatus);
+  g_command_registry.Register("calibrate_com_offset",
+                              rc_vehicle::HandleCalibrateComOffset);
+  g_command_registry.Register("get_com_offset_status",
+                              rc_vehicle::HandleGetComOffsetStatus);
   g_command_registry.Register("start_test", rc_vehicle::HandleStartTest);
   g_command_registry.Register("stop_test", rc_vehicle::HandleStopTest);
   g_command_registry.Register("get_test_status", rc_vehicle::HandleGetTestStatus);

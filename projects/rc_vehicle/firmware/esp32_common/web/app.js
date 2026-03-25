@@ -141,6 +141,10 @@ function connectWebSocket() {
                     updateTrimCalibStatus(data);
                 } else if (data.type === 'steering_trim_status') {
                     updateTrimCalibStatus(data);
+                } else if (data.type === 'calibrate_com_offset_ack') {
+                    updateComCalibStatus(data);
+                } else if (data.type === 'com_offset_status') {
+                    updateComCalibStatus(data);
                 } else if (data.type === 'start_test_ack') {
                     updateTestStatus(data);
                 } else if (data.type === 'test_status') {
@@ -867,6 +871,48 @@ if (calibFwdAccelSlider) {
 if (calibFwdThrottleSlider) {
     calibFwdThrottleSlider.addEventListener('input', (e) => { if (calibFwdThrottleValueEl) calibFwdThrottleValueEl.textContent = e.target.value; });
 }
+
+// ── CoM Offset Calibration ──
+const btnCalibCom       = $('btn-calib-com');
+const comCalibStatusEl  = $('com-calib-status');
+const comSteeringSlider = $('com-steering');
+const comSteeringValueEl = $('com-steering-value');
+const comDurationSlider = $('com-duration');
+const comDurationValueEl = $('com-duration-value');
+
+function updateComCalibStatus(data) {
+    if (!comCalibStatusEl) return;
+    comCalibStatusEl.style.display = 'block';
+    if (data.status === 'started' || data.active) {
+        comCalibStatusEl.textContent = 'Калибровка CoM идёт...';
+        if (btnCalibCom) btnCalibCom.disabled = true;
+        if (data.active) setTimeout(() => wsSend({ type: 'get_com_offset_status' }), 1000);
+    } else if (data.result && data.result.valid) {
+        comCalibStatusEl.textContent = `CoM offset: rx=${data.result.rx.toFixed(4)}m ry=${data.result.ry.toFixed(4)}m ` +
+            `(ω_cw=${data.result.omega_cw_dps.toFixed(1)} ω_ccw=${data.result.omega_ccw_dps.toFixed(1)} dps, ` +
+            `${data.result.samples_cw}+${data.result.samples_ccw} samples)`;
+        if (btnCalibCom) btnCalibCom.disabled = false;
+    } else if (data.result && !data.result.valid) {
+        comCalibStatusEl.textContent = `CoM калибровка не удалась (${data.result.samples_cw}+${data.result.samples_ccw} samples)`;
+        if (btnCalibCom) btnCalibCom.disabled = false;
+    } else if (data.ok === false) {
+        comCalibStatusEl.textContent = data.error || 'Ошибка запуска';
+        if (btnCalibCom) btnCalibCom.disabled = false;
+    }
+}
+
+if (comSteeringSlider) comSteeringSlider.addEventListener('input', (e) => { if (comSteeringValueEl) comSteeringValueEl.textContent = parseFloat(e.target.value).toFixed(2); });
+if (comDurationSlider) comDurationSlider.addEventListener('input', (e) => { if (comDurationValueEl) comDurationValueEl.textContent = parseFloat(e.target.value).toFixed(1); });
+
+if (btnCalibCom) btnCalibCom.addEventListener('click', () => {
+    let target_accel = 0.1;
+    if (calibFwdAccelSlider) target_accel = parseInt(calibFwdAccelSlider.value) / 1000;
+    const steering = comSteeringSlider ? parseFloat(comSteeringSlider.value) : 0.5;
+    const duration = comDurationSlider ? parseFloat(comDurationSlider.value) : 5.0;
+    wsSend({ type: 'calibrate_com_offset', target_accel, steering, duration });
+    if (comCalibStatusEl) { comCalibStatusEl.style.display = 'block'; comCalibStatusEl.textContent = 'Запуск...'; }
+    setTimeout(() => wsSend({ type: 'get_com_offset_status' }), 2000);
+});
 
 // ── Test Maneuvers ──
 const testTypeSelect    = $('test-type');

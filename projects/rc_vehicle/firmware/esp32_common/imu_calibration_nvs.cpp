@@ -128,6 +128,54 @@ esp_err_t imu_nvs::Load(rc_vehicle::ImuCalibData& data) {
   return ESP_OK;
 }
 
+static constexpr const char* kNvsComOffKey = "com_off";
+
+esp_err_t imu_nvs::SaveComOffset(const float offset[2]) {
+  nvs_handle_t h;
+  esp_err_t err = nvs_open(kNvsNamespace, NVS_READWRITE, &h);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "nvs_open failed for com_offset: %s", esp_err_to_name(err));
+    return err;
+  }
+
+  err = nvs_set_blob(h, kNvsComOffKey, offset, sizeof(float) * 2);
+  if (err == ESP_OK) err = nvs_commit(h);
+  nvs_close(h);
+
+  if (err == ESP_OK) {
+    ESP_LOGI(TAG, "Saved com_offset: rx=%.4f ry=%.4f m", offset[0], offset[1]);
+  } else {
+    ESP_LOGE(TAG, "nvs com_offset save failed: %s", esp_err_to_name(err));
+  }
+  return err;
+}
+
+esp_err_t imu_nvs::LoadComOffset(float offset[2]) {
+  nvs_handle_t h;
+  esp_err_t err = nvs_open(kNvsNamespace, NVS_READONLY, &h);
+  if (err != ESP_OK) return ESP_ERR_NOT_FOUND;
+
+  size_t len = sizeof(float) * 2;
+  err = nvs_get_blob(h, kNvsComOffKey, offset, &len);
+  nvs_close(h);
+
+  if (err != ESP_OK || len != sizeof(float) * 2) {
+    return ESP_ERR_NOT_FOUND;
+  }
+
+  if (!std::isfinite(offset[0]) || !std::isfinite(offset[1]) ||
+      std::fabs(offset[0]) > 1.0f || std::fabs(offset[1]) > 1.0f) {
+    ESP_LOGW(TAG, "Invalid com_offset: rx=%.4f ry=%.4f — discarding",
+             offset[0], offset[1]);
+    offset[0] = 0.f;
+    offset[1] = 0.f;
+    return ESP_ERR_INVALID_STATE;
+  }
+
+  ESP_LOGI(TAG, "Loaded com_offset: rx=%.4f ry=%.4f m", offset[0], offset[1]);
+  return ESP_OK;
+}
+
 esp_err_t imu_nvs::Erase() {
   nvs_handle_t h;
   esp_err_t err = nvs_open(kNvsNamespace, NVS_READWRITE, &h);

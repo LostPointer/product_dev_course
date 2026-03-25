@@ -129,6 +129,22 @@ void HandleCalibrateSteeringTrim(cJSON* json, httpd_req_t* req);
 void HandleGetSteeringTrimStatus(cJSON* json, httpd_req_t* req);
 
 /**
+ * @brief Start CoM offset calibration (circular CW+CCW)
+ *
+ * Request: {"type":"calibrate_com_offset","target_accel":0.1,"steering":0.5,"duration":5.0}
+ * Response: {"type":"calibrate_com_offset_ack","ok":true,"status":"started"}
+ */
+void HandleCalibrateComOffset(cJSON* json, httpd_req_t* req);
+
+/**
+ * @brief Get CoM offset calibration status/result
+ *
+ * Request: {"type":"get_com_offset_status"}
+ * Response: {"type":"com_offset_status","active":bool,"result":{...}}
+ */
+void HandleGetComOffsetStatus(cJSON* json, httpd_req_t* req);
+
+/**
  * @brief Start automated test maneuver
  *
  * Request: {"type":"start_test","test_type":"straight"|"circle"|"step",

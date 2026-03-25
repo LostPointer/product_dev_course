@@ -118,6 +118,26 @@ VehicleControlGetSteeringTrimCalibResult() {
   return detail::GetVehicleControl().GetSteeringTrimCalibResult();
 }
 
+inline bool VehicleControlStartComOffsetCalibration(
+    float target_accel_g = 0.1f, float steering_magnitude = 0.5f,
+    float cruise_duration_sec = 5.0f) {
+  return detail::GetVehicleControl().StartComOffsetCalibration(
+      target_accel_g, steering_magnitude, cruise_duration_sec);
+}
+
+inline void VehicleControlStopComOffsetCalibration() {
+  detail::GetVehicleControl().StopComOffsetCalibration();
+}
+
+inline bool VehicleControlIsComOffsetCalibActive() {
+  return detail::GetVehicleControl().IsComOffsetCalibActive();
+}
+
+inline rc_vehicle::ComOffsetCalibration::Result
+VehicleControlGetComOffsetCalibResult() {
+  return detail::GetVehicleControl().GetComOffsetCalibResult();
+}
+
 inline bool VehicleControlStartTest(const rc_vehicle::TestParams& params) {
   return detail::GetVehicleControl().StartTest(params);
 }

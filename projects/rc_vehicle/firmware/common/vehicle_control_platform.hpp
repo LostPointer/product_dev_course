@@ -143,6 +143,21 @@ class VehicleControlPlatform {
   [[nodiscard]] virtual Result<Unit, PlatformError> SaveCalib(
       const ImuCalibData& data) = 0;
 
+  /**
+   * @brief Сохранить смещение IMU→CoM в энергонезависимую память
+   * @param offset Массив [rx, ry] в метрах
+   * @return Result with Unit on success or PlatformError on failure
+   */
+  [[nodiscard]] virtual Result<Unit, PlatformError> SaveComOffset(
+      const float offset[2]) = 0;
+
+  /**
+   * @brief Загрузить смещение IMU→CoM из энергонезависимой памяти
+   * @param offset Массив [rx, ry] для записи
+   * @return true если данные найдены и валидны
+   */
+  [[nodiscard]] virtual bool LoadComOffset(float offset[2]) = 0;
+
   // ─────────────────────────────────────────────────────────────────────────
   // Stabilization Config
   // ─────────────────────────────────────────────────────────────────────────

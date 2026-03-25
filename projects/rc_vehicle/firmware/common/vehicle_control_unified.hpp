@@ -4,6 +4,7 @@
 #include <memory>
 
 #include "calibration_manager.hpp"
+#include "com_offset_calibration.hpp"
 #include "control_components.hpp"
 #include "drive_mode_registry.hpp"
 #include "i_vehicle_control.hpp"
@@ -125,6 +126,31 @@ class VehicleControlUnified : public IVehicleControl {
   [[nodiscard]] SteeringTrimCalibration::Result
   GetSteeringTrimCalibResult() const override {
     return trim_calib_.GetResult();
+  }
+
+  /**
+   * @brief Запустить круговую калибровку IMU→CoM
+   * @param target_accel_g Целевое ускорение при разгоне
+   * @param steering_magnitude Абсолютное значение руля
+   * @param cruise_duration_sec Длительность круизной фазы
+   * @return true при успешном запуске
+   */
+  bool StartComOffsetCalibration(float target_accel_g = 0.1f,
+                                 float steering_magnitude = 0.5f,
+                                 float cruise_duration_sec = 5.0f) override;
+
+  /** Прервать калибровку CoM offset. */
+  void StopComOffsetCalibration() override { com_calib_.Stop(); }
+
+  /** true пока идёт калибровка CoM offset. */
+  [[nodiscard]] bool IsComOffsetCalibActive() const override {
+    return com_calib_.IsActive();
+  }
+
+  /** Результат калибровки CoM offset. */
+  [[nodiscard]] ComOffsetCalibration::Result
+  GetComOffsetCalibResult() const override {
+    return com_calib_.GetResult();
   }
 
   /**
@@ -330,6 +356,9 @@ class VehicleControlUnified : public IVehicleControl {
 
   // Автокалибровка steering trim
   SteeringTrimCalibration trim_calib_;
+
+  // Калибровка CoM offset (CW+CCW)
+  ComOffsetCalibration com_calib_;
 
   // Тестовые автоматические манёвры
   TestRunner test_runner_;
