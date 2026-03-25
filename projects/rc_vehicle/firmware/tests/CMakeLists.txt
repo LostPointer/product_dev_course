@@ -59,6 +59,7 @@ set(COMMON_SOURCES
     ${COMMON_DIR}/steering_trim_calibration.cpp
     ${COMMON_DIR}/test_runner.cpp
     ${COMMON_DIR}/com_offset_calibration.cpp
+    ${COMMON_DIR}/auto_drive_coordinator.cpp
 )
 
 # Include directories

@@ -3,8 +3,8 @@
 #include <atomic>
 #include <memory>
 
+#include "auto_drive_coordinator.hpp"
 #include "calibration_manager.hpp"
-#include "com_offset_calibration.hpp"
 #include "control_components.hpp"
 #include "drive_mode_registry.hpp"
 #include "i_vehicle_control.hpp"
@@ -15,9 +15,7 @@
 #include "stabilization_config.hpp"
 #include "stabilization_manager.hpp"
 #include "stabilization_pipeline.hpp"
-#include "steering_trim_calibration.hpp"
 #include "telemetry_manager.hpp"
-#include "test_runner.hpp"
 #include "vehicle_control_platform.hpp"
 #include "vehicle_ekf.hpp"
 
@@ -115,17 +113,17 @@ class VehicleControlUnified : public IVehicleControl {
   bool StartSteeringTrimCalibration(float target_accel_g = 0.1f) override;
 
   /** Прервать калибровку trim руля. */
-  void StopSteeringTrimCalibration() override { trim_calib_.Stop(); }
+  void StopSteeringTrimCalibration() override { auto_drive_.StopTrimCalib(); }
 
   /** true пока идёт калибровка trim. */
   [[nodiscard]] bool IsSteeringTrimCalibActive() const override {
-    return trim_calib_.IsActive();
+    return auto_drive_.IsTrimCalibActive();
   }
 
   /** Результат калибровки trim (валиден после завершения). */
   [[nodiscard]] SteeringTrimCalibration::Result
   GetSteeringTrimCalibResult() const override {
-    return trim_calib_.GetResult();
+    return auto_drive_.GetTrimCalibResult();
   }
 
   /**
@@ -140,17 +138,17 @@ class VehicleControlUnified : public IVehicleControl {
                                  float cruise_duration_sec = 5.0f) override;
 
   /** Прервать калибровку CoM offset. */
-  void StopComOffsetCalibration() override { com_calib_.Stop(); }
+  void StopComOffsetCalibration() override { auto_drive_.StopComCalib(); }
 
   /** true пока идёт калибровка CoM offset. */
   [[nodiscard]] bool IsComOffsetCalibActive() const override {
-    return com_calib_.IsActive();
+    return auto_drive_.IsComCalibActive();
   }
 
   /** Результат калибровки CoM offset. */
   [[nodiscard]] ComOffsetCalibration::Result
   GetComOffsetCalibResult() const override {
-    return com_calib_.GetResult();
+    return auto_drive_.GetComCalibResult();
   }
 
   /**
@@ -161,16 +159,16 @@ class VehicleControlUnified : public IVehicleControl {
   bool StartTest(const TestParams& params) override;
 
   /** Прервать тестовый манёвр. */
-  void StopTest() override { test_runner_.Stop(); }
+  void StopTest() override { auto_drive_.StopTest(); }
 
   /** true пока тест активен. */
   [[nodiscard]] bool IsTestActive() const override {
-    return test_runner_.IsActive();
+    return auto_drive_.IsTestActive();
   }
 
   /** Статус текущего теста. */
   [[nodiscard]] TestRunner::Status GetTestStatus() const override {
-    return test_runner_.GetStatus();
+    return auto_drive_.GetTestStatus();
   }
 
   /**
@@ -354,14 +352,8 @@ class VehicleControlUnified : public IVehicleControl {
   // EKF оценки динамического состояния (vx, vy, r → slip angle)
   VehicleEkf ekf_;
 
-  // Автокалибровка steering trim
-  SteeringTrimCalibration trim_calib_;
-
-  // Калибровка CoM offset (CW+CCW)
-  ComOffsetCalibration com_calib_;
-
-  // Тестовые автоматические манёвры
-  TestRunner test_runner_;
+  // Координатор авто-процедур (trim calib, CoM calib, test runner)
+  AutoDriveCoordinator auto_drive_;
 
   // Control components
   std::unique_ptr<RcInputHandler> rc_handler_;

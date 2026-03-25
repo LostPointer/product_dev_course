@@ -146,134 +146,57 @@ void VehicleControlUnified::ControlTaskLoop() {
     SelectControlSource(sensors, commanded_throttle, commanded_steering);
 
     // ─────────────────────────────────────────────────────────────────────
-    // Авто-движение для Forward-калибровки направления
-    // RC-пульт имеет приоритет (безопасность): если RC активен, пользователь
-    // управляет машиной вручную, авто-движение не применяется.
-    // ─────────────────────────────────────────────────────────────────────
-
-    if (calib_mgr_->IsAutoForwardActive() && !sensors.rc_active) {
-      const float dt_sec = static_cast<float>(dt_ms) * 0.001f;
-      float fwd_accel = 0.0f;
-      float accel_mag = 1.0f;
-      float gyro_z = 0.0f;
-      if (sensors.imu_enabled) {
-        fwd_accel = imu_calib_.GetForwardAccel(sensors.imu_data);
-        accel_mag = std::sqrt(
-            sensors.imu_data.ax * sensors.imu_data.ax +
-            sensors.imu_data.ay * sensors.imu_data.ay +
-            sensors.imu_data.az * sensors.imu_data.az);
-        gyro_z = sensors.filtered_gz;
-      }
-      commanded_throttle = calib_mgr_->UpdateAutoForward(
-          fwd_accel, accel_mag, gyro_z, dt_sec);
-      commanded_steering = 0.0f;
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Авто-калибровка steering trim
+    // Авто-процедуры (forward calib, trim, test runner, CoM calib)
     // RC-пульт имеет приоритет (безопасность).
     // ─────────────────────────────────────────────────────────────────────
 
-    if (trim_calib_.IsActive() && !sensors.rc_active) {
-      const float dt_sec = static_cast<float>(dt_ms) * 0.001f;
-      float fwd_accel = 0.0f;
-      float accel_mag = 1.0f;
-      float gyro_z = 0.0f;
+    {
+      AutoDriveInput ad_input;
+      ad_input.rc_active = sensors.rc_active;
+      ad_input.imu_enabled = sensors.imu_enabled;
+      ad_input.dt_sec = static_cast<float>(dt_ms) * 0.001f;
       if (sensors.imu_enabled) {
-        fwd_accel = imu_calib_.GetForwardAccel(sensors.imu_data);
-        accel_mag = std::sqrt(
+        ad_input.fwd_accel = imu_calib_.GetForwardAccel(sensors.imu_data);
+        ad_input.accel_mag = std::sqrt(
             sensors.imu_data.ax * sensors.imu_data.ax +
             sensors.imu_data.ay * sensors.imu_data.ay +
             sensors.imu_data.az * sensors.imu_data.az);
-        gyro_z = sensors.filtered_gz;
+        ad_input.cal_ax = sensors.imu_data.ax;
+        ad_input.cal_ay = sensors.imu_data.ay;
+        ad_input.gyro_z = sensors.filtered_gz;
       }
-      float trim_throttle = 0.0f;
-      float trim_steering = 0.0f;
-      trim_calib_.Update(fwd_accel, accel_mag, gyro_z, dt_sec, trim_throttle,
-                         trim_steering);
-      commanded_throttle = trim_throttle;
-      commanded_steering = trim_steering;
 
-      // Калибровка завершена — применить результат
-      if (trim_calib_.IsFinished()) {
-        const auto& result = trim_calib_.GetResult();
-        if (result.valid && stab_mgr_) {
+      auto ad_out = auto_drive_.Update(ad_input);
+      if (ad_out.active) {
+        commanded_throttle = ad_out.throttle;
+        commanded_steering = ad_out.steering;
+      }
+
+      // Применить результат завершённой калибровки trim
+      if (ad_out.trim_completed) {
+        if (ad_out.trim_result.valid && stab_mgr_) {
           auto cfg = stab_mgr_->GetConfig();
-          cfg.steering_trim = result.trim;
+          cfg.steering_trim = ad_out.trim_result.trim;
           stab_mgr_->SetConfig(cfg, true);
           platform_->Log(LogLevel::Info, "Steering trim calibration done");
-        } else if (!result.valid) {
-          platform_->Log(LogLevel::Warning, "Steering trim calibration failed");
+        } else if (!ad_out.trim_result.valid) {
+          platform_->Log(LogLevel::Warning,
+                         "Steering trim calibration failed");
         }
       }
-    }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Автоматический тестовый манёвр (TestRunner)
-    // RC-пульт имеет приоритет (безопасность).
-    // ─────────────────────────────────────────────────────────────────────
-
-    if (test_runner_.IsActive() && !sensors.rc_active) {
-      const float dt_sec = static_cast<float>(dt_ms) * 0.001f;
-      float fwd_accel = 0.0f;
-      float accel_mag = 1.0f;
-      float gyro_z = 0.0f;
-      if (sensors.imu_enabled) {
-        fwd_accel = imu_calib_.GetForwardAccel(sensors.imu_data);
-        accel_mag = std::sqrt(
-            sensors.imu_data.ax * sensors.imu_data.ax +
-            sensors.imu_data.ay * sensors.imu_data.ay +
-            sensors.imu_data.az * sensors.imu_data.az);
-        gyro_z = sensors.filtered_gz;
-      }
-      float test_throttle = 0.0f;
-      float test_steering = 0.0f;
-      test_runner_.Update(fwd_accel, accel_mag, gyro_z, dt_sec, test_throttle,
-                          test_steering);
-      commanded_throttle = test_throttle;
-      commanded_steering = test_steering;
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Круговая калибровка CoM offset
-    // RC-пульт имеет приоритет (безопасность).
-    // ─────────────────────────────────────────────────────────────────────
-
-    if (com_calib_.IsActive() && !sensors.rc_active) {
-      const float dt_sec = static_cast<float>(dt_ms) * 0.001f;
-      float fwd_accel = 0.0f;
-      float accel_mag = 1.0f;
-      float cal_ax = 0.0f, cal_ay = 0.0f;
-      float gyro_z = 0.0f;
-      if (sensors.imu_enabled) {
-        fwd_accel = imu_calib_.GetForwardAccel(sensors.imu_data);
-        accel_mag = std::sqrt(
-            sensors.imu_data.ax * sensors.imu_data.ax +
-            sensors.imu_data.ay * sensors.imu_data.ay +
-            sensors.imu_data.az * sensors.imu_data.az);
-        cal_ax = sensors.imu_data.ax;
-        cal_ay = sensors.imu_data.ay;
-        gyro_z = sensors.filtered_gz;
-      }
-      float com_throttle = 0.0f;
-      float com_steering = 0.0f;
-      com_calib_.Update(fwd_accel, accel_mag, cal_ax, cal_ay, gyro_z, dt_sec,
-                        com_throttle, com_steering);
-      commanded_throttle = com_throttle;
-      commanded_steering = com_steering;
-
-      // Калибровка завершена — применить результат
-      if (com_calib_.IsFinished()) {
-        const auto& result = com_calib_.GetResult();
-        if (result.valid) {
+      // Применить результат завершённой калибровки CoM offset
+      if (ad_out.com_completed) {
+        if (ad_out.com_result.valid) {
           auto data = imu_calib_.GetData();
-          data.com_offset[0] = result.rx;
-          data.com_offset[1] = result.ry;
+          data.com_offset[0] = ad_out.com_result.rx;
+          data.com_offset[1] = ad_out.com_result.ry;
           imu_calib_.SetData(data);
           platform_->SaveComOffset(data.com_offset);
           platform_->Log(LogLevel::Info, "CoM offset calibration done");
         } else {
-          platform_->Log(LogLevel::Warning, "CoM offset calibration failed");
+          platform_->Log(LogLevel::Warning,
+                         "CoM offset calibration failed");
         }
       }
     }
@@ -347,10 +270,7 @@ void VehicleControlUnified::ControlTaskLoop() {
       ekf_.Reset();
       stab_mgr_->ResetWeights();       // Сброс весов стабилизации
       telem_mgr_->ResetLastLogTime();  // Сброс таймера лога
-      calib_mgr_->StopAutoForward();   // Прервать авто-движение при failsafe
-      trim_calib_.Stop();              // Прервать калибровку trim при failsafe
-      com_calib_.Stop();               // Прервать калибровку CoM при failsafe
-      test_runner_.Stop();             // Прервать тестовый манёвр при failsafe
+      auto_drive_.StopAll();           // Прервать все авто-процедуры
       platform_->SetPwmNeutral();
     }
 
@@ -461,6 +381,9 @@ PlatformError VehicleControlUnified::Init() {
     stab_mgr_.reset(new StabilizationManager(*platform_, madgwick_, yaw_ctrl_,
                                              slip_ctrl_, nullptr));
     telem_mgr_.reset(new TelemetryManager());
+
+    // Связать координатор авто-процедур с менеджером калибровки
+    auto_drive_.SetCalibrationManager(calib_mgr_.get());
 
     // Загрузка калибровки из NVS
     calib_mgr_->LoadFromNvs();
@@ -754,57 +677,31 @@ TelemetryLogFrame VehicleControlUnified::BuildLogFrame(
   frame.ekf_vx_var = ekf_.GetVxVariance();
   frame.ekf_vy_var = ekf_.GetVyVariance();
   frame.ekf_r_var = ekf_.GetRVariance();
-  frame.test_marker = test_runner_.GetTestMarker();
+  frame.test_marker = auto_drive_.GetTestMarker();
   return frame;
 }
 
 bool VehicleControlUnified::StartComOffsetCalibration(
     float target_accel_g, float steering_magnitude,
     float cruise_duration_sec) {
-  if (!stab_mgr_ || !imu_enabled_) {
-    return false;
-  }
-  // Нельзя запускать если идёт другая автоматическая процедура
-  if (calib_mgr_ && calib_mgr_->IsAutoForwardActive()) {
-    return false;
-  }
-  if (trim_calib_.IsActive() || test_runner_.IsActive()) {
-    return false;
-  }
+  if (!stab_mgr_ || !imu_enabled_) return false;
   const auto& calib_data = imu_calib_.GetData();
-  return com_calib_.Start(target_accel_g, steering_magnitude,
-                          cruise_duration_sec, calib_data.gravity_vec);
+  return auto_drive_.StartComCalib(target_accel_g, steering_magnitude,
+                                   cruise_duration_sec,
+                                   calib_data.gravity_vec);
 }
 
 bool VehicleControlUnified::StartTest(const TestParams& params) {
-  if (!stab_mgr_ || !imu_enabled_) {
-    return false;
-  }
-  // Нельзя запускать если идёт другая автоматическая процедура
-  if (calib_mgr_ && calib_mgr_->IsAutoForwardActive()) {
-    return false;
-  }
-  if (trim_calib_.IsActive() || com_calib_.IsActive()) {
-    return false;
-  }
-  return test_runner_.Start(params);
+  if (!stab_mgr_ || !imu_enabled_) return false;
+  return auto_drive_.StartTest(params);
 }
 
 bool VehicleControlUnified::StartSteeringTrimCalibration(
     float target_accel_g) {
-  if (!stab_mgr_ || !imu_enabled_) {
-    return false;
-  }
-  // Нельзя запускать если идёт другая автоматическая процедура
-  if (calib_mgr_ && calib_mgr_->IsAutoForwardActive()) {
-    return false;
-  }
-  if (test_runner_.IsActive() || com_calib_.IsActive()) {
-    return false;
-  }
+  if (!stab_mgr_ || !imu_enabled_) return false;
   const auto& cfg = stab_mgr_->GetConfig();
-  return trim_calib_.Start(target_accel_g, cfg.steering_trim,
-                           cfg.yaw_rate.steer_to_yaw_rate_dps);
+  return auto_drive_.StartTrimCalib(target_accel_g, cfg.steering_trim,
+                                    cfg.yaw_rate.steer_to_yaw_rate_dps);
 }
 
 void VehicleControlUnified::OnWifiCommand(float throttle, float steering) {
