@@ -4,6 +4,20 @@
 
 BEGIN;
 
+-- Drop all tables with CASCADE to handle foreign key dependencies
+DROP TABLE IF EXISTS schema_migrations CASCADE;
+DROP TABLE IF EXISTS invite_tokens CASCADE;
+DROP TABLE IF EXISTS password_reset_tokens CASCADE;
+DROP TABLE IF EXISTS revoked_tokens CASCADE;
+DROP TABLE IF EXISTS audit_log CASCADE;
+DROP TABLE IF EXISTS user_project_roles CASCADE;
+DROP TABLE IF EXISTS user_system_roles CASCADE;
+DROP TABLE IF EXISTS role_permissions CASCADE;
+DROP TABLE IF EXISTS roles CASCADE;
+DROP TABLE IF EXISTS permissions CASCADE;
+DROP TABLE IF EXISTS projects CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
+
 -- =============================================================================
 -- Utility functions
 -- =============================================================================
