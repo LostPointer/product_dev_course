@@ -9,6 +9,7 @@ from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
 from auth_service.api.routes.users import setup_routes
+from auth_service.core.exceptions import InvalidCredentialsError
 from auth_service.repositories.users import UserRepository
 
 
@@ -177,45 +178,33 @@ class TestSearchUsersEndpoint:
     async def test_search_requires_min_query_length(self, aiohttp_client):
         """q shorter than 2 chars returns 400."""
         with (
-            patch("auth_service.api.routes.users.jwt_get_user_id", return_value=str(REQUESTER_UUID)),
-            patch("auth_service.api.routes.users.get_pool", new=AsyncMock(return_value=AsyncMock())),
+            patch("auth_service.api.routes.users.get_permission_service", new=AsyncMock(return_value=MagicMock())),
+            patch("auth_service.api.routes.users.get_requester_id", new=AsyncMock(return_value=REQUESTER_UUID)),
         ):
-            user_mock = MagicMock()
-            user_mock.id = REQUESTER_UUID
-            user_mock.is_active = True
-            with patch("auth_service.api.routes.users.UserRepository") as MockRepo:
-                instance = MockRepo.return_value
-                instance.get_by_id = AsyncMock(return_value=user_mock)
-                instance.search_by_username = AsyncMock(return_value=[])
-
-                client = await aiohttp_client(_make_app())
-                resp = await client.get(
-                    "/api/v1/users/search?q=a",
-                    headers={"Authorization": f"Bearer {VALID_TOKEN}"},
-                )
-                assert resp.status == 400
-                body = await resp.json()
-                assert "2" in body["error"]
+            client = await aiohttp_client(_make_app())
+            resp = await client.get(
+                "/api/v1/users/search?q=a",
+                headers={"Authorization": f"Bearer {VALID_TOKEN}"},
+            )
+            assert resp.status == 400
+            body = await resp.json()
+            assert "2" in body["error"]
 
     @pytest.mark.asyncio
     async def test_search_returns_matching_users(self, aiohttp_client):
         """Valid query returns matched users as JSON array."""
-        user_mock = MagicMock()
-        user_mock.id = REQUESTER_UUID
-        user_mock.is_active = True
-
         search_results = [
             {"id": str(uuid4()), "username": "alice", "email": "alice@x.com", "is_active": True},
             {"id": str(uuid4()), "username": "alicia", "email": "alicia@x.com", "is_active": True},
         ]
 
         with (
-            patch("auth_service.api.routes.users.jwt_get_user_id", return_value=str(REQUESTER_UUID)),
+            patch("auth_service.api.routes.users.get_permission_service", new=AsyncMock(return_value=MagicMock())),
+            patch("auth_service.api.routes.users.get_requester_id", new=AsyncMock(return_value=REQUESTER_UUID)),
             patch("auth_service.api.routes.users.get_pool", new=AsyncMock(return_value=AsyncMock())),
             patch("auth_service.api.routes.users.UserRepository") as MockRepo,
         ):
             instance = MockRepo.return_value
-            instance.get_by_id = AsyncMock(return_value=user_mock)
             instance.search_by_username = AsyncMock(return_value=search_results)
 
             client = await aiohttp_client(_make_app())
@@ -231,18 +220,15 @@ class TestSearchUsersEndpoint:
     @pytest.mark.asyncio
     async def test_search_excludes_project_members(self, aiohttp_client):
         """exclude_project_id is parsed and forwarded to the repository."""
-        user_mock = MagicMock()
-        user_mock.id = REQUESTER_UUID
-        user_mock.is_active = True
         project_id = uuid4()
 
         with (
-            patch("auth_service.api.routes.users.jwt_get_user_id", return_value=str(REQUESTER_UUID)),
+            patch("auth_service.api.routes.users.get_permission_service", new=AsyncMock(return_value=MagicMock())),
+            patch("auth_service.api.routes.users.get_requester_id", new=AsyncMock(return_value=REQUESTER_UUID)),
             patch("auth_service.api.routes.users.get_pool", new=AsyncMock(return_value=AsyncMock())),
             patch("auth_service.api.routes.users.UserRepository") as MockRepo,
         ):
             instance = MockRepo.return_value
-            instance.get_by_id = AsyncMock(return_value=user_mock)
             instance.search_by_username = AsyncMock(return_value=[])
 
             client = await aiohttp_client(_make_app())
@@ -260,17 +246,13 @@ class TestSearchUsersEndpoint:
     @pytest.mark.asyncio
     async def test_search_limits_results(self, aiohttp_client):
         """limit param is capped at 10."""
-        user_mock = MagicMock()
-        user_mock.id = REQUESTER_UUID
-        user_mock.is_active = True
-
         with (
-            patch("auth_service.api.routes.users.jwt_get_user_id", return_value=str(REQUESTER_UUID)),
+            patch("auth_service.api.routes.users.get_permission_service", new=AsyncMock(return_value=MagicMock())),
+            patch("auth_service.api.routes.users.get_requester_id", new=AsyncMock(return_value=REQUESTER_UUID)),
             patch("auth_service.api.routes.users.get_pool", new=AsyncMock(return_value=AsyncMock())),
             patch("auth_service.api.routes.users.UserRepository") as MockRepo,
         ):
             instance = MockRepo.return_value
-            instance.get_by_id = AsyncMock(return_value=user_mock)
             instance.search_by_username = AsyncMock(return_value=[])
 
             client = await aiohttp_client(_make_app())
@@ -284,24 +266,19 @@ class TestSearchUsersEndpoint:
 
     @pytest.mark.asyncio
     async def test_search_only_active_users(self, aiohttp_client):
-        """Inactive requester is rejected (UserNotFoundError -> 404)."""
-        user_mock = MagicMock()
-        user_mock.id = REQUESTER_UUID
-        user_mock.is_active = False  # inactive user
+        """Inactive requester is rejected (InvalidCredentialsError -> 401)."""
+        from auth_service.core.exceptions import InvalidCredentialsError
 
         with (
-            patch("auth_service.api.routes.users.jwt_get_user_id", return_value=str(REQUESTER_UUID)),
-            patch("auth_service.api.routes.users.get_pool", new=AsyncMock(return_value=AsyncMock())),
-            patch("auth_service.api.routes.users.UserRepository") as MockRepo,
+            patch("auth_service.api.routes.users.get_permission_service", new=AsyncMock(return_value=MagicMock())),
+            patch(
+                "auth_service.api.routes.users.get_requester_id",
+                new=AsyncMock(side_effect=InvalidCredentialsError("User not found or inactive")),
+            ),
         ):
-            instance = MockRepo.return_value
-            instance.get_by_id = AsyncMock(return_value=user_mock)
-
             client = await aiohttp_client(_make_app())
             resp = await client.get(
                 "/api/v1/users/search?q=bo",
                 headers={"Authorization": f"Bearer {VALID_TOKEN}"},
             )
-            # UserNotFoundError has status_code=404; inactive users are treated
-            # as not found to avoid leaking information about account state.
-            assert resp.status == 404
+            assert resp.status == 401

@@ -268,17 +268,17 @@ class TestCreateCustomRole:
 
     @pytest.mark.asyncio
     async def test_create_custom_project_role_requires_project_roles_manage(
-        self, permission_service, test_user, database_url
+        self, permission_service, test_user, grantor_user, database_url
     ):
         """Creating custom project role requires project.roles.manage."""
         conn = await asyncpg.connect(database_url)
         try:
-            # Create project
+            # Create project owned by grantor_user; test_user is not a member
             proj_result = await conn.fetchrow("""
                 INSERT INTO projects (name, description, owner_id)
                 VALUES ('Test Project', 'Test', $1)
                 RETURNING id
-            """, test_user)
+            """, grantor_user)
             project_id = proj_result["id"]
         finally:
             await conn.close()

@@ -717,9 +717,10 @@ class TestProjectRepositoryGetters:
                 "updated_at": datetime.now(timezone.utc),
             },
         ])
+        mock_conn.fetchrow = AsyncMock(return_value={"count": 2})
 
         repo = ProjectRepository(mock_pool)
-        projects = await repo.list_by_user(user_id)
+        projects, total = await repo.list_by_user(user_id)
 
         assert len(projects) == 2
         assert all(isinstance(p, Project) for p in projects)
@@ -729,9 +730,10 @@ class TestProjectRepositoryGetters:
         """Test list_by_user returns empty list."""
         mock_pool, mock_conn = mock_pool_with_conn
         mock_conn.fetch = AsyncMock(return_value=[])
+        mock_conn.fetchrow = AsyncMock(return_value={"count": 0})
 
         repo = ProjectRepository(mock_pool)
-        projects = await repo.list_by_user(uuid4())
+        projects, total = await repo.list_by_user(uuid4())
 
         assert projects == []
 

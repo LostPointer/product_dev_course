@@ -88,8 +88,8 @@ async def test_list_projects_success(service_client):
     )
     assert response.status == 200
     payload = await response.json()
-    assert "projects" in payload
-    assert len(payload["projects"]) == 2
+    assert "items" in payload
+    assert len(payload["items"]) == 2
 
 
 @pytest.mark.asyncio
@@ -103,8 +103,8 @@ async def test_list_projects_empty(service_client):
     )
     assert response.status == 200
     payload = await response.json()
-    assert "projects" in payload
-    assert len(payload["projects"]) == 0
+    assert "items" in payload
+    assert len(payload["items"]) == 0
 
 
 @pytest.mark.asyncio
