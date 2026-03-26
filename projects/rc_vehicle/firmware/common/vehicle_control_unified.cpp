@@ -6,11 +6,9 @@
 
 #include "config.hpp"
 #include "control_loop_helpers.hpp"
-#include "diagnostics_reporter.hpp"
-#include "drive_mode_registry.hpp"
+#include "control_loop_processor.hpp"
 #include "log_format.hpp"
 #include "rc_vehicle_common.hpp"
-#include "telemetry_builder.hpp"
 
 #ifdef ESP_PLATFORM
 #include "udp_telem_sender.hpp"
@@ -35,234 +33,28 @@ void VehicleControlUnified::ControlTaskEntry(void* arg) {
 }
 
 void VehicleControlUnified::ControlTaskLoop() {
-  if (!platform_) {
-    return;  // Платформа не установлена
-  }
-
-  // Зарегистрировать control task в Task WDT
+  if (!platform_) return;
   platform_->RegisterTaskWdt();
 
-  // Slew rate для плавности управления
-  float commanded_throttle = 0.0f;
-  float commanded_steering = 0.0f;
-  float applied_throttle = 0.0f;
-  float applied_steering = 0.0f;
+  const ControlLoopContext ctx{
+      *platform_,       imu_calib_,        madgwick_,    ekf_,
+      yaw_ctrl_,        pitch_ctrl_,        slip_ctrl_,   oversteer_guard_,
+      kids_processor_,  auto_drive_,
+      calib_mgr_.get(), stab_mgr_.get(),    telem_mgr_.get(),
+      rc_handler_.get(), wifi_handler_.get(), imu_handler_.get(),
+      telem_handler_.get(), last_loop_hz_};
 
-  uint32_t last_pwm_update = platform_->GetTimeMs();
-  uint32_t last_loop = platform_->GetTimeMs();
+  const uint32_t start = platform_->GetTimeMs();
+  ControlLoopProcessor processor(ctx, start);
 
-  // Диагностика
-  uint32_t diag_loop_count = 0;
-  uint32_t diag_start_ms = platform_->GetTimeMs();
-
-  // Сигнализировать готовность control task (init-ready barrier)
   control_task_ready_.store(true, std::memory_order_release);
 
+  uint32_t last_loop = start;
   while (true) {
     platform_->DelayUntilNextTick(config::ControlLoopConfig::kPeriodMs);
     const uint32_t now = platform_->GetTimeMs();
-    const uint32_t dt_ms = now - last_loop;
+    processor.Step(now, now - last_loop);
     last_loop = now;
-    ++diag_loop_count;
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Обновление всех компонентов
-    // ─────────────────────────────────────────────────────────────────────
-
-    if (rc_handler_) rc_handler_->Update(now, dt_ms);
-    if (wifi_handler_) wifi_handler_->Update(now, dt_ms);
-    if (imu_handler_) imu_handler_->Update(now, dt_ms);
-
-    // Sensor snapshot + CoM correction
-    auto sensors = BuildSensorSnapshot(rc_handler_.get(), wifi_handler_.get(),
-                                       imu_handler_.get());
-    prev_gz_rad_s_ =
-        CorrectImuForComOffset(sensors, imu_calib_, prev_gz_rad_s_, dt_ms);
-
-    // ─────────────────────────────────────────────────────────────────────
-    // EKF: оценка динамического состояния (vx, vy, r → slip angle)
-    // ─────────────────────────────────────────────────────────────────────
-
-    const bool ekf_active =
-        stab_mgr_ && stab_mgr_->GetConfig().filter.ekf_enabled;
-    if (ekf_active && sensors.imu_enabled && dt_ms > 0) {
-      ekf_.UpdateFromImu(sensors.imu_data.ax, sensors.imu_data.ay,
-                         sensors.imu_data.az, sensors.filtered_gz,
-                         static_cast<float>(dt_ms) * 0.001f);
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Обработка запроса калибровки
-    // ─────────────────────────────────────────────────────────────────────
-
-    calib_mgr_->ProcessRequest(now);
-    calib_mgr_->ProcessCompletion();
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Выбор источника управления (RC приоритетнее Wi-Fi)
-    // ─────────────────────────────────────────────────────────────────────
-
-    SelectControlSource(sensors, commanded_throttle, commanded_steering);
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Авто-процедуры (forward calib, trim, test runner, CoM calib)
-    // RC-пульт имеет приоритет (безопасность).
-    // ─────────────────────────────────────────────────────────────────────
-
-    {
-      auto ad_out =
-          auto_drive_.Update(BuildAutoDriveInput(sensors, imu_calib_, dt_ms));
-      if (ad_out.active) {
-        commanded_throttle = ad_out.throttle;
-        commanded_steering = ad_out.steering;
-      }
-
-      HandleAutoDriveCompletion(ad_out, stab_mgr_.get(), imu_calib_,
-                                *platform_);
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Снимок конфигурации стабилизации (atomic snapshot — один вызов
-    // GetConfig() за итерацию вместо нескольких)
-    // ─────────────────────────────────────────────────────────────────────
-
-    const auto stab_cfg = stab_mgr_ ? stab_mgr_->GetConfig()
-                                     : StabilizationConfig{};
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Плавное нарастание/спад веса стабилизации и переход между режимами
-    // ─────────────────────────────────────────────────────────────────────
-
-    stab_mgr_->UpdateWeights(dt_ms);
-
-    const DriveMode drive_mode = stab_cfg.mode;
-    const auto& strategy = DriveModeRegistry::Get(drive_mode);
-    const auto traits = strategy.GetTraits();
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Kids Mode: применить ограничения газа/руля и anti-spin
-    // (активируется через traits.apply_input_limits)
-    // ─────────────────────────────────────────────────────────────────────
-
-    if (traits.apply_input_limits) {
-      float kids_fwd_accel = 0.0f;
-      if (sensors.imu_enabled) {
-        kids_fwd_accel = imu_calib_.GetForwardAccel(sensors.imu_data);
-      }
-      kids_processor_.Process(commanded_throttle, commanded_steering, dt_ms,
-                              kids_fwd_accel);
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Стабилизационный pipeline (управляется ModeTraits)
-    // ─────────────────────────────────────────────────────────────────────
-
-    const float stab_weight = stab_mgr_->GetStabilizationWeight();
-    const float mode_weight = stab_mgr_->GetModeTransitionWeight();
-
-    if (traits.yaw_rate_active)
-      yaw_ctrl_.Process(commanded_steering, stab_weight, mode_weight, dt_ms);
-
-    if (traits.pitch_comp_active)
-      pitch_ctrl_.Process(commanded_throttle, stab_weight);
-
-    if (traits.slip_angle_active)
-      slip_ctrl_.Process(commanded_throttle, stab_weight, mode_weight, dt_ms);
-
-    if (traits.oversteer_guard_active)
-      oversteer_guard_.Process(commanded_throttle, dt_ms,
-                               traits.oversteer_reduces_throttle);
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Failsafe
-    // ─────────────────────────────────────────────────────────────────────
-
-    if (platform_->FailsafeUpdate(sensors.rc_active, sensors.wifi_active)) {
-      // Failsafe активен: нейтраль
-      commanded_throttle = 0.0f;
-      commanded_steering = 0.0f;
-      applied_throttle = 0.0f;
-      applied_steering = 0.0f;
-      yaw_ctrl_.Reset();
-      slip_ctrl_.Reset();
-      oversteer_guard_.Reset();
-      kids_processor_.Reset();
-      ekf_.Reset();
-      stab_mgr_->ResetWeights();       // Сброс весов стабилизации
-      telem_mgr_->ResetLastLogTime();  // Сброс таймера лога
-      auto_drive_.StopAll();           // Прервать все авто-процедуры
-      platform_->SetPwmNeutral();
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Обновление PWM с slew rate
-    // ─────────────────────────────────────────────────────────────────────
-
-    // Применить trim (компенсация механического смещения нейтрали)
-    const float steer_trim = stab_cfg.steering_trim;
-    const float thr_trim = stab_cfg.throttle_trim;
-
-    if (traits.use_slew_rate) {
-      UpdatePwmWithSlewRate(*platform_, now, commanded_throttle,
-                            commanded_steering, applied_throttle,
-                            applied_steering, last_pwm_update, thr_trim,
-                            steer_trim, stab_cfg.slew_throttle,
-                            stab_cfg.slew_steering);
-    } else {
-      applied_throttle = commanded_throttle + thr_trim;
-      applied_steering = commanded_steering + steer_trim;
-      platform_->SetPwm(applied_throttle, applied_steering);
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Телеметрия
-    // ─────────────────────────────────────────────────────────────────────
-
-    if (telem_handler_) {
-      const TelemetryContext tctx{ekf_, madgwick_, imu_calib_,
-                                  oversteer_guard_, kids_processor_,
-                                  auto_drive_};
-      auto snap = BuildTelemetrySnapshot(tctx, now, sensors, stab_cfg,
-                                         drive_mode, applied_throttle,
-                                         applied_steering, commanded_throttle,
-                                         commanded_steering);
-      telem_handler_->SendTelemetry(now, snap);
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Запись в кольцевой буфер телеметрии (Phase 4.3) — 100 Hz
-    // ─────────────────────────────────────────────────────────────────────
-
-    if (sensors.imu_enabled) {
-      const uint32_t last_log = telem_mgr_->GetLastLogTime();
-      if (now - last_log >= config::TelemetryLogConfig::kLogIntervalMs) {
-        const TelemetryContext tctx{ekf_, madgwick_, imu_calib_,
-                                    oversteer_guard_, kids_processor_,
-                                    auto_drive_};
-        auto frame = BuildLogFrame(tctx, now, sensors, applied_throttle,
-                                   applied_steering, commanded_throttle,
-                                   commanded_steering);
-        telem_mgr_->Push(frame);
-        telem_mgr_->SetLastLogTime(now);
-
-#ifdef ESP_PLATFORM
-        // UDP telemetry streaming (no-op если не активен)
-        UdpTelemEnqueue(frame);
-#endif
-      }
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Диагностика
-    // ─────────────────────────────────────────────────────────────────────
-
-    {
-      const DiagnosticsContext dctx{*platform_, *stab_mgr_, madgwick_, ekf_,
-                                    imu_handler_.get(), last_loop_hz_};
-      PrintDiagnostics(dctx, now, diag_loop_count, diag_start_ms);
-    }
-
-    // Кормить watchdog — если цикл зависнет, WDT перезагрузит устройство
     platform_->FeedTaskWdt();
   }
 }

@@ -63,6 +63,7 @@ set(COMMON_SOURCES
     ${COMMON_DIR}/telemetry_builder.cpp
     ${COMMON_DIR}/diagnostics_reporter.cpp
     ${COMMON_DIR}/control_loop_helpers.cpp
+    ${COMMON_DIR}/control_loop_processor.cpp
 )
 
 # Include directories
