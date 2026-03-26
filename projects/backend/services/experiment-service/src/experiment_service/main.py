@@ -13,7 +13,6 @@ from backend_common.aiohttp_app import (
 )
 from backend_common.metrics import metrics_handler, metrics_middleware
 from backend_common.middleware.error_handler import error_handling_middleware
-from backend_common.db.migrations import create_migration_runner
 from backend_common.logging_config import configure_logging
 
 from experiment_service.api.router import setup_routes
@@ -40,14 +39,6 @@ configure_logging()
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 OPENAPI_PATH = PROJECT_ROOT / "openapi" / "openapi.yaml"
-
-MIGRATIONS_PATHS = [
-    Path(__file__).resolve().parent.parent.parent / "migrations",  # /app/migrations in container
-    Path("/app/migrations"),  # Absolute path in container
-    Path(__file__).resolve().parent.parent.parent.parent / "migrations",  # Local development
-]
-
-apply_migrations_on_startup = create_migration_runner(settings, MIGRATIONS_PATHS)
 
 
 async def start_audit_client(app: web.Application) -> None:
@@ -100,7 +91,6 @@ def create_app() -> web.Application:
     setup_otel(app)
 
     app.on_startup.append(init_pool)
-    app.on_startup.append(apply_migrations_on_startup)
     app.on_startup.append(start_webhook_dispatcher)
     app.on_startup.append(start_background_worker)
     app.on_startup.append(start_audit_client)

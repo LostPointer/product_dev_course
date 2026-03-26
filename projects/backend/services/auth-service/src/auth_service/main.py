@@ -1,7 +1,6 @@
 """aiohttp application entrypoint."""
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from aiohttp import web
@@ -9,7 +8,6 @@ from aiohttp import web
 from backend_common.aiohttp_app import add_cors_to_routes, add_healthcheck, create_base_app
 from backend_common.metrics import metrics_handler, metrics_middleware
 from backend_common.middleware.error_handler import error_handling_middleware
-from backend_common.db.migrations import create_migration_runner
 from backend_common.logging_config import configure_logging
 
 from auth_service.api.middleware import password_change_required_middleware
@@ -33,19 +31,6 @@ async def init_pool(_app: Any = None) -> None:
 configure_logging()
 
 
-MIGRATIONS_PATHS = [
-    Path(__file__).resolve().parent.parent.parent / "migrations",  # /app/migrations in container
-    Path("/app/migrations"),  # Absolute path in container
-    Path(__file__).resolve().parent.parent.parent.parent / "migrations",  # Local development
-]
-
-apply_migrations_on_startup = create_migration_runner(
-    settings,
-    MIGRATIONS_PATHS,
-    create_db_hint="make auth-create-db",
-)
-
-
 def create_app() -> web.Application:
     """Create aiohttp application."""
     app, cors = create_base_app(settings)
@@ -64,9 +49,7 @@ def create_app() -> web.Application:
     setup_audit_routes(app)
     setup_users_routes(app)
 
-    # Setup database pool and migrations
     app.on_startup.append(init_pool)
-    app.on_startup.append(apply_migrations_on_startup)
     app.on_startup.append(start_background_worker)
     app.on_cleanup.append(stop_background_worker)
     app.on_cleanup.append(close_pool)
