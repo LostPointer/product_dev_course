@@ -1,6 +1,6 @@
 # Firmware Refactoring — Status
 
-560 тестов (544 unit + 16 integration), 0 глобальных классов, `main.cpp` 139 строк.
+596 тестов (580 unit + 16 integration), 0 глобальных классов, `main.cpp` 139 строк.
 `VehicleControlUnified.cpp` — **89 строк** ✅ (цель <200 достигнута).
 
 ---
@@ -25,6 +25,8 @@
 | Steering Trim Calibration | Авто-калибровка trim + fix `IsActive()` |
 | Web UI Charts | Canvas-графики телеметрии в реальном времени |
 | Binary Telemetry HTTP | Бинарный эндпоинт `/log.bin` |
+| Unit-тесты `control_loop_helpers` | 22 теста: `SelectControlSource`, `BuildAutoDriveInput`, `CorrectImuForComOffset`, `HandleAutoDriveCompletion`, `BuildSelfTestInput` |
+| Unit-тесты `ControlLoopProcessor` | 14 тестов: failsafe, WiFi→PWM, slew rate, telemetry log, null safety |
 
 ---
 
@@ -47,6 +49,4 @@
 | Пункт | Приоритет | Описание |
 |-------|-----------|----------|
 | `test_ws_command_registry.cpp` | Низкий | Требует mock `esp_http_server.h` (~50 строк мока + ~100 строк теста) |
-| Unit-тесты `ControlLoopProcessor` | Средний | Сейчас покрыт только через интеграционные тесты VCU, прямых unit-тестов нет |
-| Unit-тесты `control_loop_helpers` | Средний | `HandleAutoDriveCompletion`, `BuildSelfTestInput` не покрыты напрямую |
 | `InitializeComponents` split | Низкий | Незначительный выигрыш (~10 строк) |
