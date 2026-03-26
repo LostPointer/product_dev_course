@@ -95,6 +95,8 @@ void KidsModeConfig::Clamp() noexcept {
   accel_threshold_g = std::clamp(accel_threshold_g, 0.05f, 0.5f);
   accel_limit_gain = std::clamp(accel_limit_gain, 0.5f, 10.0f);
   accel_max_reduction = std::clamp(accel_max_reduction, 0.0f, 1.0f);
+  max_speed_ms = std::clamp(max_speed_ms, 0.3f, 5.0f);
+  speed_limit_gain = std::clamp(speed_limit_gain, 0.5f, 10.0f);
 }
 
 void KidsModeConfig::ApplyPreset(KidsPreset preset) noexcept {
@@ -111,6 +113,9 @@ void KidsModeConfig::ApplyPreset(KidsPreset preset) noexcept {
       accel_threshold_g = 0.10f;
       accel_limit_gain = 5.0f;
       accel_max_reduction = 0.7f;
+      speed_limit_enabled = true;
+      max_speed_ms = 0.5f;
+      speed_limit_gain = 8.0f;
       break;
 
     case KidsPreset::Child:
@@ -125,6 +130,9 @@ void KidsModeConfig::ApplyPreset(KidsPreset preset) noexcept {
       accel_threshold_g = 0.15f;
       accel_limit_gain = 3.0f;
       accel_max_reduction = 0.5f;
+      speed_limit_enabled = true;
+      max_speed_ms = 1.0f;
+      speed_limit_gain = 5.0f;
       break;
 
     case KidsPreset::Preteen:
@@ -139,6 +147,9 @@ void KidsModeConfig::ApplyPreset(KidsPreset preset) noexcept {
       accel_threshold_g = 0.20f;
       accel_limit_gain = 2.0f;
       accel_max_reduction = 0.3f;
+      speed_limit_enabled = true;
+      max_speed_ms = 2.0f;
+      speed_limit_gain = 3.0f;
       break;
 
     default:

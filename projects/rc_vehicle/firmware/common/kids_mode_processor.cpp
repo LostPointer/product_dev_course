@@ -82,6 +82,24 @@ void KidsModeProcessor::Process(float& throttle, float& steering,
         std::min(excess * km.accel_limit_gain, km.accel_max_reduction);
     throttle *= (1.0f - reduction);
   }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 5. Ограничение по скорости (EKF, feedback-based)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  speed_limit_active_ = false;
+
+  if (km.speed_limit_enabled && ekf_ && imu_ && imu_->IsEnabled() &&
+      throttle > 0.0f) {
+    const float speed = ekf_->GetSpeedMs();
+    if (speed > km.max_speed_ms) {
+      speed_limit_active_ = true;
+      const float excess = speed - km.max_speed_ms;
+      const float reduction = std::min(excess * km.speed_limit_gain, 1.0f);
+      throttle *= (1.0f - reduction);
+      throttle = std::max(throttle, 0.0f);
+    }
+  }
 }
 
 void KidsModeProcessor::Reset() noexcept {
@@ -89,6 +107,7 @@ void KidsModeProcessor::Reset() noexcept {
   smoothed_steering_ = 0.0f;
   anti_spin_active_ = false;
   accel_limit_active_ = false;
+  speed_limit_active_ = false;
 }
 
 }  // namespace rc_vehicle

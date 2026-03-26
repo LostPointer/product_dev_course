@@ -122,6 +122,12 @@ cJSON* StabilizationConfigToJson(const StabilizationConfig& cfg) {
                             cfg.kids_mode.accel_limit_gain);
     cJSON_AddNumberToObject(kids_mode, "accel_max_reduction",
                             cfg.kids_mode.accel_max_reduction);
+    cJSON_AddBoolToObject(kids_mode, "speed_limit_enabled",
+                          cfg.kids_mode.speed_limit_enabled);
+    cJSON_AddNumberToObject(kids_mode, "max_speed_ms",
+                            cfg.kids_mode.max_speed_ms);
+    cJSON_AddNumberToObject(kids_mode, "speed_limit_gain",
+                            cfg.kids_mode.speed_limit_gain);
   }
 
   // Slew rate
@@ -250,6 +256,10 @@ void StabilizationConfigFromJson(StabilizationConfig& cfg, const cJSON* json) {
     get_float(kids_mode, "accel_limit_gain", cfg.kids_mode.accel_limit_gain);
     get_float(kids_mode, "accel_max_reduction",
               cfg.kids_mode.accel_max_reduction);
+    get_bool(kids_mode, "speed_limit_enabled",
+             cfg.kids_mode.speed_limit_enabled);
+    get_float(kids_mode, "max_speed_ms", cfg.kids_mode.max_speed_ms);
+    get_float(kids_mode, "speed_limit_gain", cfg.kids_mode.speed_limit_gain);
   }
 
   // Slew rate

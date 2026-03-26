@@ -821,6 +821,17 @@ function applyStabConfig(cfg) {
         const sEl = $('kids-steering-value');
         if (tEl) tEl.textContent = tPct;
         if (sEl) sEl.textContent = sPct;
+
+        const speedEnabled = km.speed_limit_enabled ?? false;
+        const maxSpeedMs = km.max_speed_ms ?? 1.5;
+        const chk = $('kids-speed-limit-enabled');
+        if (chk) chk.checked = speedEnabled;
+        const sliderVal = Math.round(maxSpeedMs * 10);
+        set('kids-max-speed', sliderVal);
+        const spEl = $('kids-max-speed-value');
+        if (spEl) spEl.textContent = maxSpeedMs.toFixed(1);
+        const speedRow = $('kids-speed-row');
+        if (speedRow) speedRow.style.display = speedEnabled ? 'flex' : 'none';
     }
 }
 
@@ -893,6 +904,8 @@ function saveStabConfig() {
             throttle_limit: kidsThrottleLimit,
             reverse_limit: kidsThrottleLimit,
             steering_limit: kidsSteeringLimit,
+            speed_limit_enabled: $('kids-speed-limit-enabled')?.checked ?? false,
+            max_speed_ms: ($('kids-max-speed') ? parseInt($('kids-max-speed').value) / 10.0 : 1.5),
         },
         slew_steering: getF('slew-steering'),
         slew_throttle: getF('slew-throttle'),
@@ -1357,6 +1370,18 @@ if (kidsSteeringSliderEl) kidsSteeringSliderEl.addEventListener('input', (e) => 
     const pct = parseInt(e.target.value);
     kidsSteeringLimit = pct / 100;
     if (kidsSteeringValueEl) kidsSteeringValueEl.textContent = pct;
+});
+
+const kidsSpeedChkEl = $('kids-speed-limit-enabled');
+const kidsSpeedSliderEl = $('kids-max-speed');
+const kidsSpeedValueEl = $('kids-max-speed-value');
+const kidsSpeedRowEl = $('kids-speed-row');
+if (kidsSpeedChkEl) kidsSpeedChkEl.addEventListener('change', (e) => {
+    if (kidsSpeedRowEl) kidsSpeedRowEl.style.display = e.target.checked ? 'flex' : 'none';
+});
+if (kidsSpeedSliderEl) kidsSpeedSliderEl.addEventListener('input', (e) => {
+    const ms = parseInt(e.target.value) / 10.0;
+    if (kidsSpeedValueEl) kidsSpeedValueEl.textContent = ms.toFixed(1);
 });
 
 // Slew rate sliders

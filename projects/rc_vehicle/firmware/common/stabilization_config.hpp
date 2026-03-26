@@ -368,6 +368,15 @@ struct KidsModeConfig {
   /** Максимальное снижение throttle от accel limiter [0..1] */
   float accel_max_reduction{0.5f};
 
+  /** Включить ограничение по скорости (EKF) */
+  bool speed_limit_enabled{false};
+
+  /** Максимальная скорость [м/с]; при превышении throttle снижается [0.3..5.0] */
+  float max_speed_ms{1.5f};
+
+  /** P-коэффициент регулятора скорости: excess_ms * gain → снижение [0.5..10.0] */
+  float speed_limit_gain{5.0f};
+
   /**
    * @brief Проверить валидность конфигурации Kids Mode
    */
@@ -382,7 +391,9 @@ struct KidsModeConfig {
            anti_spin_reduction <= 1.0f &&
            accel_threshold_g >= 0.05f && accel_threshold_g <= 0.5f &&
            accel_limit_gain >= 0.5f && accel_limit_gain <= 10.0f &&
-           accel_max_reduction >= 0.0f && accel_max_reduction <= 1.0f;
+           accel_max_reduction >= 0.0f && accel_max_reduction <= 1.0f &&
+           max_speed_ms >= 0.3f && max_speed_ms <= 5.0f &&
+           speed_limit_gain >= 0.5f && speed_limit_gain <= 10.0f;
   }
 
   /**

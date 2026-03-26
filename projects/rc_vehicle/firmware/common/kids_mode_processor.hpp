@@ -65,6 +65,14 @@ class KidsModeProcessor {
   }
 
   /**
+   * @brief Проверить, сработало ли ограничение по скорости (EKF)
+   * @return true если speed limiter снижает throttle
+   */
+  [[nodiscard]] bool IsSpeedLimitActive() const noexcept {
+    return speed_limit_active_;
+  }
+
+  /**
    * @brief Сбросить состояние процессора
    */
   void Reset() noexcept;
@@ -78,6 +86,7 @@ class KidsModeProcessor {
   float smoothed_steering_{0.0f};
   bool anti_spin_active_{false};
   bool accel_limit_active_{false};
+  bool speed_limit_active_{false};
 };
 
 }  // namespace rc_vehicle
