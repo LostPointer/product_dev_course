@@ -5,11 +5,11 @@
 #include <iomanip>
 
 #include "config.hpp"
+#include "control_loop_helpers.hpp"
 #include "diagnostics_reporter.hpp"
 #include "drive_mode_registry.hpp"
 #include "log_format.hpp"
 #include "rc_vehicle_common.hpp"
-#include "slew_rate.hpp"
 #include "telemetry_builder.hpp"
 
 #ifdef ESP_PLATFORM
@@ -73,38 +73,11 @@ void VehicleControlUnified::ControlTaskLoop() {
     if (wifi_handler_) wifi_handler_->Update(now, dt_ms);
     if (imu_handler_) imu_handler_->Update(now, dt_ms);
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Sensor snapshot — атомарный снимок состояния датчиков.
-    // Собирается один раз и используется во всех этапах итерации.
-    // ─────────────────────────────────────────────────────────────────────
-
-    SensorSnapshot sensors;
-    sensors.rc_active = rc_handler_ && rc_handler_->IsActive();
-    if (sensors.rc_active) {
-      sensors.rc_cmd = rc_handler_->GetCommand();
-    }
-    sensors.wifi_active = wifi_handler_ && wifi_handler_->IsActive();
-    if (sensors.wifi_active) {
-      sensors.wifi_cmd = wifi_handler_->GetCommand();
-    }
-    sensors.imu_enabled = imu_handler_ && imu_handler_->IsEnabled();
-    if (sensors.imu_enabled) {
-      sensors.imu_data = imu_handler_->GetData();
-      sensors.filtered_gz = imu_handler_->GetFilteredGyroZ();
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Коррекция акселерометра за смещение IMU от центра масс
-    // ─────────────────────────────────────────────────────────────────────
-
-    if (sensors.imu_enabled && dt_ms > 0) {
-      constexpr float kDeg2Rad = 3.14159265358979f / 180.0f;
-      const float dt_sec = static_cast<float>(dt_ms) * 0.001f;
-      const float gz_rad = sensors.filtered_gz * kDeg2Rad;
-      const float alpha_rad = (gz_rad - prev_gz_rad_s_) / dt_sec;
-      imu_calib_.CorrectForComOffset(sensors.imu_data, gz_rad, alpha_rad);
-      prev_gz_rad_s_ = gz_rad;
-    }
+    // Sensor snapshot + CoM correction
+    auto sensors = BuildSensorSnapshot(rc_handler_.get(), wifi_handler_.get(),
+                                       imu_handler_.get());
+    prev_gz_rad_s_ =
+        CorrectImuForComOffset(sensors, imu_calib_, prev_gz_rad_s_, dt_ms);
 
     // ─────────────────────────────────────────────────────────────────────
     // EKF: оценка динамического состояния (vx, vy, r → slip angle)
@@ -137,54 +110,15 @@ void VehicleControlUnified::ControlTaskLoop() {
     // ─────────────────────────────────────────────────────────────────────
 
     {
-      AutoDriveInput ad_input;
-      ad_input.rc_active = sensors.rc_active;
-      ad_input.imu_enabled = sensors.imu_enabled;
-      ad_input.dt_sec = static_cast<float>(dt_ms) * 0.001f;
-      if (sensors.imu_enabled) {
-        ad_input.fwd_accel = imu_calib_.GetForwardAccel(sensors.imu_data);
-        ad_input.accel_mag = std::sqrt(
-            sensors.imu_data.ax * sensors.imu_data.ax +
-            sensors.imu_data.ay * sensors.imu_data.ay +
-            sensors.imu_data.az * sensors.imu_data.az);
-        ad_input.cal_ax = sensors.imu_data.ax;
-        ad_input.cal_ay = sensors.imu_data.ay;
-        ad_input.gyro_z = sensors.filtered_gz;
-      }
-
-      auto ad_out = auto_drive_.Update(ad_input);
+      auto ad_out =
+          auto_drive_.Update(BuildAutoDriveInput(sensors, imu_calib_, dt_ms));
       if (ad_out.active) {
         commanded_throttle = ad_out.throttle;
         commanded_steering = ad_out.steering;
       }
 
-      // Применить результат завершённой калибровки trim
-      if (ad_out.trim_completed) {
-        if (ad_out.trim_result.valid && stab_mgr_) {
-          auto cfg = stab_mgr_->GetConfig();
-          cfg.steering_trim = ad_out.trim_result.trim;
-          stab_mgr_->SetConfig(cfg, true);
-          platform_->Log(LogLevel::Info, "Steering trim calibration done");
-        } else if (!ad_out.trim_result.valid) {
-          platform_->Log(LogLevel::Warning,
-                         "Steering trim calibration failed");
-        }
-      }
-
-      // Применить результат завершённой калибровки CoM offset
-      if (ad_out.com_completed) {
-        if (ad_out.com_result.valid) {
-          auto data = imu_calib_.GetData();
-          data.com_offset[0] = ad_out.com_result.rx;
-          data.com_offset[1] = ad_out.com_result.ry;
-          imu_calib_.SetData(data);
-          platform_->SaveComOffset(data.com_offset);
-          platform_->Log(LogLevel::Info, "CoM offset calibration done");
-        } else {
-          platform_->Log(LogLevel::Warning,
-                         "CoM offset calibration failed");
-        }
-      }
+      HandleAutoDriveCompletion(ad_out, stab_mgr_.get(), imu_calib_,
+                                *platform_);
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -269,10 +203,11 @@ void VehicleControlUnified::ControlTaskLoop() {
     const float thr_trim = stab_cfg.throttle_trim;
 
     if (traits.use_slew_rate) {
-      UpdatePwmWithSlewRate(now, commanded_throttle, commanded_steering,
-                            applied_throttle, applied_steering, last_pwm_update,
-                            thr_trim, steer_trim,
-                            stab_cfg.slew_throttle, stab_cfg.slew_steering);
+      UpdatePwmWithSlewRate(*platform_, now, commanded_throttle,
+                            commanded_steering, applied_throttle,
+                            applied_steering, last_pwm_update, thr_trim,
+                            steer_trim, stab_cfg.slew_throttle,
+                            stab_cfg.slew_steering);
     } else {
       applied_throttle = commanded_throttle + thr_trim;
       applied_steering = commanded_steering + steer_trim;
@@ -368,71 +303,10 @@ PlatformError VehicleControlUnified::Init() {
   }
 
   // IMU (опционально)
-  auto imu_result = platform_->InitImu();
-  if (IsOk(imu_result)) {
-    imu_enabled_ = true;
+  InitImuSubsystem();
 
-    // Создание менеджеров (должно быть до загрузки конфигурации)
-    calib_mgr_.reset(
-        new CalibrationManager(*platform_, imu_calib_, madgwick_, &ekf_));
-    stab_mgr_.reset(new StabilizationManager(*platform_, madgwick_, yaw_ctrl_,
-                                             slip_ctrl_, nullptr));
-    telem_mgr_.reset(new TelemetryManager());
-
-    // Связать координатор авто-процедур с менеджером калибровки
-    auto_drive_.SetCalibrationManager(calib_mgr_.get());
-
-    // Загрузка калибровки из NVS
-    calib_mgr_->LoadFromNvs();
-
-    // Загрузка CoM offset из NVS (отдельный ключ)
-    {
-      float com_off[2]{0.f, 0.f};
-      if (platform_->LoadComOffset(com_off)) {
-        auto data = imu_calib_.GetData();
-        data.com_offset[0] = com_off[0];
-        data.com_offset[1] = com_off[1];
-        imu_calib_.SetData(data);
-      }
-    }
-
-    // Загрузка конфигурации стабилизации из NVS
-    stab_mgr_->LoadFromNvs();
-
-    // Применить конфигурацию к фильтрам
-    stab_mgr_->ApplyConfig();
-
-    // Автокалибровка при старте
-    calib_mgr_->StartAutoCalibration();
-  } else {
-    imu_enabled_ = false;
-    const int who = platform_->GetImuLastWhoAmI();
-    platform_->Log(LogLevel::Warning,
-                   "IMU init failed — continuing without IMU");
-    if (who >= 0) {
-      LogFormat fmt;
-      fmt << "IMU WHO_AM_I = 0x" << std::hex << std::setw(2)
-          << std::setfill('0') << static_cast<unsigned>(who);
-      platform_->Log(LogLevel::Info, fmt.str());
-    }
-  }
-
-  // ───────────────────────────────────────────────────────────────────────
-  // Инициализация кольцевого буфера телеметрии (Phase 4.3)
-  // 60000 кадров × 80 байт ≈ 4.6 МБ → выделяется из PSRAM
-  // ───────────────────────────────────────────────────────────────────────
-
-  if (!telem_mgr_->Init(config::TelemetryLogConfig::kCapacityFrames)) {
-    platform_->Log(
-        LogLevel::Warning,
-        "TelemetryLog: failed to allocate (no PSRAM?), log disabled");
-  } else {
-    LogFormat fmt;
-    fmt << "TelemetryLog: allocated "
-        << static_cast<unsigned>(config::TelemetryLogConfig::kCapacityFrames)
-        << " frames";
-    platform_->Log(LogLevel::Info, fmt.str());
-  }
+  // Инициализация кольцевого буфера телеметрии
+  InitTelemetryLog();
 
   // ───────────────────────────────────────────────────────────────────────
   // Создание компонентов control loop
@@ -503,50 +377,6 @@ bool VehicleControlUnified::InitializeComponents() {
   return true;
 }
 
-bool VehicleControlUnified::SelectControlSource(
-    const SensorSnapshot& sensors, float& commanded_throttle,
-    float& commanded_steering) {
-  if (sensors.rc_active && sensors.rc_cmd) {
-    commanded_throttle = sensors.rc_cmd->throttle;
-    commanded_steering = sensors.rc_cmd->steering;
-    return true;
-  }
-
-  if (sensors.wifi_active && sensors.wifi_cmd) {
-    commanded_throttle = sensors.wifi_cmd->throttle;
-    commanded_steering = sensors.wifi_cmd->steering;
-    return true;
-  }
-
-  return false;
-}
-
-void VehicleControlUnified::UpdatePwmWithSlewRate(uint32_t now_ms,
-                                                  float commanded_throttle,
-                                                  float commanded_steering,
-                                                  float& applied_throttle,
-                                                  float& applied_steering,
-                                                  uint32_t& last_pwm_update,
-                                                  float throttle_trim,
-                                                  float steering_trim,
-                                                  float slew_throttle_per_sec,
-                                                  float slew_steering_per_sec) {
-  if (now_ms - last_pwm_update >= config::PwmConfig::kUpdateIntervalMs) {
-    const uint32_t pwm_dt_ms = now_ms - last_pwm_update;
-    last_pwm_update = now_ms;
-
-    applied_throttle =
-        ApplySlewRate(commanded_throttle, applied_throttle,
-                      slew_throttle_per_sec, pwm_dt_ms);
-    applied_steering =
-        ApplySlewRate(commanded_steering, applied_steering,
-                      slew_steering_per_sec, pwm_dt_ms);
-
-    platform_->SetPwm(applied_throttle + throttle_trim,
-                      applied_steering + steering_trim);
-  }
-}
-
 
 
 bool VehicleControlUnified::StartComOffsetCalibration(
@@ -578,57 +408,67 @@ void VehicleControlUnified::OnWifiCommand(float throttle, float steering) {
   }
 }
 
+void VehicleControlUnified::InitImuSubsystem() {
+  auto imu_result = platform_->InitImu();
+  if (IsOk(imu_result)) {
+    imu_enabled_ = true;
+
+    calib_mgr_.reset(
+        new CalibrationManager(*platform_, imu_calib_, madgwick_, &ekf_));
+    stab_mgr_.reset(new StabilizationManager(*platform_, madgwick_, yaw_ctrl_,
+                                             slip_ctrl_, nullptr));
+    telem_mgr_.reset(new TelemetryManager());
+
+    auto_drive_.SetCalibrationManager(calib_mgr_.get());
+    calib_mgr_->LoadFromNvs();
+
+    // Загрузка CoM offset из NVS
+    float com_off[2]{0.f, 0.f};
+    if (platform_->LoadComOffset(com_off)) {
+      auto data = imu_calib_.GetData();
+      data.com_offset[0] = com_off[0];
+      data.com_offset[1] = com_off[1];
+      imu_calib_.SetData(data);
+    }
+
+    stab_mgr_->LoadFromNvs();
+    stab_mgr_->ApplyConfig();
+    calib_mgr_->StartAutoCalibration();
+  } else {
+    imu_enabled_ = false;
+    const int who = platform_->GetImuLastWhoAmI();
+    platform_->Log(LogLevel::Warning,
+                   "IMU init failed — continuing without IMU");
+    if (who >= 0) {
+      LogFormat fmt;
+      fmt << "IMU WHO_AM_I = 0x" << std::hex << std::setw(2)
+          << std::setfill('0') << static_cast<unsigned>(who);
+      platform_->Log(LogLevel::Info, fmt.str());
+    }
+  }
+}
+
+void VehicleControlUnified::InitTelemetryLog() {
+  if (!telem_mgr_->Init(config::TelemetryLogConfig::kCapacityFrames)) {
+    platform_->Log(
+        LogLevel::Warning,
+        "TelemetryLog: failed to allocate (no PSRAM?), log disabled");
+  } else {
+    LogFormat fmt;
+    fmt << "TelemetryLog: allocated "
+        << static_cast<unsigned>(config::TelemetryLogConfig::kCapacityFrames)
+        << " frames";
+    platform_->Log(LogLevel::Info, fmt.str());
+  }
+}
+
 std::vector<SelfTestItem> VehicleControlUnified::RunSelfTest() const {
-  SelfTestInput input;
-
-  // Control loop frequency
-  input.loop_hz = last_loop_hz_.load(std::memory_order_relaxed);
-
-  // IMU
-  if (imu_handler_) {
-    input.imu_enabled = imu_handler_->IsEnabled();
-    const auto& imu = imu_handler_->GetData();
-    input.gyro_x_dps = imu.gx;
-    input.gyro_y_dps = imu.gy;
-    input.gyro_z_dps = imu.gz;
-    input.accel_x_g = imu.ax;
-    input.accel_y_g = imu.ay;
-    input.accel_z_g = imu.az;
-  }
-
-  // Madgwick
-  {
-    float pitch = 0, roll = 0, yaw = 0;
-    madgwick_.GetEulerDeg(pitch, roll, yaw);
-    input.pitch_deg = pitch;
-    input.roll_deg = roll;
-  }
-
-  // EKF
-  input.ekf_vx = ekf_.GetVx();
-  input.ekf_vy = ekf_.GetVy();
-
-  // Failsafe — check via telemetry snapshot (failsafe is private in platform)
-  // We check if RC or WiFi are active; if neither, failsafe would be active
-  bool rc_ok = rc_handler_ && rc_handler_->IsActive();
-  bool wifi_ok = wifi_handler_ && wifi_handler_->IsActive();
-  // Self-test is called from WS handler, so WiFi should be active
-  input.failsafe_active = !rc_ok && !wifi_ok;
-
-  // Calibration
-  input.calib_valid = imu_calib_.IsValid();
-
-  // TelemetryLog
-  if (telem_mgr_) {
-    size_t count = 0, cap = 0;
-    telem_mgr_->GetLogInfo(count, cap);
-    input.log_capacity = cap;
-  }
-
-  // PWM — assume ok if platform exists and is initialized
-  input.pwm_status = (platform_ && inited_) ? 0 : -1;
-
-  return SelfTest::Run(input);
+  const SelfTestContext ctx{last_loop_hz_,   imu_handler_.get(),
+                            madgwick_,       ekf_,
+                            rc_handler_.get(), wifi_handler_.get(),
+                            imu_calib_,      telem_mgr_.get(),
+                            platform_ != nullptr, inited_};
+  return SelfTest::Run(BuildSelfTestInput(ctx));
 }
 
 }  // namespace rc_vehicle

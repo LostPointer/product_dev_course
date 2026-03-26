@@ -272,39 +272,15 @@ class VehicleControlUnified : public IVehicleControl {
    */
   void ControlTaskLoop();
 
-  /**
-   * @brief Инициализация компонентов control loop
-   * @return true при успехе
-   */
+  /** Инициализация IMU подсистемы (менеджеры, NVS, авто-калибровка). */
+  void InitImuSubsystem();
+
+  /** Инициализация кольцевого буфера телеметрии. */
+  void InitTelemetryLog();
+
+  /** Создание компонентов control loop. */
   bool InitializeComponents();
 
-  /**
-   * @brief Выбор источника управления (RC приоритетнее Wi-Fi)
-   * @param commanded_throttle Выходной параметр: газ
-   * @param commanded_steering Выходной параметр: руль
-   * @return true если есть активный источник управления
-   */
-  bool SelectControlSource(const SensorSnapshot& sensors,
-                           float& commanded_throttle,
-                           float& commanded_steering);
-
-  /**
-   * @brief Обновление PWM с slew rate
-   * @param now_ms Текущее время
-   * @param commanded_throttle Целевой газ
-   * @param commanded_steering Целевой руль
-   * @param applied_throttle Текущий применённый газ (in/out)
-   * @param applied_steering Текущий применённый руль (in/out)
-   * @param last_pwm_update Время последнего обновления PWM (in/out)
-   */
-  void UpdatePwmWithSlewRate(uint32_t now_ms, float commanded_throttle,
-                             float commanded_steering, float& applied_throttle,
-                             float& applied_steering,
-                             uint32_t& last_pwm_update,
-                             float throttle_trim = 0.0f,
-                             float steering_trim = 0.0f,
-                             float slew_throttle_per_sec = 0.5f,
-                             float slew_steering_per_sec = 3.0f);
 
 
   // ─────────────────────────────────────────────────────────────────────────

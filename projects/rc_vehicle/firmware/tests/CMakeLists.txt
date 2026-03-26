@@ -62,6 +62,7 @@ set(COMMON_SOURCES
     ${COMMON_DIR}/auto_drive_coordinator.cpp
     ${COMMON_DIR}/telemetry_builder.cpp
     ${COMMON_DIR}/diagnostics_reporter.cpp
+    ${COMMON_DIR}/control_loop_helpers.cpp
 )
 
 # Include directories
