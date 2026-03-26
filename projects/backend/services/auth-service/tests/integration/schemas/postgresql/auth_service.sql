@@ -9,6 +9,7 @@ DROP TABLE IF EXISTS schema_migrations CASCADE;
 DROP TABLE IF EXISTS invite_tokens CASCADE;
 DROP TABLE IF EXISTS password_reset_tokens CASCADE;
 DROP TABLE IF EXISTS revoked_tokens CASCADE;
+DROP TABLE IF EXISTS refresh_token_families CASCADE;
 DROP TABLE IF EXISTS audit_log CASCADE;
 DROP TABLE IF EXISTS user_project_roles CASCADE;
 DROP TABLE IF EXISTS user_system_roles CASCADE;
@@ -175,11 +176,21 @@ CREATE INDEX audit_log_target_idx ON audit_log (target_type, target_id);
 -- Auth tokens
 -- =============================================================================
 
+CREATE TABLE refresh_token_families (
+    id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id    UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    revoked_at TIMESTAMPTZ
+);
+
+CREATE INDEX idx_rtf_user ON refresh_token_families(user_id);
+
 CREATE TABLE revoked_tokens (
     jti        uuid        PRIMARY KEY,
     user_id    uuid        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     expires_at timestamptz NOT NULL,
-    revoked_at timestamptz NOT NULL DEFAULT now()
+    revoked_at timestamptz NOT NULL DEFAULT now(),
+    family_id  uuid        REFERENCES refresh_token_families(id)
 );
 
 CREATE INDEX revoked_tokens_expires_at_idx ON revoked_tokens (expires_at);
