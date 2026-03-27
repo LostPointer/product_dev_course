@@ -45,3 +45,19 @@ inline esp_err_t VehicleControlInit(void) {
 inline void VehicleControlOnWifiCommand(float throttle, float steering) {
   detail::GetVehicleControl().OnWifiCommand(throttle, steering);
 }
+
+/** Текущее число кадров в буфере телеметрии и его ёмкость. */
+inline void VehicleControlGetLogInfo(size_t* count_out, size_t* cap_out) {
+  if (!count_out || !cap_out) {
+    return;
+  }
+  detail::GetVehicleControl().GetLogInfo(*count_out, *cap_out);
+}
+
+/** Кадр телеметрии по индексу (0 = самый старый). */
+inline bool VehicleControlGetLogFrame(size_t idx, TelemetryLogFrame* out) {
+  if (!out) {
+    return false;
+  }
+  return detail::GetVehicleControl().GetLogFrame(idx, *out);
+}
