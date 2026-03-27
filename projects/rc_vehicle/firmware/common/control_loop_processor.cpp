@@ -136,7 +136,7 @@ void ControlLoopProcessor::UpdatePwm(uint32_t now, uint32_t dt_ms) {
   if (traits.use_slew_rate) {
     float effective_slew_thr = stab_cfg_.slew_throttle;
     if (stab_cfg_.braking_mode == BrakingMode::Brake &&
-        commanded_throttle_ < applied_throttle_) {
+        std::abs(commanded_throttle_) < std::abs(applied_throttle_)) {
       effective_slew_thr *= stab_cfg_.brake_slew_multiplier;
     }
     UpdatePwmWithSlewRate(ctx_.platform, now, commanded_throttle_,

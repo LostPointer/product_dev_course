@@ -143,7 +143,7 @@ invalid input value for enum conversion_profile_status: "archived"
 
 ### BUG-RC-003 — Failsafe не потокобезопасен
 **Приоритет:** HIGH
-**Статус:** [ ] Открыт
+**Статус:** [x] Исправлен
 **Файл:** `projects/rc_vehicle/firmware/common/failsafe.cpp`
 
 `last_active_ms_`, `state_`, `initialized_` читаются и пишутся из разных FreeRTOS-задач без синхронизации.
@@ -154,7 +154,7 @@ invalid input value for enum conversion_profile_status: "archived"
 
 ### BUG-RC-004 — Нестабильный угол заноса при нулевой скорости
 **Приоритет:** HIGH
-**Статус:** [ ] Открыт
+**Статус:** [x] Исправлен
 **Файл:** `projects/rc_vehicle/firmware/common/vehicle_ekf.cpp:140-142`
 
 ```cpp
@@ -167,7 +167,7 @@ return std::atan2(x_[1], x_[0]);  // нестабильно при vx≈0, vy≈
 
 ### BUG-RC-005 — Переполнение uint32_t в расчёте dt_ms
 **Приоритет:** MEDIUM
-**Статус:** [ ] Открыт
+**Статус:** [x] Исправлен
 **Файл:** `projects/rc_vehicle/firmware/common/vehicle_control_unified.cpp`
 
 После ~49 дней работы `millis()` переполняется — один цикл получает огромный `dt_ms`.
@@ -178,7 +178,7 @@ return std::atan2(x_[1], x_[0]);  // нестабильно при vx≈0, vy≈
 
 ### BUG-RC-006 — NVS Load не вызывает Clamp()
 **Приоритет:** MEDIUM
-**Статус:** [ ] Открыт
+**Статус:** [x] Исправлен
 **Файл:** `projects/rc_vehicle/firmware/esp32_common/stabilization_config_nvs.cpp:31-42`
 
 Данные из NVS могут быть из старой прошивки с другим диапазоном значений — `Clamp()` не вызывается.
@@ -189,7 +189,7 @@ return std::atan2(x_[1], x_[0]);  // нестабильно при vx≈0, vy≈
 
 ### BUG-RC-007 — LPF Butterworth: нет guard на граничные частоты
 **Приоритет:** MEDIUM
-**Статус:** [ ] Открыт
+**Статус:** [x] Исправлен
 **Файл:** `projects/rc_vehicle/firmware/common/lpf_butterworth.cpp:16-26`
 
 `tan(pi * fc / fs)` при `fc == fs/2` даёт `+inf`.
@@ -203,7 +203,7 @@ if (cutoff_hz <= 0.0f || cutoff_hz >= sample_rate_hz * 0.5f) return false;
 
 ### BUG-RC-008 — RxBuffer::Advance() молча обрезает данные
 **Приоритет:** LOW
-**Статус:** [ ] Открыт
+**Статус:** [x] Исправлен
 **Файл:** `projects/rc_vehicle/firmware/common/uart_bridge_base.hpp:74-77`
 
 ```cpp
@@ -216,7 +216,7 @@ if (pos_ > CAPACITY) pos_ = CAPACITY;  // молчаливая потеря да
 
 ### BUG-RC-009 — nullptr не проверяется в Init() контроллеров
 **Приоритет:** LOW
-**Статус:** [ ] Открыт
+**Статус:** [x] Исправлен
 **Файл:** `projects/rc_vehicle/firmware/common/stabilization_pipeline.cpp:12-18`
 
 `YawRateController::Init()`, `PitchCompensator::Init()` принимают указатели без проверки на `nullptr`.
@@ -227,7 +227,7 @@ if (pos_ > CAPACITY) pos_ = CAPACITY;  // молчаливая потеря да
 
 ### BUG-RC-010 — Произвольный порог в UpdateGyroZ
 **Приоритет:** LOW
-**Статус:** [ ] Открыт
+**Статус:** [x] Исправлен
 **Файл:** `projects/rc_vehicle/firmware/common/vehicle_ekf.cpp:101`
 
 ```cpp
@@ -235,3 +235,43 @@ if (S < 1e-9f) return;  // порог выбран без обоснования
 ```
 
 **Исправление:** заменить на `if (S < params_.r_gz * 1e-3f)` или задокументировать константу.
+
+---
+
+### BUG-RC-011 — Ускорение при движении назад в режиме торможения
+**Приоритет:** HIGH
+**Статус:** [x] Исправлен
+**Файл:** `projects/rc_vehicle/firmware/common/control_loop_processor.cpp:138-140`, `projects/rc_vehicle/firmware/common/kids_mode_processor.cpp:31-35`
+
+При включённом режиме торможения (`braking_mode = Brake`, не накат) при движении назад машина начинает постоянно ускоряться вместо торможения/замедления.
+
+**Ожидаемое поведение:** при движении назад (отрицательная скорость) и отпускании газа/торможении машина должна замедляться.
+
+**Возможная причина:** логика применения `brake_slew_multiplier` или знак throttle не учитывается при движении назад.
+
+**Исправление:** проверить применение `brake_slew_multiplier` в `control_loop_processor.cpp`, логику ограничения `reverse_limit` в `kids_mode_processor.cpp`. Требуется отладка на реальном устройстве с телеметрией.
+
+---
+
+### BUG-RC-012 — Машина не двигается при малых значениях throttle в тестовых режимах
+**Приоритет:** MEDIUM
+**Статус:** [ ] Открыт
+**Файл:** `projects/rc_vehicle/firmware/common/calibration_manager.cpp`, `projects/rc_vehicle/firmware/common/test_runner.cpp`, `projects/rc_vehicle/firmware/common/speed_calibration.cpp`
+
+В автоматических тестовых режимах (авто-калибровка, тестовые прогоны) машина стоит на месте при малых значениях throttle.
+
+**Ожидаемое поведение:** машина должна начинать движение при любых положительных значениях throttle.
+
+**Возможные причины:**
+1. **Мёртвая зона ESC:** ESC не реагирует на PWM < ~1550 мкс (требуется калибровка минимального газа)
+2. **Неверная калибровка ESC:** не пройдена процедура калибровки мин/макс PWM для конкретного ESC
+3. **Слишком низкий `kAccelerateThrottle`:** значение по умолчанию недостаточно для преодоления трения/инерции
+4. **Failsafe срабатывает слишком рано:** 250 мс таймаут может срабатывать до начала движения
+
+**Исправление:**
+- Добавить калибровку минимального рабочего PWM ESC (процедура: найти мин. PWM при котором мотор начинает вращаться)
+- Увеличить `kAccelerateThrottle` в тестовых режимах (например, с 0.2 до 0.3-0.4)
+- Проверить/увеличить таймаут failsafe для тестовых режимов
+- Добавить проверку фактического движения по IMU (accel > порога) перед продолжением теста
+
+**Зависимости:** требуется отладка на реальном устройстве с телеметрией PWM и IMU.
