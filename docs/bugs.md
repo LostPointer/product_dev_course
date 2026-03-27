@@ -84,6 +84,38 @@ if (navigator.clipboard) {
 
 ---
 
+## Backend (Experiment Service)
+
+### BUG-B-001 — Worker `activate_scheduled_profiles` падает с `invalid input value for enum conversion_profile_status: "archived"`
+**Приоритет:** HIGH
+**Статус:** [ ] Открыт
+**Файл:** `projects/backend/services/experiment-service/src/experiment_service/workers/activate_scheduled_profiles.py:30`
+
+Воркер падает при каждом запуске с ошибкой:
+```
+asyncpg.exceptions.InvalidTextRepresentationError:
+invalid input value for enum conversion_profile_status: "archived"
+```
+
+В коде воркера используется значение `"archived"` для enum `conversion_profile_status`, которого не существует в БД. Допустимые значения: `draft`, `scheduled`, `active`, `deprecated`.
+
+**Исправление:** заменить `"archived"` на `"deprecated"` в запросе в `activate_scheduled_profiles.py`.
+
+---
+
+### BUG-B-002 — В Live telemetry (SSE) не пересчитываются значения (raw → physical)
+**Приоритет:** HIGH
+**Статус:** [ ] Открыт
+
+В `TelemetryStreamModal` данные приходят, но `physical_value` отсутствует или равен `null` — пересчёт через активный профиль не применяется в real-time потоке.
+
+**Возможные причины:**
+- SSE-эндпоинт возвращает только `raw_value`, не применяя профиль
+- Profile cache не прогрет / TTL истёк и профиль не подтягивается для SSE-пути
+- Воркер `activate_scheduled_profiles` падает (BUG-B-001) и профиль остаётся в `scheduled`, не переходя в `active`
+
+---
+
 ## Observability / Grafana
 
 ### BUG-O-001 — В Grafana (прод) не работают логи, нельзя выбрать лейблы

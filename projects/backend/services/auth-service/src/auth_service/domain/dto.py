@@ -96,26 +96,29 @@ class AuthTokensResponse(BaseModel):
 
 
 class UserResponse(BaseModel):
-    """User response (без is_admin — заменён системными ролями)."""
+    """User response."""
 
     id: str
     username: str
     email: str
     password_change_required: bool = False
     is_active: bool = True
+    is_admin: bool = False
     system_roles: list[str] = Field(default_factory=list)
     created_at: str = ""
 
     @classmethod
     def from_user(cls, user: "User", system_roles: list[str] | None = None) -> "UserResponse":
         """Create UserResponse from a User domain model."""
+        roles = system_roles or []
         return cls(
             id=str(user.id),
             username=user.username,
             email=user.email,
             password_change_required=user.password_change_required,
             is_active=user.is_active,
-            system_roles=system_roles or [],
+            is_admin="admin" in roles or "superadmin" in roles,
+            system_roles=roles,
             created_at=user.created_at.isoformat(),
         )
 
@@ -148,6 +151,7 @@ class AdminUserUpdateRequest(BaseModel):
     """Admin update of user fields."""
 
     is_active: bool | None = None
+    is_admin: bool | None = None
 
 
 class PasswordChangeRequest(BaseModel):

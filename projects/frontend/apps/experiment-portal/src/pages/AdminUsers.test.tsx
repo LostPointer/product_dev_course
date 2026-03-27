@@ -49,6 +49,7 @@ const regularUser = {
     email: 'regular@example.com',
     is_active: true,
     is_admin: false,
+    system_roles: [] as string[],
     password_change_required: false,
     created_at: '2024-02-01T12:00:00Z',
 }
@@ -59,6 +60,7 @@ const inactiveUser = {
     email: 'inactive@example.com',
     is_active: false,
     is_admin: false,
+    system_roles: [] as string[],
     password_change_required: false,
     created_at: '2024-03-01T08:00:00Z',
 }

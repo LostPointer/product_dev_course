@@ -65,6 +65,24 @@ class UserRoleRepository(BaseRepository):
         )
         return [row["name"] for row in rows]
 
+    async def batch_list_system_role_names(
+        self, user_ids: list[UUID],
+    ) -> dict[UUID, list[str]]:
+        """List system role names for multiple users in a single query."""
+        if not user_ids:
+            return {}
+        rows = await self._fetch(
+            "SELECT usr.user_id, r.name FROM user_system_roles usr "
+            "JOIN roles r ON r.id = usr.role_id "
+            "WHERE usr.user_id = ANY($1::uuid[]) "
+            "AND (usr.expires_at IS NULL OR usr.expires_at > now())",
+            user_ids,
+        )
+        result: dict[UUID, list[str]] = {uid: [] for uid in user_ids}
+        for row in rows:
+            result[row["user_id"]].append(row["name"])
+        return result
+
     # ── Project roles ───────────────────────────────────────────────────
 
     async def grant_project_role(

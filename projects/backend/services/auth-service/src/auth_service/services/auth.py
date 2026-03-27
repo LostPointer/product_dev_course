@@ -448,8 +448,9 @@ class AuthService:
         requester_id: UUID,
         target_user_id: UUID,
         is_active: bool | None,
+        is_admin: bool | None = None,
     ) -> User:
-        """Update user is_active flag. Requires 'users.update' permission."""
+        """Update user flags. Requires 'users.update' permission."""
         await self._perm_svc.ensure_permission(requester_id, "users.update")
 
         if requester_id == target_user_id:
@@ -465,6 +466,11 @@ class AuthService:
                 if count <= 1:
                     raise ConflictError("Cannot remove the last superadmin")
             target = await self._user_repo.set_active(target_user_id, is_active)
+
+        if is_admin is not None:
+            await self._perm_svc.set_admin_role(
+                requester_id, target_user_id, grant=is_admin,
+            )
 
         return target
 
@@ -499,6 +505,18 @@ class AuthService:
         """Build UserResponse with system role names."""
         role_names = await self._perm_svc.list_system_role_names(user.id)
         return UserResponse.from_user(user, system_roles=role_names)
+
+    async def get_user_responses(self, users: list[User]) -> list[UserResponse]:
+        """Build UserResponse list with system role names in a single batch query."""
+        if not users:
+            return []
+        roles_by_user = await self._perm_svc.batch_list_system_role_names(
+            [u.id for u in users],
+        )
+        return [
+            UserResponse.from_user(u, system_roles=roles_by_user.get(u.id, []))
+            for u in users
+        ]
 
     async def _create_tokens(
         self,

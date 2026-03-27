@@ -96,8 +96,8 @@ export interface AdminUser {
   username: string
   email: string
   is_active: boolean
-  is_admin?: boolean
-  system_roles?: string[]
+  is_admin: boolean
+  system_roles: string[]
   password_change_required: boolean
   created_at: string
 }

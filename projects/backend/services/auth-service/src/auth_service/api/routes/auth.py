@@ -391,9 +391,7 @@ async def list_users(request: web.Request) -> web.Response:
         if is_active_str is not None:
             filter_active = is_active_str.lower() in ("true", "1", "yes")
             users = [u for u in users if u.is_active == filter_active]
-        results = []
-        for u in users:
-            results.append((await auth_service.get_user_response(u)).model_dump())
+        results = [r.model_dump() for r in await auth_service.get_user_responses(users)]
         return web.json_response(results, status=200)
     except AuthError as e:
         return handle_auth_error(request, e)
@@ -419,7 +417,9 @@ async def update_user(request: web.Request) -> web.Response:
     try:
         auth_service = await get_auth_service(request)
         requester_id = await _get_requester_id(request, auth_service)
-        user = await auth_service.update_user(requester_id, target_user_id, req.is_active)
+        user = await auth_service.update_user(
+            requester_id, target_user_id, req.is_active, req.is_admin,
+        )
         user_resp = await auth_service.get_user_response(user)
         return web.json_response(user_resp.model_dump(), status=200)
     except AuthError as e:

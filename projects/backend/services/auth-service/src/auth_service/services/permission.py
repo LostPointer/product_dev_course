@@ -11,6 +11,7 @@ from asyncpg.exceptions import UniqueViolationError  # type: ignore[import-untyp
 from auth_service.core.exceptions import ConflictError, ForbiddenError, NotFoundError
 from auth_service.domain.dto import EffectivePermissionsResponse
 from auth_service.domain.models import (
+    ADMIN_ROLE_ID,
     PROJECT_OWNER_ROLE_ID,
     SUPERADMIN_ROLE_ID,
     AuditAction,
@@ -147,6 +148,28 @@ class PermissionService:
     async def bootstrap_grant_superadmin(self, user_id: UUID) -> None:
         """Grant superadmin role during bootstrap (no grantor permission check)."""
         await self._user_role_repo.grant_system_role(user_id, SUPERADMIN_ROLE_ID, user_id)
+
+    async def set_admin_role(
+        self,
+        actor_id: UUID,
+        target_user_id: UUID,
+        *,
+        grant: bool,
+    ) -> None:
+        """Grant or revoke the built-in 'admin' role. No extra permission check
+        (caller must already hold 'users.update')."""
+        if grant:
+            await self._user_role_repo.grant_system_role(
+                target_user_id, ADMIN_ROLE_ID, actor_id,
+            )
+        else:
+            await self._user_role_repo.revoke_system_role(target_user_id, ADMIN_ROLE_ID)
+
+    async def batch_list_system_role_names(
+        self, user_ids: list[UUID],
+    ) -> dict[UUID, list[str]]:
+        """List system role names for multiple users in one query."""
+        return await self._user_role_repo.batch_list_system_role_names(user_ids)
 
     async def get_role_permissions(self, role_id: UUID) -> list[str]:
         """Get permission IDs for a role (for API response building)."""

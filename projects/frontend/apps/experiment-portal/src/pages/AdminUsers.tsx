@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { authApi } from '../api/auth'
@@ -15,14 +15,22 @@ function AdminUsers() {
 
     // --- Users ---
     const [search, setSearch] = useState('')
+    const [debouncedSearch, setDebouncedSearch] = useState('')
+    const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const [filterActive, setFilterActive] = useState<'all' | 'active' | 'inactive'>('all')
     const [resetResult, setResetResult] = useState<{ userId: string; password: string } | null>(null)
 
+    useEffect(() => {
+        if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+        searchTimerRef.current = setTimeout(() => setDebouncedSearch(search), 300)
+        return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current) }
+    }, [search])
+
     const usersQuery = useQuery({
-        queryKey: ['admin', 'users', search, filterActive],
+        queryKey: ['admin', 'users', debouncedSearch, filterActive],
         queryFn: () =>
             authApi.adminListUsers({
-                search: search || undefined,
+                search: debouncedSearch || undefined,
                 is_active: filterActive === 'all' ? undefined : filterActive === 'active',
             }),
         retry: 1,
@@ -56,6 +64,7 @@ function AdminUsers() {
         mutationFn: (userId: string) => authApi.adminResetUserPassword(userId),
         onSuccess: (data) => {
             setResetResult({ userId: data.user.id, password: data.new_password })
+            queryClient.invalidateQueries({ queryKey: ['admin', 'users'] })
             notifySuccess('Пароль сброшен')
         },
         onError: (err: any) => {
