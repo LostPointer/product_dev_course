@@ -297,8 +297,15 @@ jobs:
             echo "$YC_SA_JSON_KEY" | docker --config "$_DCF" login cr.yandex -u json_key --password-stdin
             export DOCKER_CONFIG="$_DCF"
 
-            # Останавливаем контейнеры и чистим место перед пуллом
+            # Останавливаем контейнеры и чистим место перед пуллом.
+            # Сначала останавливаем оба возможных имени проекта: старое (experiment-tracking,
+            # берётся из имени директории /opt/experiment-tracking) и новое (product_dev_course,
+            # явно задано через name: в docker-compose.prod.yml начиная с v1.0.1).
+            docker compose -p experiment-tracking -f docker-compose.prod.yml down --remove-orphans || true
             docker compose -f docker-compose.prod.yml down --remove-orphans || true
+            # На случай если контейнеры остались с конфликтующими именами — удаляем принудительно
+            docker rm -f auth-service experiment-service telemetry-ingest-service \
+              auth-proxy experiment-portal sensor-simulator loki alloy grafana 2>/dev/null || true
             docker system prune -af --volumes || true
 
             # Пуллим новые образы
