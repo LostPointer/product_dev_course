@@ -88,31 +88,31 @@ if (navigator.clipboard) {
 
 ### BUG-B-001 — Worker `activate_scheduled_profiles` падает с `invalid input value for enum conversion_profile_status: "archived"`
 **Приоритет:** HIGH
-**Статус:** [ ] Открыт
+**Статус:** [x] Исправлен
 **Файл:** `projects/backend/services/experiment-service/src/experiment_service/workers/activate_scheduled_profiles.py:30`
 
-Воркер падает при каждом запуске с ошибкой:
+Воркер падал при каждом запуске с ошибкой:
 ```
 asyncpg.exceptions.InvalidTextRepresentationError:
 invalid input value for enum conversion_profile_status: "archived"
 ```
 
-В коде воркера используется значение `"archived"` для enum `conversion_profile_status`, которого не существует в БД. Допустимые значения: `draft`, `scheduled`, `active`, `deprecated`.
+В коде воркера использовалось значение `"archived"` для enum `conversion_profile_status`, которого не существует в БД. Допустимые значения: `draft`, `scheduled`, `active`, `deprecated`.
 
-**Исправление:** заменить `"archived"` на `"deprecated"` в запросе в `activate_scheduled_profiles.py`.
+**Исправление:** заменён `"archived"` на `"deprecated"` в SQL-запросе. Дополнительно: при авто-активации `draft → active` теперь обновляется `sensor.active_profile_id` (ранее не обновлялось — датчик не получал активный профиль и конверсия не применялась).
 
 ---
 
 ### BUG-B-002 — В Live telemetry (SSE) не пересчитываются значения (raw → physical)
 **Приоритет:** HIGH
-**Статус:** [ ] Открыт
+**Статус:** [x] Исправлен (корневая причина устранена в BUG-B-001)
 
-В `TelemetryStreamModal` данные приходят, но `physical_value` отсутствует или равен `null` — пересчёт через активный профиль не применяется в real-time потоке.
+В `TelemetryStreamModal` данные приходили, но `physical_value` отсутствовал или равнялся `null`.
 
-**Возможные причины:**
-- SSE-эндпоинт возвращает только `raw_value`, не применяя профиль
-- Profile cache не прогрет / TTL истёк и профиль не подтягивается для SSE-пути
-- Воркер `activate_scheduled_profiles` падает (BUG-B-001) и профиль остаётся в `scheduled`, не переходя в `active`
+**Анализ:** SSE-эндпоинт читает `physical_value` из `telemetry_records` как есть — конверсия происходит в момент ingesta в `TelemetryIngestService._prepare_items`. Тот использует `ProfileCache` (TTL 60 с), который читает активный профиль через `sensor.active_profile_id`. Воркер `activate_scheduled_profiles` падал (BUG-B-001), из-за чего `draft`-профили не активировались и `sensor.active_profile_id` не обновлялся → кэш возвращал `None` → `physical_value = null`.
+
+**Для исторических данных** с `physical_value = null` необходимо запустить backfill:
+`POST /api/v1/sensors/{sensor_id}/conversion-profiles/{profile_id}/backfill`
 
 ---
 
