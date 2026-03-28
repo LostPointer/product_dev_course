@@ -44,7 +44,7 @@
 
 ## 2) I2C/SPI (ESP32 ↔ датчики)
 
-### 2.1 IMU (MPU-6500 / LSM3DS3 / ICM-20948)
+### 2.1 IMU (MPU-6500 / LSM6DS3 / ICM-20948)
 - **Интерфейс**: SPI (предпочтительно) или I2C
 - **Частота**: 400 kHz (I2C) или до 10 MHz (SPI)
 - **Частота опроса**: 200–500 Hz (для контуров управления по gyro)
@@ -62,4 +62,45 @@
   - руль = центр/0
 - Переключение источников управления не должно вызывать "скачок газа" (используем slew‑rate и/или "hold last safe").
 
+---
 
+## Приложение: UART-протокол ESP32 ↔ внешний MCU (архив)
+
+> Актуально при использовании RP2040 или другого MCU в будущем. Для текущей конфигурации (ESP32‑S3 one-board) не используется.
+
+### Общий кадр
+
+```
+AA 55 | VER | TYPE | LEN_LO LEN_HI | PAYLOAD... | CRC16_LO CRC16_HI
+```
+
+- `AA 55`: префикс (2 байта)
+- `VER`: версия протокола (1 байт), MVP: `0x01`
+- `TYPE`: тип сообщения (1 байт)
+- `LEN`: длина `PAYLOAD` (uint16 LE)
+- `CRC16`: CRC-16/IBM (Modbus), считается по `VER..PAYLOAD` (без `AA55`, но включая `VER/TYPE/LEN/PAYLOAD`)
+
+### Типы сообщений
+- `0x01` **COMMAND** (ESP32 → MCU): целевые `throttle/steering`
+- `0x02` **TELEM** (MCU → ESP32): состояние + IMU
+- `0x03` **PING** / `0x04` **PONG** (опционально)
+
+### PAYLOAD: COMMAND (TYPE=0x01)
+
+```
+SEQ_LO SEQ_HI | THR_I16 | STEER_I16 | FLAGS
+```
+
+- `SEQ`: uint16 LE
+- `THR_I16`: int16 LE, нормализованный `thr * 32767`
+- `STEER_I16`: int16 LE, нормализованный `steer * 32767`
+- `FLAGS`: bit0 = `slew_enable`
+
+### PAYLOAD: TELEM (TYPE=0x02)
+
+```
+SEQ_LO SEQ_HI | STATUS | AX_I16 AY_I16 AZ_I16 | GX_I16 GY_I16 GZ_I16
+```
+
+- `STATUS`: bit0=`rc_ok`, bit1=`wifi_ok`, bit2=`failsafe_active`, bit3..7=reserved
+- IMU поля: int16 LE (масштабирование фиксируется в прошивке, напр. mg и mdps)
