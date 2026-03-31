@@ -2,6 +2,7 @@ import { ReactNode, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { authApi } from '../api/auth'
+import { usePermissions } from '../hooks/usePermissions'
 import UserProfileModal from './UserProfileModal'
 import { notifyError, notifySuccess } from '../utils/notify'
 import './Layout.scss'
@@ -17,6 +18,7 @@ type NavItem = {
   eyebrow: string
   shortLabel: string
   adminOnly?: boolean
+  auditOnly?: boolean
 }
 
 const navItems: NavItem[] = [
@@ -69,6 +71,14 @@ const navItems: NavItem[] = [
     eyebrow: 'Control Plane',
     shortLabel: 'AD',
     adminOnly: true,
+  },
+  {
+    to: '/admin/audit',
+    label: 'Аудит',
+    description: 'Журнал действий пользователей и системных событий',
+    eyebrow: 'Audit Log',
+    shortLabel: 'AL',
+    auditOnly: true,
   },
 ]
 
@@ -159,9 +169,16 @@ function Layout({ children }: LayoutProps) {
   })
 
   const isAdmin = user?.is_admin || user?.system_roles?.some((r) => r === 'superadmin' || r === 'admin')
+  const { hasSystemPermission } = usePermissions()
+  const canReadAudit = hasSystemPermission('audit.read')
   const availableNavItems = useMemo(
-    () => navItems.filter((item) => !item.adminOnly || isAdmin),
-    [isAdmin]
+    () =>
+      navItems.filter(
+        (item) =>
+          (!item.adminOnly || isAdmin) &&
+          (!item.auditOnly || canReadAudit)
+      ),
+    [isAdmin, canReadAudit]
   )
 
   const currentPage =

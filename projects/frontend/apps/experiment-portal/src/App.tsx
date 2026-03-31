@@ -18,6 +18,7 @@ const TelemetryViewer = lazy(() => import('./pages/TelemetryViewer'))
 const Webhooks = lazy(() => import('./pages/Webhooks'))
 const AdminUsers = lazy(() => import('./pages/AdminUsers'))
 const SystemRoles = lazy(() => import('./pages/SystemRoles'))
+const AuditLog = lazy(() => import('./pages/AuditLog'))
 const SensorMonitor = lazy(() => import('./pages/SensorMonitor'))
 const ComparisonPage = lazy(() => import('./pages/ComparisonPage'))
 
@@ -59,6 +60,7 @@ function App() {
                   <Route path="/webhooks" element={<Webhooks />} />
                   <Route path="/admin/users" element={<AdminUsers />} />
                   <Route path="/admin/system-roles" element={<SystemRoles />} />
+                  <Route path="/admin/audit" element={<AuditLog />} />
                 </Routes>
               </Layout>
             </ProtectedRoute>
