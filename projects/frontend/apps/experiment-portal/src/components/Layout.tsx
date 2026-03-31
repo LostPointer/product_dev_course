@@ -19,6 +19,7 @@ type NavItem = {
   shortLabel: string
   adminOnly?: boolean
   auditOnly?: boolean
+  scriptsOnly?: boolean
 }
 
 const navItems: NavItem[] = [
@@ -80,6 +81,14 @@ const navItems: NavItem[] = [
     shortLabel: 'AL',
     auditOnly: true,
   },
+  {
+    to: '/admin/scripts',
+    label: 'Скрипты',
+    description: 'Управление скриптами и выполнениями',
+    eyebrow: 'Scripts',
+    shortLabel: 'SC',
+    scriptsOnly: true,
+  },
 ]
 
 const pageMeta = [
@@ -126,10 +135,17 @@ const pageMeta = [
     eyebrow: 'Automation',
   },
   {
-    match: (pathname: string) => pathname.startsWith('/admin'),
+    match: (pathname: string) =>
+      pathname.startsWith('/admin') && !pathname.startsWith('/admin/scripts'),
     title: 'Администрирование',
     description: 'Управление доступом, пользователями и системными ролями.',
     eyebrow: 'Control Plane',
+  },
+  {
+    match: (pathname: string) => pathname.startsWith('/admin/scripts'),
+    title: 'Скрипты',
+    description: 'Управление скриптами и их выполнениями на сервисах.',
+    eyebrow: 'Scripts',
   },
 ]
 
@@ -171,14 +187,17 @@ function Layout({ children }: LayoutProps) {
   const isAdmin = user?.is_admin || user?.system_roles?.some((r) => r === 'superadmin' || r === 'admin')
   const { hasSystemPermission } = usePermissions()
   const canReadAudit = hasSystemPermission('audit.read')
+  const canScripts =
+    hasSystemPermission('scripts.execute') || hasSystemPermission('scripts.manage')
   const availableNavItems = useMemo(
     () =>
       navItems.filter(
         (item) =>
           (!item.adminOnly || isAdmin) &&
-          (!item.auditOnly || canReadAudit)
+          (!item.auditOnly || canReadAudit) &&
+          (!item.scriptsOnly || canScripts)
       ),
-    [isAdmin, canReadAudit]
+    [isAdmin, canReadAudit, canScripts]
   )
 
   const currentPage =
