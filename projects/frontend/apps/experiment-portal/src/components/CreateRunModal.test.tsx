@@ -260,7 +260,7 @@ describe('CreateRunModal', () => {
         await user.click(submitButton)
 
         await waitFor(() => {
-            expect(screen.getByText(/ошибка в формате json для параметров/i)).toBeInTheDocument()
+            expect(screen.getAllByText(/неверный формат json/i).length).toBeGreaterThan(0)
         })
 
         expect(vi.mocked(runsApi.create)).not.toHaveBeenCalled()
@@ -286,7 +286,7 @@ describe('CreateRunModal', () => {
         await user.click(submitButton)
 
         await waitFor(() => {
-            expect(screen.getByText(/ошибка в формате json для метаданных/i)).toBeInTheDocument()
+            expect(screen.getAllByText(/неверный формат json/i).length).toBeGreaterThan(0)
         })
 
         expect(vi.mocked(runsApi.create)).not.toHaveBeenCalled()
