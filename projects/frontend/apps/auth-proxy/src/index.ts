@@ -533,7 +533,8 @@ export async function buildServer(config: Config, _cache?: PermissionsCache) {
         if (
             url.startsWith('/auth/login') ||
             url.startsWith('/auth/register') ||
-            url.startsWith('/auth/refresh')
+            url.startsWith('/auth/refresh') ||
+            url.startsWith('/auth/password-reset')
         )
             return
         if (url.startsWith('/api/v1/telemetry')) return
@@ -808,6 +809,53 @@ export async function buildServer(config: Config, _cache?: PermissionsCache) {
 
         clearAuthCookies(reply, config)
         return { ok: true }
+    })
+
+    // Password reset routes — public, no auth/CSRF required
+    app.post('/auth/password-reset/request', async (request, reply) => {
+        const { traceId } = getTraceContext(request)
+        const outgoingHeaders = getOutgoingRequestHeaders(traceId)
+
+        const res = await fetch(`${config.authUrl}/auth/password-reset/request`, {
+            method: 'POST',
+            headers: {
+                'content-type': 'application/json',
+                ...outgoingHeaders,
+            },
+            body: JSON.stringify(request.body ?? {}),
+        })
+
+        reply.status(res.status)
+        return res.json().catch(() => ({}))
+    })
+
+    app.post('/auth/password-reset/confirm', async (request, reply) => {
+        const { traceId } = getTraceContext(request)
+        const outgoingHeaders = getOutgoingRequestHeaders(traceId)
+
+        const res = await fetch(`${config.authUrl}/auth/password-reset/confirm`, {
+            method: 'POST',
+            headers: {
+                'content-type': 'application/json',
+                ...outgoingHeaders,
+            },
+            body: JSON.stringify(request.body ?? {}),
+        })
+
+        if (!res.ok) {
+            reply.status(res.status)
+            return res.json().catch(() => ({}))
+        }
+
+        const data = (await res.json()) as AuthTokens
+        if (data.access_token) {
+            setAuthCookies(reply, config, data)
+            setCsrfCookie(reply, config)
+            const { access_token, refresh_token, ...rest } = data
+            return rest
+        }
+
+        return data
     })
 
     app.get('/auth/me', async (request, reply) => {

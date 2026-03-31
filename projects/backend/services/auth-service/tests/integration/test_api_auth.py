@@ -540,9 +540,12 @@ async def test_change_password_invalid_new_password(service_client):
 # ---------------------------------------------------------------------------
 
 
+_RESET_MSG = "Если этот email зарегистрирован, вы получите письмо со ссылкой для сброса пароля"
+
+
 @pytest.mark.asyncio
 async def test_password_reset_request_success(service_client):
-    """Запрос сброса пароля по существующему email → 200, поля reset_token и expires_at."""
+    """Запрос сброса пароля по существующему email → 200, generic message."""
     await service_client.post(
         "/auth/register",
         json={
@@ -558,25 +561,23 @@ async def test_password_reset_request_success(service_client):
     )
     assert response.status == 200
     payload = await response.json()
-    assert "reset_token" in payload
-    assert "expires_at" in payload
-    assert len(payload["reset_token"]) > 10
+    assert payload.get("message") == _RESET_MSG
 
 
 @pytest.mark.asyncio
 async def test_password_reset_request_not_found(service_client):
-    """Запрос сброса пароля по несуществующему email → 404."""
+    """Запрос сброса пароля по несуществующему email → 200, same message (no enumeration)."""
     response = await service_client.post(
         "/auth/password-reset/request",
         json={"email": "nobody@example.com"},
     )
-    assert response.status == 404
+    assert response.status == 200
     payload = await response.json()
-    assert "error" in payload
+    assert payload.get("message") == _RESET_MSG
 
 
 @pytest.mark.asyncio
-async def test_password_reset_confirm_success(service_client):
+async def test_password_reset_confirm_success(service_client, database_url):
     """Валидный reset_token → 200, получаем access_token и refresh_token."""
     await service_client.post(
         "/auth/register",
@@ -592,7 +593,17 @@ async def test_password_reset_confirm_success(service_client):
         json={"email": "confirm@example.com"},
     )
     assert request_response.status == 200
-    reset_token = (await request_response.json())["reset_token"]
+
+    # Token is no longer returned in the response body — fetch from DB directly
+    conn = await asyncpg.connect(str(database_url))
+    try:
+        row = await conn.fetchrow(
+            "SELECT token FROM password_reset_tokens ORDER BY created_at DESC LIMIT 1"
+        )
+    finally:
+        await conn.close()
+    assert row is not None, "No reset token found in DB"
+    reset_token = row["token"]
 
     response = await service_client.post(
         "/auth/password-reset/confirm",
@@ -602,6 +613,66 @@ async def test_password_reset_confirm_success(service_client):
     payload = await response.json()
     assert "access_token" in payload
     assert "refresh_token" in payload
+
+
+@pytest.mark.asyncio
+async def test_password_reset_request_email_called(service_client, database_url, monkeypatch):
+    """EmailService.send_password_reset_email вызывается с правильным email."""
+    from unittest.mock import AsyncMock
+    from auth_service.services.email import EmailService
+
+    mock_send = AsyncMock()
+    monkeypatch.setattr(EmailService, "send_password_reset_email", mock_send)
+
+    await service_client.post(
+        "/auth/register",
+        json={
+            "username": "emailtestuser",
+            "email": "emailtest@example.com",
+            "password": "testpass123",
+        },
+    )
+
+    response = await service_client.post(
+        "/auth/password-reset/request",
+        json={"email": "emailtest@example.com"},
+    )
+    assert response.status == 200
+
+    mock_send.assert_called_once()
+    call_args = mock_send.call_args
+    # args: (to_email, token, expires_at) — self is implicit (bound method)
+    assert call_args.args[0] == "emailtest@example.com"
+
+
+@pytest.mark.asyncio
+async def test_password_reset_smtp_failure(service_client, database_url, monkeypatch):
+    """SMTP failure не ломает ответ — всё равно 200 с generic message."""
+    import aiosmtplib
+    from unittest.mock import AsyncMock
+    from auth_service.services.email import EmailService
+
+    async def _fail(*args: object, **kwargs: object) -> None:
+        raise aiosmtplib.SMTPException("connection refused")
+
+    monkeypatch.setattr(EmailService, "send_password_reset_email", AsyncMock(side_effect=_fail))
+
+    await service_client.post(
+        "/auth/register",
+        json={
+            "username": "smtpfailuser",
+            "email": "smtpfail@example.com",
+            "password": "testpass123",
+        },
+    )
+
+    response = await service_client.post(
+        "/auth/password-reset/request",
+        json={"email": "smtpfail@example.com"},
+    )
+    assert response.status == 200
+    payload = await response.json()
+    assert payload.get("message") == _RESET_MSG
 
 
 @pytest.mark.asyncio

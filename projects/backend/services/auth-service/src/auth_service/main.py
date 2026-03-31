@@ -11,6 +11,7 @@ from backend_common.middleware.error_handler import error_handling_middleware
 from backend_common.logging_config import configure_logging
 
 from auth_service.api.middleware import password_change_required_middleware
+from auth_service.services.email import EmailService
 from auth_service.api.routes.audit import setup_routes as setup_audit_routes
 from auth_service.api.routes.auth import setup_routes as setup_auth_routes
 from auth_service.api.routes.permissions import setup_routes as setup_permissions_routes
@@ -34,9 +35,10 @@ configure_logging()
 def create_app() -> web.Application:
     """Create aiohttp application."""
     app, cors = create_base_app(settings)
-    app.middlewares.append(error_handling_middleware)
-    app.middlewares.append(metrics_middleware("auth-service"))
-    app.middlewares.append(password_change_required_middleware)
+    app["email_service"] = EmailService(settings)
+    app.middlewares.append(error_handling_middleware)  # type: ignore[arg-type]
+    app.middlewares.append(metrics_middleware("auth-service"))  # type: ignore[arg-type]
+    app.middlewares.append(password_change_required_middleware)  # type: ignore[arg-type]
 
     # Setup routes
     add_healthcheck(app, settings)

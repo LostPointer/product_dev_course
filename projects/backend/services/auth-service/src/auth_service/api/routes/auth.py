@@ -26,6 +26,7 @@ from auth_service.domain.dto import (
 )
 from auth_service.services.auth import AuthService
 from auth_service.services.dependencies import get_auth_service
+from auth_service.services.email import EmailService
 from auth_service.settings import settings
 
 logger = structlog.get_logger(__name__)
@@ -249,18 +250,21 @@ async def password_reset_request(request: web.Request) -> web.Response:
     except Exception as e:
         return web.json_response({"error": f"Invalid request: {e}"}, status=400)
 
+    MSG = "Если этот email зарегистрирован, вы получите письмо со ссылкой для сброса пароля"
+
     try:
         auth_service = await get_auth_service(request)
+        email_service: EmailService = request.app["email_service"]
         token, expires_at = await auth_service.request_password_reset(req.email)
-        return web.json_response(
-            {"reset_token": token, "expires_at": expires_at.isoformat()},
-            status=200,
-        )
-    except AuthError as e:
-        return handle_auth_error(request, e)
+        await email_service.send_password_reset_email(req.email, token, expires_at)
+    except AuthError:
+        # Don't reveal if email exists
+        pass
     except Exception:
         logger.exception("Password reset request error")
-        return web.json_response({"error": "Internal server error"}, status=500)
+        # Still return success to avoid leaking info
+
+    return web.json_response({"message": MSG})
 
 
 async def password_reset_confirm(request: web.Request) -> web.Response:

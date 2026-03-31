@@ -159,6 +159,17 @@
   font-size: 0.9rem;
 }
 
+.auth-success-message {
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  border-radius: var(--radius-sm);
+  background: var(--success-container, #dcfce7);
+  border: 1px solid rgba(22, 163, 74, 0.2);
+  color: var(--success, #166534);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
 .auth-note {
   margin-top: 14px;
   color: var(--text-secondary);

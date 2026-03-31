@@ -43,6 +43,15 @@ class Settings(BaseServiceSettings):
     audit_retention_days: int = 365  # delete audit_log entries older than this
     worker_interval_seconds: float = 60.0  # how often the background worker runs
 
+    smtp_enabled: bool = False
+    smtp_host: str = "localhost"
+    smtp_port: int = 1025
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = "noreply@example.com"
+    smtp_from_name: str = "Experiment Platform"
+    app_url: str = "http://localhost:3000"
+
     @model_validator(mode="after")
     def _warn_insecure_jwt_secret(self) -> "Settings":
         """Emit a loud warning when the JWT secret is a known insecure default."""

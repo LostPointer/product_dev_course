@@ -26,6 +26,7 @@ bcrypt = "^4.1.2"
 email-validator = "^2.1.0"
 backend-common = { path = "../../common", develop = true }
 prometheus-client = "^0.24.1"
+aiosmtplib = "^3.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.2.2"

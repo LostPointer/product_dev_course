@@ -7,6 +7,8 @@ import './App.scss'
 const Login = lazy(() => import('./pages/Login'))
 const Register = lazy(() => import('./pages/Register'))
 const ChangePassword = lazy(() => import('./pages/ChangePassword'))
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
+const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 const ExperimentsList = lazy(() => import('./pages/ExperimentsList'))
 const ExperimentDetail = lazy(() => import('./pages/ExperimentDetail'))
 const RunDetail = lazy(() => import('./pages/RunDetail'))
@@ -33,6 +35,8 @@ function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route
           path="/change-password"
           element={

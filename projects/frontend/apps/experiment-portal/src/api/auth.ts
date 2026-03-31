@@ -171,5 +171,30 @@ export const authApi = {
     }): Promise<void> => {
         await authClient.post('/auth/change-password', data)
     },
+
+    /**
+     * Запрос сброса пароля — отправляет письмо на email
+     */
+    requestPasswordReset: async (email: string): Promise<{ message: string }> => {
+        const response = await authClient.post<{ message: string }>(
+            '/auth/password-reset/request',
+            { email }
+        )
+        return response.data
+    },
+
+    /**
+     * Подтверждение сброса пароля по токену из письма
+     */
+    confirmPasswordReset: async (
+        token: string,
+        newPassword: string
+    ): Promise<AuthResponse> => {
+        const response = await authClient.post<AuthResponse>(
+            '/auth/password-reset/confirm',
+            { reset_token: token, new_password: newPassword }
+        )
+        return response.data
+    },
 }
 
