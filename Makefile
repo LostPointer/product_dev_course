@@ -40,7 +40,9 @@ DEV_ADMIN_USER     ?= admin
 DEV_ADMIN_EMAIL    ?= admin@example.com
 DEV_ADMIN_PASSWORD ?= Admin123
 DEV_BOOTSTRAP_SECRET ?= dev-bootstrap-secret
-AUTH_SERVICE_URL   ?= http://localhost:8001
+AUTH_SERVICE_URL        ?= http://localhost:8001
+EXPERIMENT_SERVICE_URL  ?= http://localhost:8002
+TELEMETRY_SERVICE_URL   ?= http://localhost:8003
 # Backend tests require TimescaleDB (telemetry tables are hypertables).
 # By default we run tests against the docker-compose postgres container and
 # dynamically discover its credentials and mapped host port (so local .env works).
@@ -336,6 +338,15 @@ dev-up:
 	@echo ""
 	@echo "⚠️  Если возникла ошибка 'ContainerConfig', выполните: make dev-fix"
 	@echo "⚠️  Если не получается войти в Grafana, выполните: make grafana-reset-password"
+
+# Заполнение БД демо-данными: 2 проекта, 5 датчиков, 3 эксперимента, 5 запусков, телеметрия.
+# Требует: pip install requests (или pipx run requests)
+dev-seed-demo: dev-seed
+	@echo "Заполнение БД демо-данными..."
+	@python3 scripts/seed_demo.py \
+		--auth-url $(AUTH_SERVICE_URL) \
+		--exp-url $(EXPERIMENT_SERVICE_URL) \
+		--telem-url $(TELEMETRY_SERVICE_URL)
 
 # Создание dev-пользователя (superadmin) через bootstrap API.
 # Идемпотентно: если пользователь уже создан, просто пропускает.
