@@ -11,7 +11,7 @@ from pydantic import ValidationError
 
 from backend_common.db.pool import get_pool_service as get_pool
 
-from telemetry_ingest_service.api.routes.telemetry import _normalize_bearer
+from telemetry_ingest_service.api.routes.telemetry import _fire_and_forget_error_log, _normalize_bearer
 from telemetry_ingest_service.core.exceptions import (
     NotFoundError,
     ScopeMismatchError,
@@ -150,6 +150,8 @@ async def _handle_message(
     log: structlog.BoundLogger,
 ) -> None:
     """Process a single text frame.  Sends an ack or an error JSON back."""
+    sensor_id_str = str(sensor_id)
+
     # --- parse JSON ---
     try:
         data = json.loads(raw)
@@ -161,13 +163,28 @@ async def _handle_message(
     try:
         ws_msg = WsIngestMessageDTO.model_validate(data)
     except ValidationError as exc:
+        _fire_and_forget_error_log(
+            sensor_id_str,
+            "validation_error",
+            error_message=str(exc),
+            endpoint="ws",
+        )
         await ws.send_json({"status": "error", "code": "validation_error", "message": str(exc)})
         return
 
+    readings_count = len(ws_msg.readings)
+
     # --- rate limiting (per sensor, fixed window) ---
-    limit_hit = _ws_limiter.check(sensor_id, len(ws_msg.readings))
+    limit_hit = _ws_limiter.check(sensor_id, readings_count)
     if limit_hit is not None:
         INGEST_RATE_LIMITED.labels(transport="ws").inc()
+        _fire_and_forget_error_log(
+            sensor_id_str,
+            "rate_limited",
+            error_message=f"Rate limit exceeded ({limit_hit.reason}). Retry in {limit_hit.retry_after}s.",
+            endpoint="ws",
+            readings_count=readings_count,
+        )
         await ws.send_json({
             "status": "error",
             "code": "rate_limited",
@@ -189,16 +206,37 @@ async def _handle_message(
     try:
         accepted = await service.ingest(dto, token=token)
     except UnauthorizedError as exc:
+        _fire_and_forget_error_log(
+            sensor_id_str,
+            "unauthorized",
+            error_message=str(exc),
+            endpoint="ws",
+            readings_count=readings_count,
+        )
         await ws.send_json({"status": "error", "code": "unauthorized", "message": str(exc)})
         if not ws.closed:
             await ws.close(code=aiohttp.WSCloseCode.POLICY_VIOLATION, message=b"Unauthorized")
         return
     except (ScopeMismatchError, NotFoundError) as exc:
         # Recoverable: bad scope or missing run/session — client can fix and retry.
+        _fire_and_forget_error_log(
+            sensor_id_str,
+            "bad_request",
+            error_message=str(exc),
+            endpoint="ws",
+            readings_count=readings_count,
+        )
         await ws.send_json({"status": "error", "code": "bad_request", "message": str(exc)})
         return
     except Exception as exc:
         log.exception("ws_ingest_message_error", error=str(exc))
+        _fire_and_forget_error_log(
+            sensor_id_str,
+            "internal_error",
+            error_message="Internal error",
+            endpoint="ws",
+            readings_count=readings_count,
+        )
         await ws.send_json({"status": "error", "code": "internal_error", "message": "Internal error"})
         return
 

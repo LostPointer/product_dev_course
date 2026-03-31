@@ -164,5 +164,19 @@ GROUP BY bucket, sensor_id, signal, capture_session_id;
 --     if_not_exists   => TRUE
 -- );
 
+CREATE TABLE IF NOT EXISTS sensor_error_log (
+    id bigserial PRIMARY KEY,
+    sensor_id uuid NOT NULL,
+    occurred_at timestamptz NOT NULL DEFAULT now(),
+    error_code text NOT NULL,
+    error_message text,
+    endpoint text NOT NULL DEFAULT 'rest',
+    readings_count integer,
+    meta jsonb NOT NULL DEFAULT '{}'
+);
+
+CREATE INDEX IF NOT EXISTS sensor_error_log_sensor_occurred ON sensor_error_log (sensor_id, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS sensor_error_log_occurred ON sensor_error_log (occurred_at DESC);
+
 COMMIT;
 

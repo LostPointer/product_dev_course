@@ -183,6 +183,25 @@ export interface HeartbeatHistory {
   count: number
 }
 
+export interface SensorErrorEntry {
+  id: number
+  sensor_id: string
+  occurred_at: string
+  error_code: string
+  error_message: string | null
+  endpoint: string
+  readings_count: number | null
+  meta: Record<string, unknown>
+}
+
+export interface SensorErrorLogResponse {
+  sensor_id: string
+  entries: SensorErrorEntry[]
+  total: number
+  limit: number
+  offset: number
+}
+
 export interface SensorCreate {
   project_id: string
   name: string

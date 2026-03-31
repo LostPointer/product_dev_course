@@ -52,6 +52,7 @@ import type {
   Artifact,
   ArtifactsListResponse,
   CreateArtifactRequest,
+  SensorErrorLogResponse,
 } from '../types'
 import { generateRequestId } from '../utils/uuid'
 import { getTraceId } from '../utils/trace'
@@ -387,6 +388,13 @@ export const sensorsApi = {
   removeProject: async (id: string, projectId: string): Promise<void> => {
     // Use explicit project_id context for permission checks in that project
     await apiDelete(`/api/v1/sensors/${id}/projects/${projectId}`, { params: { project_id: projectId } })
+  },
+
+  getErrorLog: async (
+    sensorId: string,
+    params?: { limit?: number; offset?: number }
+  ): Promise<SensorErrorLogResponse> => {
+    return await apiGet(`/api/v1/sensors/${sensorId}/error-log`, { params })
   },
 }
 
