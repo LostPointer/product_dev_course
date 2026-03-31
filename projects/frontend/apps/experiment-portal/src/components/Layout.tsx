@@ -17,9 +17,7 @@ type NavItem = {
   description: string
   eyebrow: string
   shortLabel: string
-  adminOnly?: boolean
-  auditOnly?: boolean
-  scriptsOnly?: boolean
+  requiredPermissions?: string[]
 }
 
 const navItems: NavItem[] = [
@@ -67,27 +65,27 @@ const navItems: NavItem[] = [
   },
   {
     to: '/admin/users',
-    label: 'Администрирование',
-    description: 'Роли, пользователи и контроль доступа',
+    label: 'Пользователи',
+    description: 'Управление пользователями и системными ролями',
     eyebrow: 'Control Plane',
     shortLabel: 'AD',
-    adminOnly: true,
+    requiredPermissions: ['users.list', 'roles.manage', 'roles.assign'],
   },
   {
     to: '/admin/audit',
     label: 'Аудит',
-    description: 'Журнал действий пользователей и системных событий',
+    description: 'Журнал системных событий и действий',
     eyebrow: 'Audit Log',
-    shortLabel: 'AL',
-    auditOnly: true,
+    shortLabel: 'AU',
+    requiredPermissions: ['audit.read'],
   },
   {
     to: '/admin/scripts',
     label: 'Скрипты',
-    description: 'Управление скриптами и выполнениями',
-    eyebrow: 'Scripts',
+    description: 'Реестр и выполнение управляющих скриптов',
+    eyebrow: 'Script Runner',
     shortLabel: 'SC',
-    scriptsOnly: true,
+    requiredPermissions: ['scripts.manage', 'scripts.execute'],
   },
 ]
 
@@ -135,17 +133,22 @@ const pageMeta = [
     eyebrow: 'Automation',
   },
   {
-    match: (pathname: string) =>
-      pathname.startsWith('/admin') && !pathname.startsWith('/admin/scripts'),
-    title: 'Администрирование',
-    description: 'Управление доступом, пользователями и системными ролями.',
-    eyebrow: 'Control Plane',
+    match: (pathname: string) => pathname.startsWith('/admin/audit'),
+    title: 'Аудит',
+    description: 'Журнал системных событий, действий пользователей и изменений ролей.',
+    eyebrow: 'Audit Log',
   },
   {
     match: (pathname: string) => pathname.startsWith('/admin/scripts'),
     title: 'Скрипты',
-    description: 'Управление скриптами и их выполнениями на сервисах.',
-    eyebrow: 'Scripts',
+    description: 'Реестр управляющих скриптов и история выполнения.',
+    eyebrow: 'Script Runner',
+  },
+  {
+    match: (pathname: string) => pathname.startsWith('/admin'),
+    title: 'Администрирование',
+    description: 'Управление доступом, пользователями и системными ролями.',
+    eyebrow: 'Control Plane',
   },
 ]
 
@@ -184,20 +187,18 @@ function Layout({ children }: LayoutProps) {
     },
   })
 
-  const isAdmin = user?.is_admin || user?.system_roles?.some((r) => r === 'superadmin' || r === 'admin')
-  const { hasSystemPermission } = usePermissions()
-  const canReadAudit = hasSystemPermission('audit.read')
-  const canScripts =
-    hasSystemPermission('scripts.execute') || hasSystemPermission('scripts.manage')
+  const { hasAnyPermission, isSuperadmin } = usePermissions()
+
+  const isAdmin = isSuperadmin || (user?.system_roles?.some((r) => r === 'superadmin' || r === 'admin') ?? false)
+
   const availableNavItems = useMemo(
     () =>
-      navItems.filter(
-        (item) =>
-          (!item.adminOnly || isAdmin) &&
-          (!item.auditOnly || canReadAudit) &&
-          (!item.scriptsOnly || canScripts)
-      ),
-    [isAdmin, canReadAudit, canScripts]
+      navItems.filter((item) => {
+        if (!item.requiredPermissions || item.requiredPermissions.length === 0) return true
+        if (isSuperadmin) return true
+        return hasAnyPermission(...item.requiredPermissions)
+      }),
+    [isSuperadmin, hasAnyPermission]
   )
 
   const currentPage =

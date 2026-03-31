@@ -3,52 +3,41 @@ import { authApi } from '../api/auth'
 import { permissionsApi } from '../api/permissions'
 import { getActiveProjectId } from '../utils/activeProject'
 
-export interface UsePermissionsResult {
-  permissions: string[]
-  systemPermissions: string[]
-  isSuperadmin: boolean
-  hasPermission: (permission: string) => boolean
-  hasSystemPermission: (permission: string) => boolean
-  isLoading: boolean
-}
-
-export function usePermissions(): UsePermissionsResult {
-  const { data: currentUser } = useQuery({
+export function usePermissions() {
+  const { data: user } = useQuery({
     queryKey: ['auth', 'me'],
     queryFn: () => authApi.me(),
-    retry: false,
-    staleTime: 30_000,
+    staleTime: 5 * 60 * 1000,
   })
 
-  const activeProjectId = getActiveProjectId() ?? undefined
+  const projectId = getActiveProjectId() ?? undefined
 
-  const { data: effectivePerms, isLoading } = useQuery({
-    queryKey: ['permissions', 'effective', currentUser?.id, activeProjectId],
-    queryFn: () => permissionsApi.getEffectivePermissions(currentUser!.id, activeProjectId),
-    enabled: Boolean(currentUser?.id),
-    staleTime: 30_000,
+  const { data: permissions, isLoading } = useQuery({
+    queryKey: ['permissions', 'effective', user?.id, projectId],
+    queryFn: () => permissionsApi.getEffectivePermissions(user!.id, projectId),
+    enabled: !!user?.id,
+    staleTime: 30 * 1000,
   })
 
-  const permissions = effectivePerms?.project_permissions ?? []
-  const systemPermissions = effectivePerms?.system_permissions ?? []
-  const isSuperadmin = effectivePerms?.is_superadmin ?? false
-
-  const hasPermission = (permission: string): boolean => {
-    if (isSuperadmin) return true
-    return permissions.includes(permission) || systemPermissions.includes(permission)
+  const hasPermission = (perm: string): boolean => {
+    if (!permissions) return false
+    if (permissions.is_superadmin) return true
+    return (
+      permissions.system_permissions.includes(perm) ||
+      permissions.project_permissions.includes(perm)
+    )
   }
 
-  const hasSystemPermission = (permission: string): boolean => {
-    if (isSuperadmin) return true
-    return systemPermissions.includes(permission)
+  const hasAnyPermission = (...perms: string[]): boolean => {
+    return perms.some(hasPermission)
   }
 
   return {
-    permissions,
-    systemPermissions,
-    isSuperadmin,
+    systemPermissions: permissions?.system_permissions ?? [],
+    projectPermissions: permissions?.project_permissions ?? [],
+    isSuperadmin: permissions?.is_superadmin ?? false,
     hasPermission,
-    hasSystemPermission,
-    isLoading: isLoading && Boolean(currentUser?.id),
+    hasAnyPermission,
+    loading: isLoading,
   }
 }

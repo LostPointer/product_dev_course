@@ -1,19 +1,29 @@
-import type { ReactNode } from 'react'
+import { ReactNode } from 'react'
 import { usePermissions } from '../hooks/usePermissions'
 
-interface Props {
-  permission: string
-  system?: boolean
+interface PermissionGateProps {
+  permission?: string
+  anyOf?: string[]
   fallback?: ReactNode
   children: ReactNode
 }
 
-function PermissionGate({ permission, system = false, fallback = null, children }: Props) {
-  const { hasPermission, hasSystemPermission } = usePermissions()
+export function PermissionGate({
+  permission,
+  anyOf,
+  fallback = null,
+  children,
+}: PermissionGateProps) {
+  const { hasPermission, hasAnyPermission } = usePermissions()
 
-  const allowed = system ? hasSystemPermission(permission) : hasPermission(permission)
+  let allowed = false
+  if (permission) {
+    allowed = hasPermission(permission)
+  } else if (anyOf && anyOf.length > 0) {
+    allowed = hasAnyPermission(...anyOf)
+  } else {
+    allowed = true
+  }
 
-  return <>{allowed ? children : fallback}</>
+  return allowed ? <>{children}</> : <>{fallback}</>
 }
-
-export default PermissionGate
