@@ -6,7 +6,7 @@ import type {
   ScriptExecution,
   ScriptsListResponse,
   ExecutionsListResponse,
-} from '../types'
+} from '../types/scripts'
 
 const AUTH_PROXY_URL = import.meta.env.VITE_AUTH_PROXY_URL ?? 'http://localhost:8080'
 

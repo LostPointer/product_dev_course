@@ -29,6 +29,32 @@ export interface GrantRoleRequest {
   expires_at?: string
 }
 
+export interface UserSystemRole {
+  user_id: string
+  role_id: string
+  role_name: string
+  granted_by: string
+  granted_at: string
+  expires_at?: string | null
+}
+
+export interface UserProjectRole {
+  user_id: string
+  project_id: string
+  role_id: string
+  role_name: string
+  granted_by: string
+  granted_at: string
+  expires_at?: string | null
+}
+
+export interface AuditLogResponse {
+  entries: AuditEntry[]
+  total: number
+  limit: number
+  offset: number
+}
+
 export interface AuditEntry {
   id: string
   actor_id: string

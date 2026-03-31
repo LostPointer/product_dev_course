@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { AuditLogResponse } from '../types'
+import type { AuditLogResponse } from '../types/permissions'
 
 const AUTH_PROXY_URL = import.meta.env.VITE_AUTH_PROXY_URL ?? 'http://localhost:8080'
 

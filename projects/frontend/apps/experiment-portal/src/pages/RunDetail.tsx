@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { runsApi, experimentsApi, captureSessionsApi, sensorsApi } from '../api/client'
@@ -22,6 +22,7 @@ import './RunDetail.scss'
 import { setActiveProjectId } from '../utils/activeProject'
 import { IS_TEST } from '../utils/env'
 import { notifyError, notifySuccess } from '../utils/notify'
+import { useCountdown } from '../hooks/useCountdown'
 
 function RunDetail() {
   const { id } = useParams<{ id: string }>()
@@ -206,6 +207,28 @@ function RunDetail() {
     },
   })
 
+  const countdownDeadline = useMemo(() => {
+    if (
+      !run ||
+      run.status !== 'running' ||
+      run.auto_complete_after_minutes === null ||
+      !run.started_at
+    ) {
+      return null
+    }
+    return new Date(run.started_at).getTime() + run.auto_complete_after_minutes * 60 * 1000
+  }, [run?.status, run?.auto_complete_after_minutes, run?.started_at])
+
+  const { remaining: countdownRemaining, isWarning: countdownIsWarning, isExpired: countdownIsExpired } =
+    useCountdown(countdownDeadline)
+
+  const formatCountdown = (ms: number): string => {
+    const totalSeconds = Math.max(0, Math.ceil(ms / 1000))
+    const minutes = Math.floor(totalSeconds / 60)
+    const seconds = totalSeconds % 60
+    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+  }
+
   const formatDuration = (seconds?: number) => {
     if (!seconds) return '-'
     const hours = Math.floor(seconds / 3600)
@@ -350,6 +373,14 @@ function RunDetail() {
               : ` / done ${completedSessionsCount}`}
           </span>
         </div>
+
+        {countdownDeadline !== null && (
+          <div className={`run-countdown${countdownIsWarning ? ' countdown-warning' : ''}`}>
+            {countdownIsExpired
+              ? 'Автозавершение ожидается...'
+              : `Автозавершение через ${formatCountdown(countdownRemaining!)}`}
+          </div>
+        )}
       </section>
 
       <div className="detail-grid run-detail__overview-grid">

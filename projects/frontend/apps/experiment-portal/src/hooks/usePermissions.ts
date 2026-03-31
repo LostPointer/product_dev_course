@@ -19,6 +19,9 @@ export function usePermissions() {
     staleTime: 30 * 1000,
   })
 
+  const systemPermissions = permissions?.system_permissions ?? []
+  const projectPermissions = permissions?.project_permissions ?? []
+
   const hasPermission = (perm: string): boolean => {
     if (!permissions) return false
     if (permissions.is_superadmin) return true
@@ -28,16 +31,24 @@ export function usePermissions() {
     )
   }
 
+  const hasSystemPermission = (perm: string): boolean => {
+    if (!permissions) return false
+    if (permissions.is_superadmin) return true
+    return permissions.system_permissions.includes(perm)
+  }
+
   const hasAnyPermission = (...perms: string[]): boolean => {
     return perms.some(hasPermission)
   }
 
   return {
-    systemPermissions: permissions?.system_permissions ?? [],
-    projectPermissions: permissions?.project_permissions ?? [],
+    systemPermissions,
+    projectPermissions,
+    permissions: [...systemPermissions, ...projectPermissions],
     isSuperadmin: permissions?.is_superadmin ?? false,
     hasPermission,
+    hasSystemPermission,
     hasAnyPermission,
-    loading: isLoading,
+    isLoading,
   }
 }

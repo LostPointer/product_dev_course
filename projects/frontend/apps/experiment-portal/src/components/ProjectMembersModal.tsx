@@ -100,7 +100,7 @@ function MemberRolesModal({
 
     const grantMutation = useMutation({
         mutationFn: (roleId: string) =>
-            permissionsApi.grantProjectRole(projectId, userId, { role_id: roleId }),
+            permissionsApi.grantProjectRole(projectId, userId, roleId),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'members'] })
             notifySuccess('Роль назначена')
@@ -226,8 +226,8 @@ function CreateProjectRoleModal({ isOpen, onClose, projectId }: CreateProjectRol
         mutationFn: () =>
             permissionsApi.createProjectRole(projectId, {
                 name,
-                description: description || null,
-                permission_ids: permissionIds,
+                description: description || undefined,
+                permissions: permissionIds,
             }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'roles'] })

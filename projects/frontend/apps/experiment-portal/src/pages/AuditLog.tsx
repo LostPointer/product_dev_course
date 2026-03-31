@@ -28,7 +28,7 @@ function AuditLog() {
   const filters = {
     actor_id: searchParams.get('actor_id') || undefined,
     action: searchParams.get('action') || undefined,
-    scope_type: searchParams.get('scope_type') || undefined,
+    scope_type: (searchParams.get('scope_type') || undefined) as 'system' | 'project' | undefined,
     from: searchParams.get('from') || undefined,
     to: searchParams.get('to') || undefined,
   }
@@ -39,7 +39,7 @@ function AuditLog() {
     queryKey: ['audit-log', filters, offset],
     queryFn: async () => {
       try {
-        return await auditApi.listAuditLog({ ...filters, limit: LIMIT, offset })
+        return await auditApi.queryAuditLog({ ...filters, limit: LIMIT, offset })
       } catch (err: any) {
         const msg =
           err?.response?.data?.error ||
@@ -89,7 +89,7 @@ function AuditLog() {
     )
   }
 
-  const entries = data?.items ?? []
+  const entries = data?.entries ?? []
   const total = data?.total ?? 0
 
   return (

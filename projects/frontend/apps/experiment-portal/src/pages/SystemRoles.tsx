@@ -50,7 +50,7 @@ function SystemRoles() {
   }, [roles, search])
 
   const createMutation = useMutation({
-    mutationFn: (data: { name: string; description?: string | null; permission_ids?: string[] }) =>
+    mutationFn: (data: { name: string; description?: string; permissions: string[] }) =>
       permissionsApi.createSystemRole(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['system-roles'] })
@@ -69,7 +69,7 @@ function SystemRoles() {
       data,
     }: {
       id: string
-      data: { name?: string; description?: string | null; permission_ids?: string[] }
+      data: { name?: string; description?: string; permissions?: string[] }
     }) => permissionsApi.updateSystemRole(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['system-roles'] })
@@ -130,8 +130,8 @@ function SystemRoles() {
 
     const payload = {
       name,
-      description: form.description.trim() || null,
-      permission_ids: form.selectedPermissions,
+      description: form.description.trim() || undefined,
+      permissions: form.selectedPermissions,
     }
 
     if (editingRole) {

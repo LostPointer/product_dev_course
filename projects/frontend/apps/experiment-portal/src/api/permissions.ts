@@ -5,7 +5,7 @@ import type {
   EffectivePermissions,
   UserSystemRole,
   UserProjectRole,
-} from '../types'
+} from '../types/permissions'
 
 const AUTH_PROXY_URL = import.meta.env.VITE_AUTH_PROXY_URL ?? 'http://localhost:8080'
 
@@ -65,13 +65,14 @@ export const permissionsApi = {
   // System role assignments
   grantSystemRole: async (
     userId: string,
-    roleId: string,
+    roleIdOrBody: string | { role_id: string; expires_at?: string },
     expiresAt?: string
   ): Promise<UserSystemRole> => {
-    const res = await client.post<UserSystemRole>(
-      `/api/v1/users/${userId}/system-roles`,
-      { role_id: roleId, ...(expiresAt ? { expires_at: expiresAt } : {}) }
-    )
+    const body =
+      typeof roleIdOrBody === 'string'
+        ? { role_id: roleIdOrBody, ...(expiresAt ? { expires_at: expiresAt } : {}) }
+        : roleIdOrBody
+    const res = await client.post<UserSystemRole>(`/api/v1/users/${userId}/system-roles`, body)
     return res.data
   },
 

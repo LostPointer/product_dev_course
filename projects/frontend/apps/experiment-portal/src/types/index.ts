@@ -1,151 +1,7 @@
 /** Типы для экспериментов и runs */
 import type { TelemetryQueryRecord } from './telemetry'
-
-// RBAC v2
-export interface Permission {
-  id: string
-  scope_type: 'system' | 'project'
-  category: string
-  description?: string | null
-}
-
-export interface Role {
-  id: string
-  name: string
-  scope_type: 'system' | 'project'
-  project_id?: string | null
-  is_builtin: boolean
-  description?: string | null
-  created_by?: string | null
-  created_at: string
-  updated_at: string
-  permissions?: string[]
-}
-
-export interface UserSystemRole {
-  user_id: string
-  role_id: string
-  role_name: string
-  granted_by: string
-  granted_at: string
-  expires_at?: string | null
-}
-
-export interface UserProjectRole {
-  user_id: string
-  project_id: string
-  role_id: string
-  role_name: string
-  granted_by: string
-  granted_at: string
-  expires_at?: string | null
-}
-
-export interface EffectivePermissions {
-  user_id: string
-  is_superadmin: boolean
-  system_permissions: string[]
-  project_permissions: string[]
-}
-
-// Audit (system-wide audit log)
-export interface AuditEntry {
-  id: string
-  timestamp: string
-  actor_id: string
-  action: string
-  scope_type: 'system' | 'project'
-  scope_id?: string | null
-  target_type?: string | null
-  target_id?: string | null
-  details: Record<string, unknown>
-  ip_address?: string | null
-  user_agent?: string | null
-}
-
-export interface AuditLogResponse {
-  entries: AuditEntry[]
-  total: number
-  limit: number
-  offset: number
-}
-
-// Scripts
-export interface ScriptParameter {
-  name: string
-  type: 'string' | 'number' | 'boolean'
-  required: boolean
-  default?: unknown
-  description?: string
-}
-
-export interface Script {
-  id: string
-  name: string
-  description?: string | null
-  target_service: string
-  script_type: 'python' | 'bash' | 'javascript'
-  script_body: string
-  parameters_schema: ScriptParameter[]
-  timeout_sec: number
-  is_active: boolean
-  created_by: string
-  created_at: string
-  updated_at: string
-}
-
-export interface ScriptCreate {
-  name: string
-  description?: string
-  target_service: string
-  script_type: 'python' | 'bash' | 'javascript'
-  script_body: string
-  parameters_schema?: ScriptParameter[]
-  timeout_sec?: number
-}
-
-export interface ScriptUpdate {
-  name?: string
-  description?: string
-  script_body?: string
-  parameters_schema?: ScriptParameter[]
-  timeout_sec?: number
-  is_active?: boolean
-}
-
-export type ScriptExecutionStatus = 'pending' | 'running' | 'completed' | 'failed' | 'timeout' | 'cancelled'
-
-export interface ScriptExecution {
-  id: string
-  script_id: string
-  script_name?: string | null
-  status: ScriptExecutionStatus
-  parameters: Record<string, unknown>
-  target_instance?: string | null
-  requested_by: string
-  started_at?: string | null
-  finished_at?: string | null
-  exit_code?: number | null
-  stdout?: string | null
-  stderr?: string | null
-  error_message?: string | null
-  created_at: string
-  updated_at: string
-}
-
-export interface ScriptsListResponse {
-  scripts: Script[]
-  total: number
-  limit: number
-  offset: number
-}
-
-export interface ExecutionsListResponse {
-  executions: ScriptExecution[]
-  total: number
-  limit: number
-  offset: number
-}
+import type { UserProjectRole } from './permissions'
+export type { UserProjectRole }
 
 export interface Experiment {
   id: string
@@ -173,6 +29,7 @@ export interface Run {
   duration_seconds?: number
   notes?: string
   metadata: Record<string, any>
+  auto_complete_after_minutes: number | null
   created_at: string
   updated_at: string
 }
@@ -200,6 +57,7 @@ export interface RunCreate {
   params: Record<string, any>
   notes?: string
   metadata?: Record<string, any>
+  auto_complete_after_minutes?: number | null
 }
 
 export interface RunUpdate {

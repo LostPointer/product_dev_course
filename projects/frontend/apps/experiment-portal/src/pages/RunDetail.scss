@@ -175,6 +175,24 @@
   color: var(--text);
 }
 
+.run-countdown {
+  margin-top: 10px;
+  padding: 8px 14px;
+  border-radius: var(--radius-pill);
+  background: rgba(15, 118, 110, 0.08);
+  color: var(--primary);
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  font-size: 0.9rem;
+  font-weight: 600;
+  display: inline-block;
+
+  &.countdown-warning {
+    background: rgba(217, 119, 6, 0.1);
+    color: #b45309;
+    border-color: rgba(217, 119, 6, 0.25);
+  }
+}
+
 @media (max-width: 960px) {
   .telemetry-controls {
     grid-template-columns: 1fr;

@@ -1,6 +1,39 @@
 export type ScriptType = 'python' | 'bash' | 'javascript'
 export type ExecutionStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'timeout'
 
+export interface ScriptCreate {
+  name: string
+  description?: string
+  target_service: string
+  script_type: ScriptType
+  script_body: string
+  parameters_schema?: Record<string, unknown>
+  timeout_sec?: number
+}
+
+export interface ScriptUpdate {
+  name?: string
+  description?: string
+  script_body?: string
+  parameters_schema?: Record<string, unknown>
+  timeout_sec?: number
+  is_active?: boolean
+}
+
+export interface ScriptsListResponse {
+  scripts: Script[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export interface ExecutionsListResponse {
+  executions: ScriptExecution[]
+  total: number
+  limit: number
+  offset: number
+}
+
 export interface Script {
   id: string
   name: string

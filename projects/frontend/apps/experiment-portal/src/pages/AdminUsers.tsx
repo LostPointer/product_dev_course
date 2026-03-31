@@ -192,7 +192,8 @@ function AdminUsers() {
         mutationFn: () =>
             permissionsApi.createSystemRole({
                 name: newRoleName.trim(),
-                description: newRoleDescription.trim() || null,
+                description: newRoleDescription.trim() || undefined,
+                permissions: [],
             }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['system-roles'] })

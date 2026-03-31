@@ -130,7 +130,7 @@ function ScriptFormModal({ script, onClose, onSaved }: ScriptFormModalProps) {
         : {}
       const payload = {
         name: form.name.trim(),
-        description: form.description.trim() || null,
+        description: form.description.trim() || undefined,
         target_service: form.target_service.trim(),
         script_type: form.script_type,
         script_body: form.script_body,
@@ -694,7 +694,7 @@ function RegistryTab({ onScriptExecuted: _onScriptExecuted }: RegistryTabProps) 
     },
   })
 
-  const scripts = data ?? []
+  const scripts = data?.scripts ?? []
 
   return (
     <>
@@ -884,14 +884,14 @@ function ExecutionsTab({ onTabChange: _onTabChange }: ExecutionsTabProps) {
     enabled: showExecuteModal,
   })
 
-  const executions = executionsData ?? []
+  const executions = executionsData?.executions ?? []
 
   // Build a script id -> name map from cached scripts query
   const scriptMap = useQuery({
     queryKey: ['scripts', {}],
     queryFn: () => scriptsApi.listScripts(),
     staleTime: 60_000,
-  }).data?.reduce<Record<string, string>>((acc, s) => {
+  }).data?.scripts.reduce<Record<string, string>>((acc, s) => {
     acc[s.id] = s.name
     return acc
   }, {}) ?? {}
@@ -1006,7 +1006,7 @@ function ExecutionsTab({ onTabChange: _onTabChange }: ExecutionsTabProps) {
 
       {showExecuteModal && (
         <ExecuteScriptModal
-          scripts={activeScripts ?? []}
+          scripts={activeScripts?.scripts ?? []}
           onClose={() => setShowExecuteModal(false)}
           onExecuted={() => {
             setShowExecuteModal(false)

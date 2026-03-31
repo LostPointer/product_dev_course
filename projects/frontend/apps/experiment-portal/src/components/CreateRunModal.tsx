@@ -23,9 +23,11 @@ function CreateRunModal({ experimentId, isOpen, onClose }: CreateRunModalProps) 
         params: {},
         notes: '',
         metadata: {},
+        auto_complete_after_minutes: null,
     })
     const [paramsJson, setParamsJson] = useState('{}')
     const [metadataJson, setMetadataJson] = useState('{}')
+    const [autoCompleteInput, setAutoCompleteInput] = useState('')
     const [error, setError] = useState<string | null>(null)
     const [fieldErrors, setFieldErrors] = useState<Record<string, string | undefined>>({})
 
@@ -67,11 +69,15 @@ function CreateRunModal({ experimentId, isOpen, onClose }: CreateRunModalProps) 
         }
 
         const { paramsJson: params, metadataJson: metadata, ...rest } = result.data
+        const autoCompleteMinutes = autoCompleteInput.trim() !== ''
+            ? parseInt(autoCompleteInput, 10)
+            : null
         createMutation.mutate({
             ...rest,
             params,
             notes: rest.notes || undefined,
             metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+            auto_complete_after_minutes: autoCompleteMinutes,
         })
     }
 
@@ -82,9 +88,11 @@ function CreateRunModal({ experimentId, isOpen, onClose }: CreateRunModalProps) 
                 params: {},
                 notes: '',
                 metadata: {},
+                auto_complete_after_minutes: null,
             })
             setParamsJson('{}')
             setMetadataJson('{}')
+            setAutoCompleteInput('')
             setError(null)
             setFieldErrors({})
             onClose()
@@ -147,6 +155,23 @@ function CreateRunModal({ experimentId, isOpen, onClose }: CreateRunModalProps) 
                         rows={3}
                         disabled={createMutation.isPending}
                     />
+                </div>
+
+                <div className="form-group">
+                    <label htmlFor="run_auto_complete">Автозавершение (минуты)</label>
+                    <input
+                        id="run_auto_complete"
+                        type="number"
+                        min="1"
+                        max="1440"
+                        value={autoCompleteInput}
+                        onChange={(e) => setAutoCompleteInput(e.target.value)}
+                        placeholder="Нет (без лимита)"
+                        disabled={createMutation.isPending}
+                    />
+                    <small className="form-hint">
+                        Через сколько минут после старта run завершится автоматически. Оставьте пустым для отключения.
+                    </small>
                 </div>
 
                 <div className="form-group">
