@@ -54,6 +54,16 @@ class Run(BaseModel):
     updated_at: datetime
 
 
+class RunSensor(BaseModel):
+    run_id: UUID
+    sensor_id: UUID
+    project_id: UUID
+    mode: str = "passive"
+    attached_at: datetime
+    detached_at: datetime | None = None
+    created_by: UUID
+
+
 class CaptureSession(BaseModel):
     id: UUID
     run_id: UUID

@@ -34,6 +34,16 @@ export interface Run {
   updated_at: string
 }
 
+export interface RunSensor {
+  run_id: string
+  sensor_id: string
+  project_id: string
+  mode: string
+  attached_at: string
+  detached_at: string | null
+  created_by: string
+}
+
 export interface ExperimentCreate {
   project_id: string
   name: string

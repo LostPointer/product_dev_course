@@ -11,7 +11,7 @@ from asyncpg import Pool, Record  # type: ignore[import-untyped]
 from experiment_service.core.exceptions import NotFoundError
 from experiment_service.domain.dto import RunCreateDTO, RunUpdateDTO
 from experiment_service.domain.enums import RunStatus
-from experiment_service.domain.models import Run
+from experiment_service.domain.models import Run, RunSensor
 from experiment_service.repositories.base import BaseRepository
 
 
@@ -385,3 +385,52 @@ class RunRepository(BaseRepository):
             now,
         )
         return [self._to_model(record) for record in records]
+
+    async def list_sensors(self, run_id: UUID) -> list[RunSensor]:
+        """List sensors attached to a run (not detached)."""
+        rows = await self._fetch(
+            """
+            SELECT run_id, sensor_id, project_id, mode, attached_at, detached_at, created_by
+            FROM run_sensors
+            WHERE run_id = $1 AND detached_at IS NULL
+            ORDER BY attached_at
+            """,
+            run_id,
+        )
+        return [RunSensor(**dict(row)) for row in rows]
+
+    async def attach_sensor(
+        self,
+        run_id: UUID,
+        sensor_id: UUID,
+        project_id: UUID,
+        created_by: UUID,
+        mode: str = "passive",
+    ) -> RunSensor:
+        """Attach a sensor to a run (upsert — re-attaches if previously detached)."""
+        row = await self._fetchrow(
+            """
+            INSERT INTO run_sensors (run_id, sensor_id, project_id, mode, attached_at, detached_at, created_by)
+            VALUES ($1, $2, $3, $4, now(), NULL, $5)
+            ON CONFLICT (run_id, sensor_id) DO UPDATE
+                SET mode = EXCLUDED.mode,
+                    attached_at = now(),
+                    detached_at = NULL,
+                    created_by = EXCLUDED.created_by
+            RETURNING run_id, sensor_id, project_id, mode, attached_at, detached_at, created_by
+            """,
+            run_id, sensor_id, project_id, mode, created_by,
+        )
+        assert row is not None
+        return RunSensor(**dict(row))
+
+    async def detach_sensor(self, run_id: UUID, sensor_id: UUID) -> bool:
+        """Detach a sensor from a run (soft delete). Returns True if row existed."""
+        result = await self._execute(
+            """
+            UPDATE run_sensors SET detached_at = now()
+            WHERE run_id = $1 AND sensor_id = $2 AND detached_at IS NULL
+            """,
+            run_id, sensor_id,
+        )
+        return result != "UPDATE 0"

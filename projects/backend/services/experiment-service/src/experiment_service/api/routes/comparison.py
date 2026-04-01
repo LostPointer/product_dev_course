@@ -139,3 +139,95 @@ async def compare_get(request: web.Request) -> web.Response:
     except NotFoundError as exc:
         raise web.HTTPNotFound(text=str(exc)) from exc
     return web.json_response(payload)
+
+
+@routes.get("/api/v1/experiments/{experiment_id}/compare/export")
+async def export_comparison(request: web.Request) -> web.Response:
+    """Export comparison data as CSV or JSON (viewer+)."""
+    import csv
+    import io
+    import json
+
+    user = await require_current_user(request)
+    ensure_permission(user, "experiments.view")
+    experiment_id = parse_uuid(request.match_info["experiment_id"], "experiment_id")
+    project_id = resolve_project_id(user, request.rel_url.query.get("project_id"))
+
+    fmt = request.rel_url.query.get("format", "csv").lower()
+    if fmt not in ("csv", "json"):
+        raise web.HTTPBadRequest(text="format must be 'csv' or 'json'")
+
+    run_ids_raw = request.rel_url.query.get("run_ids", "")
+    names_raw = request.rel_url.query.get("names", "")
+    if not run_ids_raw:
+        raise web.HTTPBadRequest(text="run_ids is required")
+    if not names_raw:
+        raise web.HTTPBadRequest(text="names is required")
+
+    run_ids = _parse_uuid_list(run_ids_raw, "run_ids")
+    metric_names = [n.strip() for n in names_raw.split(",") if n.strip()]
+    if not metric_names:
+        raise web.HTTPBadRequest(text="names must contain at least one metric name")
+
+    from_step = _parse_optional_int(request.rel_url.query.get("from_step"), "from_step")
+    to_step = _parse_optional_int(request.rel_url.query.get("to_step"), "to_step")
+    max_points_raw = _parse_optional_int(request.rel_url.query.get("max_points"), "max_points")
+    max_points = min(
+        max_points_raw if max_points_raw is not None else _DEFAULT_MAX_POINTS,
+        10000,
+    )
+    max_points = max(_MIN_MAX_POINTS, max_points)
+
+    service = await get_metrics_service(request)
+    try:
+        data = await service.compare_runs(
+            project_id,
+            experiment_id,
+            run_ids=run_ids,
+            metric_names=metric_names,
+            from_step=from_step,
+            to_step=to_step,
+            max_points_per_series=max_points,
+        )
+    except ValueError as exc:
+        raise web.HTTPBadRequest(text=str(exc)) from exc
+    except NotFoundError as exc:
+        raise web.HTTPNotFound(text=str(exc)) from exc
+
+    filename_base = f"comparison_{experiment_id}"
+
+    if fmt == "json":
+        body = json.dumps(data, default=str)
+        return web.Response(
+            body=body,
+            content_type="application/json",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename_base}.json"'
+            },
+        )
+
+    # CSV: one row per (run_id, metric_name, step, value)
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["run_id", "run_name", "metric_name", "step", "value"])
+    for run_entry in data.get("runs", []):
+        run_id_str = run_entry.get("run_id", "")
+        run_name = run_entry.get("run_name", "")
+        metrics: dict = run_entry.get("metrics", {})
+        for metric_name, metric_data in metrics.items():
+            for point in metric_data.get("series", []):
+                writer.writerow([
+                    run_id_str,
+                    run_name,
+                    metric_name,
+                    point.get("step", ""),
+                    point.get("value", ""),
+                ])
+
+    return web.Response(
+        body=buf.getvalue(),
+        content_type="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename_base}.csv"'
+        },
+    )

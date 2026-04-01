@@ -289,6 +289,42 @@ export default function ComparisonPage() {
       {/* Results */}
       {comparisonResult && (
         <>
+          {/* Export buttons */}
+          <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() =>
+                window.open(
+                  comparisonApi.exportUrl(experimentId!, {
+                    run_ids: selectedRunIds,
+                    metric_names: selectedMetrics.length > 0 ? selectedMetrics : comparisonResult.metric_names,
+                    format: 'csv',
+                  }),
+                  '_blank'
+                )
+              }
+            >
+              Export CSV
+            </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() =>
+                window.open(
+                  comparisonApi.exportUrl(experimentId!, {
+                    run_ids: selectedRunIds,
+                    metric_names: selectedMetrics.length > 0 ? selectedMetrics : comparisonResult.metric_names,
+                    format: 'json',
+                  }),
+                  '_blank'
+                )
+              }
+            >
+              Export JSON
+            </Button>
+          </Box>
+
           {/* Summary table */}
           <Paper sx={{ mb: 3 }}>
             <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>

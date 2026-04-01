@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { runsApi, experimentsApi, captureSessionsApi, sensorsApi } from '../api/client'
+import { runsApi, experimentsApi, captureSessionsApi, sensorsApi, runSensorsApi } from '../api/client'
 import { format } from 'date-fns'
 import type { CaptureSession } from '../types'
 import {
@@ -24,6 +24,109 @@ import { setActiveProjectId } from '../utils/activeProject'
 import { IS_TEST } from '../utils/env'
 import { notifyError, notifySuccess } from '../utils/notify'
 import { useCountdown } from '../hooks/useCountdown'
+
+// ---------------------------------------------------------------------------
+// Run Sensors panel
+// ---------------------------------------------------------------------------
+
+function RunSensorsPanel({ runId, projectId }: { runId: string; projectId: string }) {
+  const queryClient = useQueryClient()
+  const [showAdd, setShowAdd] = useState(false)
+
+  const { data: attachedData, isLoading } = useQuery({
+    queryKey: ['run-sensors', runId],
+    queryFn: () => runSensorsApi.list(runId, { project_id: projectId }),
+    enabled: !!runId,
+  })
+
+  const { data: allSensorsData } = useQuery({
+    queryKey: ['sensors', projectId],
+    queryFn: () => sensorsApi.list({ project_id: projectId }),
+    enabled: !!projectId,
+  })
+
+  const attachMutation = useMutation({
+    mutationFn: (sensorId: string) =>
+      runSensorsApi.attach(runId, sensorId, { project_id: projectId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['run-sensors', runId] })
+      setShowAdd(false)
+      notifySuccess('Датчик привязан')
+    },
+    onError: () => notifyError('Не удалось привязать датчик'),
+  })
+
+  const detachMutation = useMutation({
+    mutationFn: (sensorId: string) =>
+      runSensorsApi.detach(runId, sensorId, { project_id: projectId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['run-sensors', runId] })
+      notifySuccess('Датчик откреплён')
+    },
+    onError: () => notifyError('Не удалось открепить датчик'),
+  })
+
+  const attached = attachedData?.sensors ?? []
+  const attachedIds = new Set(attached.map((s) => s.sensor_id))
+  const allSensors = allSensorsData?.sensors ?? []
+  const available = allSensors.filter((s) => !attachedIds.has(s.id))
+
+  if (isLoading) return <Loading />
+
+  return (
+    <div className="run-sensors">
+      {attached.length === 0 ? (
+        <p className="run-sensors__empty">Датчики не привязаны</p>
+      ) : (
+        <div className="run-sensors__list">
+          {attached.map((rs) => {
+            const sensor = allSensors.find((s) => s.id === rs.sensor_id)
+            return (
+              <div key={rs.sensor_id} className="run-sensors__item">
+                <span className="run-sensors__name">{sensor?.name ?? rs.sensor_id}</span>
+                <span className="run-sensors__type">{sensor?.type ?? '—'}</span>
+                <span className="run-sensors__mode badge">{rs.mode}</span>
+                <button
+                  className="btn btn-danger btn-sm"
+                  onClick={() => detachMutation.mutate(rs.sensor_id)}
+                  disabled={detachMutation.isPending}
+                >
+                  Открепить
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
+      {!showAdd ? (
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={() => setShowAdd(true)}
+          disabled={available.length === 0}
+          style={{ marginTop: '0.5rem' }}
+        >
+          + Привязать датчик
+        </button>
+      ) : (
+        <div className="run-sensors__add" style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem' }}>
+          <select
+            defaultValue=""
+            onChange={(e) => { if (e.target.value) attachMutation.mutate(e.target.value) }}
+            disabled={attachMutation.isPending}
+          >
+            <option value="">Выберите датчик...</option>
+            {available.map((s) => (
+              <option key={s.id} value={s.id}>{s.name} ({s.type})</option>
+            ))}
+          </select>
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowAdd(false)}>
+            Отмена
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function RunDetail() {
   const { id } = useParams<{ id: string }>()
@@ -655,6 +758,17 @@ function RunDetail() {
               ))}
           </div>
         )}
+      </section>
+
+      <section className="card detail-card">
+        <div className="detail-section-header">
+          <div className="detail-section-header__copy">
+            <span className="detail-card__eyebrow">Sensors</span>
+            <h3 className="detail-card__title">Датчики запуска</h3>
+            <p>Датчики, привязанные к этому запуску для аннотации телеметрии.</p>
+          </div>
+        </div>
+        <RunSensorsPanel runId={id!} projectId={experiment?.project_id ?? ''} />
       </section>
 
       <section className="card detail-card">
