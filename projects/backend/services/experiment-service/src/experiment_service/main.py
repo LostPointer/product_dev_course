@@ -15,6 +15,7 @@ from backend_common.metrics import metrics_handler, metrics_middleware
 from backend_common.middleware.error_handler import error_handling_middleware
 from backend_common.logging_config import configure_logging
 
+from experiment_service.core.s3_client import get_s3_client
 from experiment_service.api.router import setup_routes
 from experiment_service.api.routes.health import health_routes
 from backend_common.db.pool import close_pool_service as close_pool, init_pool_service
@@ -76,6 +77,18 @@ async def stop_script_runner(app: web.Application) -> None:
         await runner.stop()
 
 
+async def init_s3_bucket(app: web.Application) -> None:
+    """Ensure S3 bucket exists on startup (best-effort)."""
+    try:
+        await get_s3_client().ensure_bucket()
+    except Exception:
+        import structlog
+        structlog.get_logger(__name__).warning(
+            "s3_bucket_init_failed",
+            hint="MinIO not available, artifact upload/download will fail",
+        )
+
+
 def create_app() -> web.Application:
     app, cors = create_base_app(settings)
     app.middlewares.append(error_handling_middleware)
@@ -91,6 +104,7 @@ def create_app() -> web.Application:
     setup_otel(app)
 
     app.on_startup.append(init_pool)
+    app.on_startup.append(init_s3_bucket)
     app.on_startup.append(start_webhook_dispatcher)
     app.on_startup.append(start_background_worker)
     app.on_startup.append(start_audit_client)

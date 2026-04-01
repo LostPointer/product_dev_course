@@ -29,6 +29,8 @@ import {
   Typography,
 } from '@mui/material'
 import type { SelectChangeEvent } from '@mui/material'
+import { artifactsApi } from '../api/client'
+import type { Artifact, ArtifactType } from '../types'
 // Inline minimal SVG icons (no @mui/icons-material dependency needed)
 function DeleteIcon() {
   return (
@@ -53,8 +55,22 @@ function AddIcon() {
     </svg>
   )
 }
-import { artifactsApi } from '../api/client'
-import type { Artifact, ArtifactType } from '../types'
+
+function UploadIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor">
+      <path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z" />
+    </svg>
+  )
+}
+
+function DownloadIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor">
+      <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
+    </svg>
+  )
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -188,6 +204,168 @@ function AddArtifactDialog({ open, onClose, onSubmit, loading, error }: AddDialo
   )
 }
 
+// ── Upload Artifact Dialog ────────────────────────────────────────────────────
+
+interface UploadDialogProps {
+  open: boolean
+  onClose: () => void
+  runId: string
+  projectId: string
+  onSuccess: () => void
+}
+
+function UploadArtifactDialog({ open, onClose, runId, projectId: _projectId, onSuccess }: UploadDialogProps) {
+  const [type, setType] = useState<string>('other')
+  const [file, setFile] = useState<File | null>(null)
+  const [metadata, setMetadata] = useState('')
+  const [status, setStatus] = useState<'idle' | 'uploading' | 'done' | 'error'>('idle')
+  const [progress, setProgress] = useState(0)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+
+  function handleClose() {
+    if (status === 'uploading') return
+    setType('other')
+    setFile(null)
+    setMetadata('')
+    setStatus('idle')
+    setProgress(0)
+    setErrorMsg(null)
+    onClose()
+  }
+
+  async function handleUpload() {
+    if (!file) return
+    setStatus('uploading')
+    setProgress(0)
+    setErrorMsg(null)
+    try {
+      let parsedMeta: Record<string, unknown> | undefined
+      if (metadata.trim()) {
+        try {
+          parsedMeta = JSON.parse(metadata)
+        } catch {
+          setErrorMsg('Metadata должен быть валидным JSON')
+          setStatus('error')
+          return
+        }
+      }
+
+      // Step 1: request presigned upload URL
+      const { upload_url } = await artifactsApi.requestUploadUrl(runId, {
+        filename: file.name,
+        content_type: file.type || 'application/octet-stream',
+        type,
+        size_bytes: file.size,
+        metadata: parsedMeta,
+      })
+
+      // Step 2: upload file directly to MinIO via PUT
+      setProgress(30)
+      const xhr = new XMLHttpRequest()
+      await new Promise<void>((resolve, reject) => {
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            setProgress(30 + Math.round((e.loaded / e.total) * 65))
+          }
+        }
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) resolve()
+          else reject(new Error(`Upload failed: HTTP ${xhr.status}`))
+        }
+        xhr.onerror = () => reject(new Error('Network error during upload'))
+        xhr.open('PUT', upload_url)
+        xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream')
+        xhr.send(file)
+      })
+
+      setProgress(100)
+      setStatus('done')
+      setTimeout(() => {
+        onSuccess()
+        handleClose()
+      }, 800)
+    } catch (e: unknown) {
+      setErrorMsg(e instanceof Error ? e.message : 'Upload failed')
+      setStatus('error')
+    }
+  }
+
+  return (
+    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Upload Artifact</DialogTitle>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
+        {errorMsg && <Alert severity="error">{errorMsg}</Alert>}
+        {status === 'done' && <Alert severity="success">Загружено!</Alert>}
+
+        <FormControl size="small" required>
+          <InputLabel>Type</InputLabel>
+          <Select
+            value={type}
+            label="Type"
+            onChange={(e: SelectChangeEvent) => setType(e.target.value)}
+            disabled={status === 'uploading'}
+          >
+            {ARTIFACT_TYPES.map((t) => (
+              <MenuItem key={t} value={t}>{t}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        <Button
+          variant="outlined"
+          component="label"
+          startIcon={<UploadIcon />}
+          disabled={status === 'uploading'}
+        >
+          {file ? file.name : 'Выбрать файл'}
+          <input
+            type="file"
+            hidden
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          />
+        </Button>
+
+        {file && (
+          <Typography variant="caption" color="text.secondary">
+            {humanBytes(file.size)} · {file.type || 'unknown type'}
+          </Typography>
+        )}
+
+        <TextField
+          label="Metadata (JSON, optional)"
+          size="small"
+          multiline
+          rows={2}
+          value={metadata}
+          onChange={(e) => setMetadata(e.target.value)}
+          placeholder='{"key": "value"}'
+          disabled={status === 'uploading'}
+        />
+
+        {status === 'uploading' && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <CircularProgress size={16} />
+            <Typography variant="caption">{progress}%</Typography>
+          </Box>
+        )}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={handleClose} disabled={status === 'uploading'}>
+          Cancel
+        </Button>
+        <Button
+          variant="contained"
+          onClick={handleUpload}
+          disabled={!file || status === 'uploading' || status === 'done'}
+          startIcon={status === 'uploading' ? <CircularProgress size={16} color="inherit" /> : <UploadIcon />}
+        >
+          Upload
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
 // ── Delete confirm dialog ─────────────────────────────────────────────────────
 
 function DeleteDialog({
@@ -231,10 +409,11 @@ function DeleteDialog({
 
 interface Props {
   runId: string
+  projectId: string
   isOwner?: boolean
 }
 
-export default function ArtifactsPanel({ runId, isOwner = false }: Props) {
+export default function ArtifactsPanel({ runId, projectId, isOwner = false }: Props) {
   const queryClient = useQueryClient()
 
   const [typeFilter, setTypeFilter] = useState<string>('')
@@ -242,6 +421,8 @@ export default function ArtifactsPanel({ runId, isOwner = false }: Props) {
   const [showAdd, setShowAdd] = useState(false)
   const [addError, setAddError] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Artifact | null>(null)
+  const [showUpload, setShowUpload] = useState(false)
+  const [downloadingId, setDownloadingId] = useState<string | null>(null)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['artifacts', runId, typeFilter, page],
@@ -311,6 +492,23 @@ export default function ArtifactsPanel({ runId, isOwner = false }: Props) {
     })
   }
 
+  async function handleDownload(artifact: Artifact) {
+    if (!artifact.uri.startsWith('s3://') && !artifact.uri.startsWith('http')) {
+      window.open(artifact.uri, '_blank', 'noopener,noreferrer')
+      return
+    }
+    setDownloadingId(artifact.id)
+    try {
+      const { download_url } = await artifactsApi.getDownloadUrl(artifact.id)
+      window.open(download_url, '_blank', 'noopener,noreferrer')
+    } catch {
+      // fallback: open URI directly
+      window.open(artifact.uri, '_blank', 'noopener,noreferrer')
+    } finally {
+      setDownloadingId(null)
+    }
+  }
+
   return (
     <Box>
       {/* Toolbar */}
@@ -349,6 +547,14 @@ export default function ArtifactsPanel({ runId, isOwner = false }: Props) {
         >
           Add Artifact
         </Button>
+        <Button
+          variant="outlined"
+          size="small"
+          startIcon={<UploadIcon />}
+          onClick={() => setShowUpload(true)}
+        >
+          Upload File
+        </Button>
       </Box>
 
       {/* Content */}
@@ -384,9 +590,17 @@ export default function ArtifactsPanel({ runId, isOwner = false }: Props) {
                       <Chip label={artifact.type} size="small" color={typeColor(artifact.type)} />
                     </TableCell>
                     <TableCell sx={{ maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      <Link href={artifact.uri} target="_blank" rel="noopener noreferrer" underline="hover">
-                        {artifact.uri}
-                      </Link>
+                      {artifact.uri.startsWith('s3://') ? (
+                        <Tooltip title={artifact.uri}>
+                          <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#64748b' }}>
+                            {artifact.uri.split('/').pop() ?? artifact.uri}
+                          </span>
+                        </Tooltip>
+                      ) : (
+                        <Link href={artifact.uri} target="_blank" rel="noopener noreferrer" underline="hover">
+                          {artifact.uri}
+                        </Link>
+                      )}
                     </TableCell>
                     <TableCell align="right">
                       <Typography variant="body2">{humanBytes(artifact.size_bytes)}</Typography>
@@ -410,6 +624,20 @@ export default function ArtifactsPanel({ runId, isOwner = false }: Props) {
                     </TableCell>
                     <TableCell align="right">
                       <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
+                        <Tooltip title="Download">
+                          <span>
+                            <IconButton
+                              size="small"
+                              onClick={() => handleDownload(artifact)}
+                              disabled={downloadingId === artifact.id}
+                            >
+                              {downloadingId === artifact.id
+                                ? <CircularProgress size={16} />
+                                : <DownloadIcon />
+                              }
+                            </IconButton>
+                          </span>
+                        </Tooltip>
                         {isOwner && !artifact.approved_by && (
                           <Tooltip title="Approve">
                             <span>
@@ -468,6 +696,17 @@ export default function ArtifactsPanel({ runId, isOwner = false }: Props) {
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
         loading={deleteMutation.isPending}
+      />
+
+      <UploadArtifactDialog
+        open={showUpload}
+        onClose={() => setShowUpload(false)}
+        runId={runId}
+        projectId={projectId}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['artifacts', runId] })
+          setShowUpload(false)
+        }}
       />
     </Box>
   )

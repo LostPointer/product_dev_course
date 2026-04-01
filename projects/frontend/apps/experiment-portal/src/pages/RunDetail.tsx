@@ -18,6 +18,7 @@ import TelemetryStreamModal from '../components/TelemetryStreamModal'
 import TelemetryExportModal from '../components/TelemetryExportModal'
 import AuditLog from '../components/AuditLog'
 import RunMetrics from '../components/RunMetrics'
+import ArtifactsPanel from '../components/ArtifactsPanel'
 import './RunDetail.scss'
 import { setActiveProjectId } from '../utils/activeProject'
 import { IS_TEST } from '../utils/env'
@@ -654,6 +655,21 @@ function RunDetail() {
               ))}
           </div>
         )}
+      </section>
+
+      <section className="card detail-card">
+        <div className="detail-section-header">
+          <div className="detail-section-header__copy">
+            <span className="detail-card__eyebrow">Files</span>
+            <h3 className="detail-card__title">Артефакты</h3>
+            <p>Файлы, связанные с запуском: модели, датасеты, логи, графики и конфиги.</p>
+          </div>
+        </div>
+        <ArtifactsPanel
+          runId={id!}
+          projectId={experiment?.project_id ?? ''}
+          isOwner={false}
+        />
       </section>
 
       <section className="audit-section card detail-card">

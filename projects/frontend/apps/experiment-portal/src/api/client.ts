@@ -962,5 +962,24 @@ export const artifactsApi = {
   approve: async (artifactId: string): Promise<Artifact> => {
     return await apiPost(`/api/v1/artifacts/${artifactId}/approve`, {})
   },
+
+  requestUploadUrl: async (
+    runId: string,
+    data: {
+      filename: string
+      content_type: string
+      type: string
+      size_bytes?: number
+      metadata?: Record<string, unknown>
+    }
+  ): Promise<{ upload_url: string; artifact_id: string; s3_key: string }> => {
+    return await apiPost(`/api/v1/runs/${runId}/artifacts/upload-url`, data)
+  },
+
+  getDownloadUrl: async (
+    artifactId: string
+  ): Promise<{ download_url: string; expires_in: number | null }> => {
+    return await apiGet(`/api/v1/artifacts/${artifactId}/download-url`)
+  },
 }
 

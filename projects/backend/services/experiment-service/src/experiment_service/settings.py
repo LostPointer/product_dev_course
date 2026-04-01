@@ -25,6 +25,14 @@ class Settings(BaseServiceSettings):
     rabbitmq_url: str = "amqp://guest:guest@localhost:5672/"
     telemetry_broker_url: str = "redis://localhost:6379/0"
 
+    # S3 / MinIO artifact storage
+    s3_endpoint_url: str = "http://localhost:9000"
+    s3_access_key: str = "minioadmin"
+    s3_secret_key: str = "minioadmin"
+    s3_bucket: str = "artifacts"
+    s3_presign_expire_seconds: int = 3600
+    s3_public_endpoint_url: str = "http://localhost:9000"
+
     otel_exporter_endpoint: AnyHttpUrl | None = None
 
     # Webhooks (MVP)

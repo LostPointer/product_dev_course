@@ -1,6 +1,8 @@
 """Artifact endpoints."""
 from __future__ import annotations
 
+import uuid
+
 from aiohttp import web
 from pydantic import ValidationError
 
@@ -11,6 +13,7 @@ from experiment_service.api.utils import (
     read_json,
 )
 from experiment_service.core.exceptions import NotFoundError
+from experiment_service.core.s3_client import get_s3_client
 from experiment_service.services.dependencies import (
     ensure_permission,
     get_artifact_service,
@@ -141,3 +144,112 @@ async def approve_artifact(request: web.Request) -> web.Response:
     except NotFoundError as exc:
         raise web.HTTPNotFound(text=str(exc)) from exc
     return web.json_response(_artifact_response(artifact))
+
+
+@routes.post("/api/v1/runs/{run_id}/artifacts/upload-url")
+async def request_upload_url(request: web.Request) -> web.Response:
+    """Generate presigned upload URL and create pending artifact record (editor+).
+
+    Body:
+        filename: str — original filename (used as S3 key suffix)
+        content_type: str — MIME type, e.g. "application/octet-stream"
+        type: str — artifact type (model, dataset, log, etc.)
+        size_bytes: int | None
+        metadata: dict | None
+        is_restricted: bool (default false)
+
+    Returns:
+        upload_url: presigned PUT URL
+        artifact_id: created artifact UUID
+        s3_key: the object key in S3
+    """
+    user = await require_current_user(request)
+    project_id = resolve_project_id(user, request.rel_url.query.get("project_id"))
+    ensure_permission(user, "runs.update")
+    run_id = parse_uuid(request.match_info["run_id"], "run_id")
+    body = await read_json(request)
+
+    filename: str = body.get("filename") or ""
+    content_type: str = body.get("content_type") or "application/octet-stream"
+    artifact_type: str = body.get("type") or ""
+    if not filename or not isinstance(filename, str):
+        raise web.HTTPBadRequest(text="filename is required")
+    if not artifact_type or not isinstance(artifact_type, str):
+        raise web.HTTPBadRequest(text="type is required")
+
+    size_bytes: int | None = body.get("size_bytes")
+    metadata: dict = body.get("metadata") or {}
+    is_restricted: bool = bool(body.get("is_restricted", False))
+
+    # Generate S3 key: artifacts/{project_id}/{run_id}/{uuid}/{filename}
+    object_key = f"artifacts/{project_id}/{run_id}/{uuid.uuid4()}/{filename}"
+    s3_uri = f"s3://{object_key}"
+
+    service = await get_artifact_service(request)
+    try:
+        artifact = await service.create_artifact(
+            project_id=project_id,
+            run_id=run_id,
+            type=artifact_type,
+            uri=s3_uri,
+            created_by=user.user_id,
+            size_bytes=size_bytes,
+            metadata=metadata,
+            is_restricted=is_restricted,
+        )
+    except NotFoundError as exc:
+        raise web.HTTPNotFound(text=str(exc)) from exc
+
+    s3 = get_s3_client()
+    try:
+        upload_url = await s3.presign_upload(object_key, content_type)
+    except Exception as exc:
+        raise web.HTTPServiceUnavailable(text=f"S3 unavailable: {exc}") from exc
+
+    return web.json_response({
+        "upload_url": upload_url,
+        "artifact_id": str(artifact.id),
+        "s3_key": object_key,
+    }, status=201)
+
+
+@routes.get("/api/v1/artifacts/{artifact_id}/download-url")
+async def get_download_url(request: web.Request) -> web.Response:
+    """Generate presigned download URL for an artifact (viewer+).
+
+    Returns:
+        download_url: presigned GET URL
+        expires_in: seconds until URL expires
+    """
+    user = await require_current_user(request)
+    resolve_project_id(user, request.rel_url.query.get("project_id"))
+    ensure_permission(user, "experiments.view")
+    artifact_id = parse_uuid(request.match_info["artifact_id"], "artifact_id")
+
+    service = await get_artifact_service(request)
+    try:
+        artifact = await service.get_artifact(artifact_id)
+    except NotFoundError as exc:
+        raise web.HTTPNotFound(text=str(exc)) from exc
+
+    # URI format: "s3://<key>" or legacy plain string
+    uri = artifact.uri
+    if not uri.startswith("s3://"):
+        # Legacy artifact — return URI directly (not presigned)
+        return web.json_response({"download_url": uri, "expires_in": None})
+
+    object_key = uri[len("s3://"):]
+    # Extract filename from key (last path component)
+    filename = object_key.split("/")[-1] if "/" in object_key else object_key
+
+    from experiment_service.settings import settings as _settings
+    s3 = get_s3_client()
+    try:
+        download_url = await s3.presign_download(object_key, filename=filename)
+    except Exception as exc:
+        raise web.HTTPServiceUnavailable(text=f"S3 unavailable: {exc}") from exc
+
+    return web.json_response({
+        "download_url": download_url,
+        "expires_in": _settings.s3_presign_expire_seconds,
+    })
