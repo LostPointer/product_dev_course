@@ -9,11 +9,18 @@ datasources:
     editable: true
     jsonData:
       maxLines: 1000
-      # Grafana автоматически обнаружит все labels из Loki
-      # Новые labels (level, path, logger, event, method, status_code, error_type, trace_id, request_id)
-      # будут доступны в фильтрах после поступления новых логов
       derivedFields:
         - datasourceUid: loki
           matcherRegex: "trace_id=(\\w+)"
           name: TraceID
           url: '$${__value.raw}'
+
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: false
+    editable: true
+    jsonData:
+      timeInterval: '15s'
+      httpMethod: POST
