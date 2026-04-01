@@ -163,6 +163,30 @@ function ValueSparkline({ values, displayUnit }: { values: number[]; displayUnit
     )
 }
 
+function ErrorBadge({ sensorId }: { sensorId: string }) {
+    const since = useMemo(() => {
+        const d = new Date()
+        d.setHours(d.getHours() - 24)
+        return d.toISOString()
+    }, [])
+
+    const { data } = useQuery({
+        queryKey: ['sensor-error-log-count', sensorId, since],
+        queryFn: () => sensorsApi.getErrorLog(sensorId, { limit: 100 }),
+        refetchInterval: 60_000,
+        staleTime: 30_000,
+    })
+
+    const count = data?.entries?.length ?? 0
+    if (count === 0) return null
+
+    return (
+        <span className="lsp__error-badge" title={`${count} ошибок за 24ч`}>
+            {count > 99 ? '99+' : count}
+        </span>
+    )
+}
+
 export default function LiveSensorPanel({ sensors, projectId, recentValues }: LiveSensorPanelProps) {
     const { data: statusSummary } = useQuery({
         queryKey: ['sensors', 'status-summary', projectId],
@@ -244,6 +268,7 @@ export default function LiveSensorPanel({ sensors, projectId, recentValues }: Li
                                     {sensor.name}
                                 </span>
                                 <span className="lsp__type">{sensor.type}</span>
+                                <ErrorBadge sensorId={sensor.id} />
                             </div>
                             <div className="lsp__card-mid">
                                 <HeartbeatSparkline sensorId={sensor.id} />

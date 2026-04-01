@@ -246,3 +246,17 @@
 .lsp__status--offline {
   color: #6b7280;
 }
+
+.lsp__error-badge {
+  margin-left: auto;
+  background: #dc2626;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 10px;
+  min-width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+}

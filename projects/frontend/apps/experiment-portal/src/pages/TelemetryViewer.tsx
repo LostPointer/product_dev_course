@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import Plotly from 'plotly.js-dist-min'
@@ -79,6 +79,16 @@ function TelemetryViewer() {
     const [historySensorFilter, setHistorySensorFilter] = useState('')
     const [showExportModal, setShowExportModal] = useState(false)
     const [historyTimeRange, setHistoryTimeRange] = useState<[string, string] | null>(null)
+    const [recentValuesBySensor, setRecentValuesBySensor] = useState<Record<string, number[]>>({})
+    const RECENT_VALUES_MAX = 30
+
+    const handleRecordReceived = useCallback((sensorId: string, value: number) => {
+        setRecentValuesBySensor(prev => {
+            const arr = prev[sensorId] ?? []
+            const next = arr.length >= RECENT_VALUES_MAX ? arr.slice(arr.length - RECENT_VALUES_MAX + 1) : arr
+            return { ...prev, [sensorId]: [...next, value] }
+        })
+    }, [])
 
     useEffect(() => {
         if (typeof window === 'undefined') return
@@ -1334,6 +1344,7 @@ function TelemetryViewer() {
                                                         title={`${panelTitleSeed} #${index + 1}`}
                                                         onRemove={() => removePanel(panelId)}
                                                         onSizeChange={(size) => handlePanelSizeChange(panelId, size)}
+                                                        onRecordReceived={handleRecordReceived}
                                                         dragHandleProps={{
                                                             draggable: true,
                                                             onDragStart: (event) => {
@@ -1355,7 +1366,7 @@ function TelemetryViewer() {
                             </section>
 
                             {projectId && sensors.length > 0 && (
-                                <LiveSensorPanel sensors={sensors} projectId={projectId} />
+                                <LiveSensorPanel sensors={sensors} projectId={projectId} recentValues={recentValuesBySensor} />
                             )}
                             </div>
                         ) : (
