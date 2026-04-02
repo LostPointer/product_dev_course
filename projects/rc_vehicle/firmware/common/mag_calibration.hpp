@@ -16,6 +16,16 @@ struct MagCalibData {
 enum class MagCalibStatus { Idle, Collecting, Done, Failed };
 
 /**
+ * @brief Причина неудачи калибровки магнитометра.
+ */
+enum class MagCalibFailReason {
+  None,           ///< Нет ошибки (или калибровка ещё не завершена)
+  TooFewSamples,  ///< Мало семплов — нажали Finish слишком быстро
+  RadiusTooSmall, ///< Мало вращения — min/max по осям почти совпали
+  RadiusTooLarge, ///< Сильные помехи — аномально большой разброс
+};
+
+/**
  * @brief Hard iron калибровка магнитометра.
  *
  * Собирает min/max по каждой оси пока машина вращается,
@@ -75,6 +85,15 @@ class MagCalibration {
     return status_ == MagCalibStatus::Collecting;
   }
 
+  /** Причина неудачи (валидна только при status == Failed). */
+  [[nodiscard]] MagCalibFailReason GetFailReason() const noexcept {
+    return fail_reason_;
+  }
+
+  /** Строковое описание причины неудачи (для UI/логов). */
+  [[nodiscard]] const char* GetFailReasonStr() const noexcept;
+
+
   // ─── Валидационные границы ───────────────────────────────────────────────
 
   /** Минимальный средний радиус сферы [мГс]. Меньше → недостаточное вращение. */
@@ -88,6 +107,7 @@ class MagCalibration {
 
  private:
   MagCalibStatus status_{MagCalibStatus::Idle};
+  MagCalibFailReason fail_reason_{MagCalibFailReason::None};
   MagCalibData data_{};
   float min_[3]{};
   float max_[3]{};

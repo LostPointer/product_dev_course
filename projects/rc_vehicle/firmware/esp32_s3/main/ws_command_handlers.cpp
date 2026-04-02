@@ -802,6 +802,7 @@ void HandleCalibrateMag(IVehicleControl& vc, cJSON* json, httpd_req_t* req) {
   if (reply) {
     cJSON_AddStringToObject(reply, "type", "calibrate_mag_ack");
     cJSON_AddStringToObject(reply, "status", vc.GetMagCalibStatus());
+    cJSON_AddStringToObject(reply, "fail_reason", vc.GetMagCalibFailReason());
     cJSON_AddBoolToObject(reply, "ok", ok);
     WsSendJsonReply(req, reply);
     cJSON_Delete(reply);
@@ -816,6 +817,7 @@ void HandleGetMagCalibStatus(IVehicleControl& vc, cJSON* json,
   if (reply) {
     cJSON_AddStringToObject(reply, "type", "mag_calib_status");
     cJSON_AddStringToObject(reply, "status", vc.GetMagCalibStatus());
+    cJSON_AddStringToObject(reply, "fail_reason", vc.GetMagCalibFailReason());
     WsSendJsonReply(req, reply);
     cJSON_Delete(reply);
   }

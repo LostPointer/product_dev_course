@@ -31,8 +31,11 @@ void MagCalibration::Finish() {
     return;
   }
 
+  fail_reason_ = MagCalibFailReason::None;
+
   if (sample_count_ < kMinSamples) {
     status_ = MagCalibStatus::Failed;
+    fail_reason_ = MagCalibFailReason::TooFewSamples;
     return;
   }
 
@@ -45,8 +48,14 @@ void MagCalibration::Finish() {
   }
   const float avg_radius = radius_sum / 3.f;
 
-  if (avg_radius < kMinRadius || avg_radius > kMaxRadius) {
+  if (avg_radius < kMinRadius) {
     status_ = MagCalibStatus::Failed;
+    fail_reason_ = MagCalibFailReason::RadiusTooSmall;
+    return;
+  }
+  if (avg_radius > kMaxRadius) {
+    status_ = MagCalibStatus::Failed;
+    fail_reason_ = MagCalibFailReason::RadiusTooLarge;
     return;
   }
 
@@ -55,6 +64,19 @@ void MagCalibration::Finish() {
   }
   data_.valid = true;
   status_ = MagCalibStatus::Done;
+}
+
+const char* MagCalibration::GetFailReasonStr() const noexcept {
+  switch (fail_reason_) {
+    case MagCalibFailReason::TooFewSamples:
+      return "too_few_samples";
+    case MagCalibFailReason::RadiusTooSmall:
+      return "radius_too_small";
+    case MagCalibFailReason::RadiusTooLarge:
+      return "radius_too_large";
+    default:
+      return "none";
+  }
 }
 
 void MagCalibration::Cancel() {

@@ -119,6 +119,11 @@ class VehicleControlUnified : public IVehicleControl {
   /** Прервать сбор, вернуться в Idle. */
   void CancelMagCalibration() override { mag_calib_.Cancel(); }
 
+  /** Причина неудачи калибровки магнитометра (валидна при статусе "failed"). */
+  [[nodiscard]] const char* GetMagCalibFailReason() const override {
+    return mag_calib_.GetFailReasonStr();
+  }
+
   /** Строковый статус калибровки магнитометра. */
   [[nodiscard]] const char* GetMagCalibStatus() const override {
     switch (mag_calib_.GetStatus()) {

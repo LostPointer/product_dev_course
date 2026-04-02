@@ -208,9 +208,9 @@ function connectWebSocket() {
                     if (speedCalibStatusEl) speedCalibStatusEl.textContent = 'Остановлено';
                     if (btnSpeedCalibStart) btnSpeedCalibStart.disabled = false;
                 } else if (data.type === 'calibrate_mag_ack') {
-                    updateMagCalibUI(data.status, data.ok ? null : 'Ошибка операции');
+                    updateMagCalibUI(data.status, data.fail_reason ?? 'none');
                 } else if (data.type === 'mag_calib_status') {
-                    updateMagCalibUI(data.status, null);
+                    updateMagCalibUI(data.status, data.fail_reason ?? 'none');
                 } else if (data.type === 'reset_heading_ref_ack') {
                     if (magCalibMsg) { magCalibMsg.textContent = 'Нулевой курс сброшен'; magCalibMsg.style.display = 'block'; setTimeout(() => { if (magCalibMsg) magCalibMsg.style.display = 'none'; }, 2000); }
                 }
@@ -392,7 +392,13 @@ async function scanWifiNetworks() {
 // Magnetometer UI
 // ═══════════════════════════════════════════════════════════════════
 
-function updateMagCalibUI(status, msg) {
+const MAG_FAIL_REASON_TEXT = {
+    too_few_samples: 'Мало семплов — нажмите Start и вращайте машину дольше (>2 сек)',
+    radius_too_small: 'Недостаточное вращение — покрутите машину по кругу во всех направлениях',
+    radius_too_large: 'Сильные помехи — уберите магниты и металл рядом с датчиком',
+};
+
+function updateMagCalibUI(status, failReason) {
     const collecting = status === 'collecting';
     const done       = status === 'done';
     const failed     = status === 'failed';
@@ -407,14 +413,16 @@ function updateMagCalibUI(status, msg) {
     const badgeText  = { idle: '—', collecting: 'Сбор', done: 'OK', failed: 'Ошибка' }[status] ?? '—';
     if (magCalibBadge) { magCalibBadge.className = `badge ${badgeClass}`; magCalibBadge.textContent = badgeText; }
 
-    // Статус-строка
-    const statusText = { idle: 'Ожидание', collecting: 'Сбор данных...', done: 'Калибровка OK', failed: 'Ошибка' }[status] ?? status;
+    // Статус-строка с причиной ошибки
+    let statusText = { idle: 'Ожидание', collecting: 'Сбор данных...', done: 'Калибровка OK', failed: 'Ошибка' }[status] ?? status;
+    if (failed && failReason && failReason !== 'none') {
+        statusText = MAG_FAIL_REASON_TEXT[failReason] ?? `Ошибка: ${failReason}`;
+    }
     if (magCalibStatus) magCalibStatus.textContent = statusText;
 
-    // Сообщение
-    if (msg && magCalibMsg) {
-        magCalibMsg.textContent = msg;
-        magCalibMsg.style.display = 'block';
+    // Сообщение (скрыть если нет ошибки)
+    if (magCalibMsg) {
+        magCalibMsg.style.display = 'none';
     }
 
     // Polling пока collecting

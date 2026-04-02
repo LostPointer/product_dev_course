@@ -81,6 +81,7 @@ class IVehicleControl {
   virtual void FinishMagCalibration() = 0;
   virtual void CancelMagCalibration() = 0;
   [[nodiscard]] virtual const char* GetMagCalibStatus() const = 0;
+  [[nodiscard]] virtual const char* GetMagCalibFailReason() const = 0;
   virtual bool EraseMagCalibration() = 0;
 
   // Телеметрия лог
