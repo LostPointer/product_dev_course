@@ -107,48 +107,63 @@ void ImuHandler::Update(uint32_t now_ms, [[maybe_unused]] uint32_t dt_ms) {
                            : (static_cast<float>(now_ms - prev_read_ms) / 1000.0f);
   first_read_ = false;
 
-  // Пробуем прочитать магнетометр; если успешно — 9DOF, иначе 6DOF.
-  const auto mag_opt = platform_.ReadMag();
-  if (mag_opt) {
-    mag_data_ = *mag_opt;
-    mag_enabled_ = true;
+  // Читаем магнетометр на 100 Hz (MMC5983 CMM rate).
+  // I2C/SPI транзакция ~350 мкс — не читаем каждые 2 мс.
+  bool new_mag_sample = false;
+  if ((now_ms - last_mag_read_ms_) >= kMagReadIntervalMs) {
+    last_mag_read_ms_ = now_ms;
+    const auto mag_opt = platform_.ReadMag();
+    if (mag_opt) {
+      mag_data_ = *mag_opt;
+      mag_enabled_ = true;
+      new_mag_sample = true;
+    }
   }
 
   if (mag_enabled_) {
-    // Подача семпла в калибровку магнетометра (если идёт сбор)
-    if (mag_calib_ && mag_calib_->IsCollecting()) {
-      mag_calib_->FeedSample(mag_data_);
-    }
-
-    // Применяем hard iron коррекцию для фильтра (работаем с копией)
     MagData mag_cal = mag_data_;
     if (mag_calib_) {
       mag_calib_->Apply(mag_cal);
     }
 
-    if (madgwick_enabled_) {
-      filter_.UpdateWithMag(raw_ax, raw_ay, raw_az, data_.gx, data_.gy,
-                            data_.gz, mag_cal.mx, mag_cal.my, mag_cal.mz,
-                            dt_sec);
-    }
+    if (new_mag_sample) {
+      // Подача нового семпла в калибровку (если идёт сбор)
+      if (mag_calib_ && mag_calib_->IsCollecting()) {
+        mag_calib_->FeedSample(mag_data_);
+      }
 
-    // Tilt-compensated heading (NED formula)
-    float pitch_rad = 0.f, roll_rad = 0.f, yaw_rad = 0.f;
-    filter_.GetEulerRad(pitch_rad, roll_rad, yaw_rad);
-    const float cp = std::cos(pitch_rad);
-    const float sp = std::sin(pitch_rad);
-    const float cr = std::cos(roll_rad);
-    const float sr = std::sin(roll_rad);
-    const float mx_h =
-        mag_cal.mx * cp + mag_cal.my * sr * sp - mag_cal.mz * cr * sp;
-    const float my_h = mag_cal.my * cr + mag_cal.mz * sr;
-    const float h = std::atan2(-my_h, mx_h) * (180.f / 3.14159265f);
-    heading_deg_ = (h < 0.f) ? h + 360.f : h;
+      // 9DOF fusion — только когда пришли свежие данные,
+      // чтобы не завышать вес магнитометра в фильтре.
+      if (madgwick_enabled_) {
+        filter_.UpdateWithMag(raw_ax, raw_ay, raw_az, data_.gx, data_.gy,
+                              data_.gz, mag_cal.mx, mag_cal.my, mag_cal.mz,
+                              dt_sec);
+      }
 
-    // Установить опорный курс при первом валидном чтении (или после сброса)
-    if (!heading_ref_set_) {
-      heading_ref_ = heading_deg_;
-      heading_ref_set_ = true;
+      // Tilt-compensated heading (NED formula)
+      float pitch_rad = 0.f, roll_rad = 0.f, yaw_rad = 0.f;
+      filter_.GetEulerRad(pitch_rad, roll_rad, yaw_rad);
+      const float cp = std::cos(pitch_rad);
+      const float sp = std::sin(pitch_rad);
+      const float cr = std::cos(roll_rad);
+      const float sr = std::sin(roll_rad);
+      const float mx_h =
+          mag_cal.mx * cp + mag_cal.my * sr * sp - mag_cal.mz * cr * sp;
+      const float my_h = mag_cal.my * cr + mag_cal.mz * sr;
+      const float h = std::atan2(-my_h, mx_h) * (180.f / 3.14159265f);
+      heading_deg_ = (h < 0.f) ? h + 360.f : h;
+
+      // Установить опорный курс при первом валидном чтении (или после сброса)
+      if (!heading_ref_set_) {
+        heading_ref_ = heading_deg_;
+        heading_ref_set_ = true;
+      }
+    } else {
+      // Новых данных магнитометра нет — 6DOF, гироскоп+акселерометр
+      if (madgwick_enabled_) {
+        filter_.Update(raw_ax, raw_ay, raw_az, data_.gx, data_.gy, data_.gz,
+                       dt_sec);
+      }
     }
   } else {
     if (madgwick_enabled_) {

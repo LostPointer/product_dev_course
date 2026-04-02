@@ -248,6 +248,8 @@ class ImuHandler : public ControlComponent {
   // Магнетометр (опционален)
   MagData mag_data_{};
   bool mag_enabled_{false};
+  uint32_t last_mag_read_ms_{0};
+  static constexpr uint32_t kMagReadIntervalMs = 10;  ///< 100 Hz
 
   // Калибровка магнитометра (не владеет)
   MagCalibration* mag_calib_{nullptr};
