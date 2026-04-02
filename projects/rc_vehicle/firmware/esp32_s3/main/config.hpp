@@ -42,14 +42,26 @@
 #define IMU_SPI_MISO_PIN GPIO_NUM_13
 #define IMU_SPI_BAUD_HZ 500000  // 500 kHz (1 MHz нестабильно на длинных проводах)
 
-// Магнитометр (MMC5983MA по SPI, разделяет шину SPI2 с IMU)
+// Магнитометр MMC5983MA — выбор интерфейса:
+//   Закомментировать MAG_USE_I2C → SPI (4-проводной, CS на GPIO5)
+//   Оставить          MAG_USE_I2C → I2C (2-проводной, SDA/SCL)
 // Расположить как можно дальше от мотора/ESC (источников магнитных помех).
-#define MAG_SPI_HOST    SPI2_HOST
-#define MAG_SPI_CS_PIN  GPIO_NUM_5
+#define MAG_USE_I2C
+
+// I2C-конфигурация (активна при MAG_USE_I2C)
+#include "driver/i2c_master.h"
+#define MAG_I2C_PORT    I2C_NUM_0
+#define MAG_I2C_SDA_PIN GPIO_NUM_8   // Свободный GPIO (не strapping после загрузки)
+#define MAG_I2C_SCL_PIN GPIO_NUM_9   // Свободный GPIO
+#define MAG_I2C_BAUD_HZ 400000       // Fast Mode (max 400 кГц)
+
+// SPI-конфигурация (активна без MAG_USE_I2C)
+#define MAG_SPI_HOST     SPI2_HOST
+#define MAG_SPI_CS_PIN   GPIO_NUM_5
 #define MAG_SPI_SCK_PIN  IMU_SPI_SCK_PIN   // Общие линии шины
 #define MAG_SPI_MOSI_PIN IMU_SPI_MOSI_PIN
 #define MAG_SPI_MISO_PIN IMU_SPI_MISO_PIN
-#define MAG_SPI_BAUD_HZ 1000000  // 1 МГц (max 10 МГц, умеренно для надёжности)
+#define MAG_SPI_BAUD_HZ  1000000           // 1 МГц (max 10 МГц)
 
 // Тайминги (в миллисекундах)
 #define CONTROL_LOOP_PERIOD_MS 2   // 500 Hz — основной цикл Core 1

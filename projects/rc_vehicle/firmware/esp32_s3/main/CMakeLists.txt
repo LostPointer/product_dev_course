@@ -39,6 +39,7 @@ idf_component_register(
         "../../common/mpu6050_spi.cpp"
         "../../common/lsm6ds3_spi.cpp"
         "../../common/mmc5983_spi.cpp"
+        "../../esp32_common/mmc5983_i2c.cpp"
         "../../common/mag_calibration.cpp"
         "../../common/failsafe.cpp"
         "../../common/control_components.cpp"
@@ -62,6 +63,7 @@ idf_component_register(
         esp_driver_gpio
         esp_driver_ledc
         esp_driver_spi
+        esp_driver_i2c
         lwip
         freertos
         cjson
