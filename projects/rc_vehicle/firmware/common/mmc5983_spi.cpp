@@ -38,9 +38,9 @@ static const char* MMC_TAG = "mmc5983_spi";
 #define MMC5983_STATUS_MEAS_M_DONE 0x01
 
 // Масштаб: 18-битный диапазон 0..262143, ноль поля = 131072 (2^17).
-// Полная шкала ±8 Гс = ±800 мГс. 1 LSB = 800/131072 мГс ≈ 0.006104 мГс.
+// Полная шкала ±8 Гс = ±8000 мГс. 1 LSB = 8000/131072 мГс ≈ 0.06104 мГс.
 #define MMC5983_HALF_RANGE    131072.0f
-#define MMC5983_SCALE_MGAUSS  (800.0f / 131072.0f)
+#define MMC5983_SCALE_MGAUSS  (8000.0f / 131072.0f)
 
 int Mmc5983Spi::ReadReg(uint8_t reg, uint8_t& value) {
   uint8_t tx[2] = {static_cast<uint8_t>(reg | MMC5983_SPI_READ_BIT), 0};

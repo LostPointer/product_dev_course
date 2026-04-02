@@ -26,7 +26,7 @@ static const char* MMC_TAG = "mmc5983_i2c";
 #define MMC5983_CTRL1_BW_100HZ   0x00
 #define MMC5983_CTRL2_CMM_100HZ  0x14  // CMM_en | freq=100Hz
 #define MMC5983_HALF_RANGE       131072.0f
-#define MMC5983_SCALE_MGAUSS     (800.0f / 131072.0f)
+#define MMC5983_SCALE_MGAUSS     (8000.0f / 131072.0f)
 
 static constexpr int kI2cTimeoutMs = 50;
 
