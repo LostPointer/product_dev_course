@@ -113,4 +113,4 @@ async def test_audit_log_cleanup_partial_deletion_returns_summary(mock_pool_audi
 def test_worker_has_audit_log_cleanup_task():
     task_names = [t.name for t in worker.tasks]
     assert "audit_log_cleanup" in task_names
-    assert len(task_names) == 8
+    assert len(task_names) == 9
