@@ -45,11 +45,9 @@ static void build_dns_response(const uint8_t* query, size_t query_len,
   out[off++] = 60;  // 60 seconds
   out[off++] = 0;   // RDLENGTH
   out[off++] = 4;
-  // A record: 4 байта в network byte order (big-endian)
-  out[off++] = (answer_ip >> 24) & 0xFF;
-  out[off++] = (answer_ip >> 16) & 0xFF;
-  out[off++] = (answer_ip >> 8) & 0xFF;
-  out[off++] = (answer_ip >> 0) & 0xFF;
+  // A record: answer_ip is already in network byte order — copy bytes directly
+  memcpy(out + off, &answer_ip, 4);
+  off += 4;
 
   *out_len = off;
 }
