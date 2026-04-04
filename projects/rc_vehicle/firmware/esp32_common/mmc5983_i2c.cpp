@@ -24,7 +24,9 @@ static const char* MMC_TAG = "mmc5983_i2c";
 
 #define MMC5983_PRODUCT_ID       0x30
 #define MMC5983_CTRL1_BW_100HZ   0x00
-#define MMC5983_CTRL2_CMM_100HZ  0x14  // CMM_en | freq=100Hz
+// CTRL2 layout: [7]=EN_PRD_SET [6:4]=PRD_SET[2:0] [3]=CMM_EN [2:0]=CM_FREQ
+// CM_FREQ: 000=1Hz 001=10Hz 010=20Hz 011=50Hz 100=100Hz 101=200Hz 110=1000Hz
+#define MMC5983_CTRL2_CMM_100HZ  0x0C  // CMM_en (бит 3) | freq=100Hz (0b100)
 #define MMC5983_HALF_RANGE       131072.0f
 #define MMC5983_SCALE_MGAUSS     (8000.0f / 131072.0f)
 
@@ -116,8 +118,10 @@ int Mmc5983I2c::Init(const Config& cfg) noexcept {
   // BW = 100 Гц
   if (WriteReg(MMC5983_REG_CTRL1, MMC5983_CTRL1_BW_100HZ) != 0) return -1;
 
-  // CMM @ 100 Гц
+  // CMM @ 100 Гц (CTRL2 bit 3 = CMM_EN)
   if (WriteReg(MMC5983_REG_CTRL2, MMC5983_CTRL2_CMM_100HZ) != 0) return -1;
+  // Дать сенсору завершить первое измерение (100 Гц → 10 мс)
+  vTaskDelay(pdMS_TO_TICKS(15));
 
   initialized_ = true;
   read_count_  = 0;
@@ -131,12 +135,11 @@ int Mmc5983I2c::Init(const Config& cfg) noexcept {
 int Mmc5983I2c::Read(MagData& data) {
   if (!initialized_) return -1;
 
-  // Периодическое SET/RESET
+  // Периодический SET для компенсации температурного дрейфа моста.
+  // RESET не используется — он инвертирует полярность моста и знак сигнала,
+  // что ломает непрерывный поток данных и сбивает калибровку.
   if (read_count_ > 0 && (read_count_ % kSetResetPeriod) == 0) {
-    if ((read_count_ / kSetResetPeriod) % 2 == 0)
-      (void)DoSet();
-    else
-      (void)DoReset();
+    (void)DoSet();
   }
   ++read_count_;
 
