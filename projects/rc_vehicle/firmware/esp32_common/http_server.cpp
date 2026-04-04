@@ -6,8 +6,10 @@
 
 #include "cJSON.h"
 #include "config.hpp"
+#include "crash_logger.hpp"
 #include "esp_http_server.h"
 #include "esp_log.h"
+#include "telemetry_event_log.hpp"
 #include "telemetry_log.hpp"
 #include "vehicle_control.hpp"
 #include "wifi_ap.hpp"
@@ -698,6 +700,27 @@ static esp_err_t app_js_handler(httpd_req_t* req) {
   return ESP_OK;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Crash log: GET /api/crash.json — получить данные о последнем крэше
+//           DELETE /api/crash.json — очистить
+// ─────────────────────────────────────────────────────────────────────────────
+
+static esp_err_t crash_json_get_handler(httpd_req_t* req) {
+  char buf[384];
+  CrashLoggerGetJson(buf, sizeof(buf));
+  httpd_resp_set_type(req, "application/json");
+  httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
+  httpd_resp_send(req, buf, HTTPD_RESP_USE_STRLEN);
+  return ESP_OK;
+}
+
+static esp_err_t crash_json_delete_handler(httpd_req_t* req) {
+  CrashLoggerClear();
+  httpd_resp_set_type(req, "application/json");
+  httpd_resp_send(req, "{\"ok\":true}", HTTPD_RESP_USE_STRLEN);
+  return ESP_OK;
+}
+
 static esp_err_t redirect_to_root_handler(httpd_req_t* req) {
   char ap_ip[16] = {};
   char location[64] = {};
@@ -717,48 +740,86 @@ static esp_err_t redirect_to_root_handler(httpd_req_t* req) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Binary telemetry log download: GET /api/log.bin
-// Protocol:
-//   [4 bytes] uint32_t frame_count  (little-endian)
-//   [4 bytes] uint32_t frame_size   (sizeof(TelemetryLogFrame))
-//   [frame_count × frame_size bytes] raw TelemetryLogFrame data
+//
+// Format (all values little-endian):
+//   Section 1 — кадры телеметрии:
+//     [4] uint32_t frame_count
+//     [4] uint32_t frame_size   (sizeof(TelemetryLogFrame))
+//     [frame_count × frame_size] raw TelemetryLogFrame[]
+//
+//   Section 2 — события (старт/стоп режимов и калибровок):
+//     [4] uint32_t event_count
+//     [4] uint32_t event_size   (sizeof(TelemetryEvent))
+//     [event_count × event_size] raw TelemetryEvent[]
 // ─────────────────────────────────────────────────────────────────────────────
 
 static esp_err_t log_bin_handler(httpd_req_t* req) {
-  size_t count = 0;
+  size_t frame_count = 0;
   size_t cap = 0;
-  VehicleControlGetLogInfo(&count, &cap);
+  VehicleControlGetLogInfo(&frame_count, &cap);
+  const size_t event_count = VehicleControlGetEventCount();
 
   httpd_resp_set_type(req, "application/octet-stream");
   httpd_resp_set_hdr(req, "Content-Disposition",
                      "attachment; filename=\"telemetry_log.bin\"");
   httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
 
-  // Header: frame_count + frame_size
-  const uint32_t header[2] = {
-      static_cast<uint32_t>(count),
+  // ── Section 1 header: frame_count + frame_size ───────────────────────────
+  const uint32_t frame_header[2] = {
+      static_cast<uint32_t>(frame_count),
       static_cast<uint32_t>(sizeof(TelemetryLogFrame)),
   };
-  esp_err_t err =
-      httpd_resp_send_chunk(req, reinterpret_cast<const char*>(header),
-                            sizeof(header));
+  esp_err_t err = httpd_resp_send_chunk(
+      req, reinterpret_cast<const char*>(frame_header), sizeof(frame_header));
   if (err != ESP_OK) return err;
 
-  // Send frames in chunks to avoid large stack allocation
-  constexpr size_t kBatchSize = 32;
-  TelemetryLogFrame batch[kBatchSize];
+  // ── Section 1 data: frames in batches ────────────────────────────────────
+  constexpr size_t kFrameBatch = 32;
+  TelemetryLogFrame frame_batch[kFrameBatch];
 
-  for (size_t sent = 0; sent < count;) {
-    size_t n = std::min(kBatchSize, count - sent);
+  for (size_t sent = 0; sent < frame_count;) {
+    size_t n = std::min(kFrameBatch, frame_count - sent);
     size_t filled = 0;
     for (size_t i = 0; i < n; ++i) {
-      if (VehicleControlGetLogFrame(sent + i, &batch[filled])) {
+      if (VehicleControlGetLogFrame(sent + i, &frame_batch[filled])) {
         ++filled;
       }
     }
     if (filled > 0) {
-      err = httpd_resp_send_chunk(
-          req, reinterpret_cast<const char*>(batch),
-          filled * sizeof(TelemetryLogFrame));
+      err = httpd_resp_send_chunk(req,
+                                  reinterpret_cast<const char*>(frame_batch),
+                                  filled * sizeof(TelemetryLogFrame));
+      if (err != ESP_OK) return err;
+    }
+    sent += n;
+  }
+
+  // ── Section 2 header: event_count + event_size ───────────────────────────
+  const uint32_t event_header[2] = {
+      static_cast<uint32_t>(event_count),
+      static_cast<uint32_t>(sizeof(rc_vehicle::TelemetryEvent)),
+  };
+  err = httpd_resp_send_chunk(req,
+                              reinterpret_cast<const char*>(event_header),
+                              sizeof(event_header));
+  if (err != ESP_OK) return err;
+
+  // ── Section 2 data: events in batches ────────────────────────────────────
+  constexpr size_t kEventBatch = 64;
+  rc_vehicle::TelemetryEvent event_batch[kEventBatch];
+
+  for (size_t sent = 0; sent < event_count;) {
+    size_t n = std::min(kEventBatch, event_count - sent);
+    size_t filled = 0;
+    for (size_t i = 0; i < n; ++i) {
+      if (VehicleControlGetEvent(sent + i, &event_batch[filled])) {
+        ++filled;
+      }
+    }
+    if (filled > 0) {
+      err = httpd_resp_send_chunk(req,
+                                  reinterpret_cast<const char*>(event_batch),
+                                  filled * sizeof(rc_vehicle::TelemetryEvent));
       if (err != ESP_OK) return err;
     }
     sent += n;
@@ -766,15 +827,19 @@ static esp_err_t log_bin_handler(httpd_req_t* req) {
 
   // End chunked response
   httpd_resp_send_chunk(req, nullptr, 0);
-  ESP_LOGI(TAG, "Binary log download: %zu frames, %zu bytes", count,
-           count * sizeof(TelemetryLogFrame) + sizeof(header));
+  ESP_LOGI(TAG,
+           "Binary log download: %zu frames + %zu events, %zu bytes total",
+           frame_count, event_count,
+           frame_count * sizeof(TelemetryLogFrame) +
+               event_count * sizeof(rc_vehicle::TelemetryEvent) +
+               sizeof(frame_header) + sizeof(event_header));
   return ESP_OK;
 }
 
 esp_err_t HttpServerInit(void) {
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
   config.server_port = HTTP_SERVER_PORT;
-  config.max_uri_handlers = 16;
+  config.max_uri_handlers = 18;
   config.stack_size = 8192;
   config.max_open_sockets =
       7;  // LWIP_MAX_SOCKETS лимит (3 занято httpd внутри)
@@ -891,6 +956,32 @@ esp_err_t HttpServerInit(void) {
 #endif
     };
     httpd_register_uri_handler(server_handle, &log_bin_uri);
+
+    httpd_uri_t crash_json_get_uri = {
+        .uri = "/api/crash.json",
+        .method = HTTP_GET,
+        .handler = crash_json_get_handler,
+        .user_ctx = NULL,
+#if CONFIG_HTTPD_WS_SUPPORT
+        .is_websocket = false,
+        .handle_ws_control_frames = false,
+        .supported_subprotocol = NULL,
+#endif
+    };
+    httpd_register_uri_handler(server_handle, &crash_json_get_uri);
+
+    httpd_uri_t crash_json_delete_uri = {
+        .uri = "/api/crash.json",
+        .method = HTTP_DELETE,
+        .handler = crash_json_delete_handler,
+        .user_ctx = NULL,
+#if CONFIG_HTTPD_WS_SUPPORT
+        .is_websocket = false,
+        .handle_ws_control_frames = false,
+        .supported_subprotocol = NULL,
+#endif
+    };
+    httpd_register_uri_handler(server_handle, &crash_json_delete_uri);
 
     // Captive portal probes (iOS/Android/Windows/macOS).
     httpd_uri_t captive_android_uri = {

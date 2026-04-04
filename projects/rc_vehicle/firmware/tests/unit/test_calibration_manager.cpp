@@ -68,7 +68,7 @@ TEST_F(CalibrationManagerTest, ProcessRequest_NoRequest_DoesNothing) {
 
 TEST_F(CalibrationManagerTest, ProcessCompletion_NoStatusChange_DoesNothing) {
   // Status stays idle → no action
-  mgr_->ProcessCompletion();
+  mgr_->ProcessCompletion(0);
   EXPECT_STREQ(mgr_->GetStatus(), "idle");
 }
 

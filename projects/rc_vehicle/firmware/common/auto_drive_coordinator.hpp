@@ -1,8 +1,11 @@
 #pragma once
 
+#include <cstdint>
+
 #include "com_offset_calibration.hpp"
 #include "speed_calibration.hpp"
 #include "steering_trim_calibration.hpp"
+#include "telemetry_event_log.hpp"
 #include "test_runner.hpp"
 
 namespace rc_vehicle {
@@ -11,15 +14,16 @@ class CalibrationManager;
 
 /** Входные данные от датчиков для авто-процедур. */
 struct AutoDriveInput {
-  float fwd_accel{0.0f};
-  float accel_mag{1.0f};
-  float gyro_z{0.0f};
-  float cal_ax{0.0f};
-  float cal_ay{0.0f};
-  float dt_sec{0.0f};
-  float speed_ms{0.0f};  ///< EKF speed [m/s] (0 если IMU недоступен)
-  bool rc_active{false};
-  bool imu_enabled{false};
+  float    fwd_accel{0.0f};
+  float    accel_mag{1.0f};
+  float    gyro_z{0.0f};
+  float    cal_ax{0.0f};
+  float    cal_ay{0.0f};
+  float    dt_sec{0.0f};
+  float    speed_ms{0.0f};   ///< EKF speed [m/s] (0 если IMU недоступен)
+  uint32_t ts_ms{0};         ///< Текущее время [мс] — для меток событий
+  bool     rc_active{false};
+  bool     imu_enabled{false};
 };
 
 /** Результат одной итерации авто-процедур. */
@@ -51,6 +55,16 @@ class AutoDriveCoordinator {
   AutoDriveCoordinator() = default;
 
   void SetCalibrationManager(CalibrationManager* mgr) { calib_mgr_ = mgr; }
+
+  /**
+   * @brief Привязать лог событий (необязательно).
+   *
+   * При каждом старте/завершении/ошибке авто-процедуры записывается событие.
+   * Передайте nullptr чтобы отключить запись.
+   *
+   * @param log Указатель на TelemetryEventLog (время жизни ≥ AutoDriveCoordinator)
+   */
+  void SetEventLog(TelemetryEventLog* log) { event_log_ = log; }
 
   /** Обновить все активные процедуры. Вызывается каждую итерацию loop. */
   AutoDriveOutput Update(const AutoDriveInput& input);
@@ -109,6 +123,8 @@ class AutoDriveCoordinator {
   ComOffsetCalibration com_calib_;
   TestRunner test_runner_;
   SpeedCalibration speed_calib_;
+
+  TelemetryEventLog* event_log_{nullptr};
 };
 
 }  // namespace rc_vehicle

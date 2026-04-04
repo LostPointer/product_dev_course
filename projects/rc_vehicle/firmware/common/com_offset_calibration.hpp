@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-#include "pid_controller.hpp"
+#include "motion_driver.hpp"
 
 namespace rc_vehicle {
 
@@ -112,15 +112,12 @@ class ComOffsetCalibration {
 
  private:
   Phase phase_{Phase::Idle};
-  PidController accel_pid_;
+  MotionDriver driver_;
 
   float target_accel_g_{0.1f};
   float steering_magnitude_{0.5f};
   float cruise_duration_sec_{5.0f};
   float gravity_vec_[3]{0.f, 0.f, 1.f};
-
-  float phase_elapsed_sec_{0.0f};
-  float cruise_throttle_{0.0f};
 
   // Аккумуляторы Pass 1 (CW: steering = +magnitude)
   double sum_ax_1_{0.0}, sum_ay_1_{0.0}, sum_gz_1_{0.0};
@@ -132,11 +129,7 @@ class ComOffsetCalibration {
 
   Result result_{};
 
-  static constexpr float kAccelDurationSec = 1.5f;
-  static constexpr float kBrakeTimeoutSec = 3.0f;
   static constexpr float kSettleSkipSec = 0.5f;  ///< Пропустить начало круиза
-  static constexpr float kStopAccelThresh = 0.05f;
-  static constexpr float kStopGyroThresh = 3.0f;
   static constexpr int kMinSamples = 500;
   static constexpr float kMinOmegaDps = 10.0f;  ///< Мин. ω для расчёта
   static constexpr float kMaxOffsetM = 0.3f;     ///< Макс. допустимый offset

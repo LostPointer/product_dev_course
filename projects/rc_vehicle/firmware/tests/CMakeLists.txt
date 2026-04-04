@@ -46,6 +46,8 @@ set(COMMON_SOURCES
     ${COMMON_DIR}/pid_controller.cpp
     ${COMMON_DIR}/vehicle_ekf.cpp
     ${COMMON_DIR}/telemetry_log.cpp
+    ${COMMON_DIR}/telemetry_event_log.cpp
+    ${COMMON_DIR}/motion_driver.cpp
     ${COMMON_DIR}/stabilization_config.cpp
     ${COMMON_DIR}/stabilization_pipeline.cpp
     ${COMMON_DIR}/kids_mode_processor.cpp
@@ -109,6 +111,8 @@ add_executable(unit_tests
     unit/test_telemetry_handler.cpp
     unit/test_drive_modes.cpp
     unit/test_telemetry_manager.cpp
+    unit/test_telemetry_event_log.cpp
+    unit/test_motion_driver.cpp
     unit/test_calibration_manager.cpp
     unit/test_stabilization_manager.cpp
     unit/test_steering_trim_calibration.cpp

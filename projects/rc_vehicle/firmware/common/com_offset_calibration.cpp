@@ -5,6 +5,21 @@
 
 namespace rc_vehicle {
 
+namespace {
+MotionDriver::Config MakeDriverConfig(float target_accel_g) {
+  MotionDriver::Config cfg;
+  cfg.accel_mode = MotionDriver::AccelMode::Pid;
+  cfg.pid_gains = {1.0f, 0.5f, 0.05f, 0.4f, 0.5f};
+  cfg.target_value = target_accel_g;
+  cfg.accel_duration_sec = 1.5f;
+  cfg.min_effective_throttle = 0.15f;
+  cfg.brake_throttle = 0.0f;
+  cfg.brake_timeout_sec = 3.0f;
+  cfg.zupt = {0.05f, 3.0f};
+  return cfg;
+}
+}  // namespace
+
 bool ComOffsetCalibration::Start(float target_accel_g,
                                  float steering_magnitude,
                                  float cruise_duration_sec,
@@ -28,24 +43,13 @@ bool ComOffsetCalibration::Start(float target_accel_g,
     gravity_vec_[2] = 1.f;
   }
 
-  PidController::Gains gains;
-  gains.kp = 1.0f;
-  gains.ki = 0.5f;
-  gains.kd = 0.05f;
-  gains.max_integral = 0.4f;
-  gains.max_output = 0.5f;
-  accel_pid_.SetGains(gains);
-  accel_pid_.Reset();
-
-  phase_elapsed_sec_ = 0.0f;
-  cruise_throttle_ = 0.0f;
-
   sum_ax_1_ = sum_ay_1_ = sum_gz_1_ = 0.0;
   count_1_ = 0;
   sum_ax_2_ = sum_ay_2_ = sum_gz_2_ = 0.0;
   count_2_ = 0;
   result_ = Result{};
 
+  driver_.Start(MakeDriverConfig(target_accel_g_));
   TransitionTo(Phase::Pass1_Accelerate);
   return true;
 }
@@ -55,14 +59,12 @@ void ComOffsetCalibration::Stop() {
     phase_ = Phase::Failed;
     result_.valid = false;
   }
-  accel_pid_.Reset();
+  driver_.Reset();
 }
 
 void ComOffsetCalibration::Reset() {
   phase_ = Phase::Idle;
-  accel_pid_.Reset();
-  phase_elapsed_sec_ = 0.0f;
-  cruise_throttle_ = 0.0f;
+  driver_.Reset();
   sum_ax_1_ = sum_ay_1_ = sum_gz_1_ = 0.0;
   count_1_ = 0;
   sum_ax_2_ = sum_ay_2_ = sum_gz_2_ = 0.0;
@@ -82,52 +84,45 @@ void ComOffsetCalibration::Update(float current_accel_g, float accel_magnitude,
     return;
   }
 
-  phase_elapsed_sec_ += dt_sec;
+  throttle = driver_.Update(current_accel_g, accel_magnitude, filtered_gz_dps,
+                            dt_sec);
+  MotionPhase dp = driver_.GetPhase();
 
   switch (phase_) {
     // ─────────────── Pass 1: CW (steering = +magnitude) ───────────────
 
     case Phase::Pass1_Accelerate: {
-      float error = target_accel_g_ - current_accel_g;
-      throttle = accel_pid_.Step(error, dt_sec);
-      throttle = std::clamp(throttle, 0.0f, 0.5f);
       steering = steering_magnitude_;
-
-      if (phase_elapsed_sec_ >= kAccelDurationSec) {
-        cruise_throttle_ = throttle;
+      if (dp == MotionPhase::Cruise) {
         TransitionTo(Phase::Pass1_Cruise);
       }
       break;
     }
 
     case Phase::Pass1_Cruise: {
-      throttle = cruise_throttle_;
+      throttle = driver_.GetCruiseThrottle();
       steering = steering_magnitude_;
 
-      if (phase_elapsed_sec_ > kSettleSkipSec) {
+      float elapsed = driver_.GetPhaseElapsed();
+      if (elapsed > kSettleSkipSec) {
         sum_ax_1_ += static_cast<double>(cal_ax);
         sum_ay_1_ += static_cast<double>(cal_ay);
         sum_gz_1_ += static_cast<double>(filtered_gz_dps);
         count_1_++;
       }
 
-      if (phase_elapsed_sec_ >= cruise_duration_sec_) {
+      if (elapsed >= cruise_duration_sec_) {
+        driver_.EndCruise();
         TransitionTo(Phase::Pass1_Brake);
       }
       break;
     }
 
     case Phase::Pass1_Brake: {
-      throttle = 0.0f;
       steering = 0.0f;
-
-      bool stopped = (std::abs(accel_magnitude - 1.0f) < kStopAccelThresh) &&
-                     (std::abs(filtered_gz_dps) < kStopGyroThresh);
-      bool timeout = phase_elapsed_sec_ >= kBrakeTimeoutSec;
-
-      if (stopped || timeout) {
-        // Перезапустить PID для второго прохода
-        accel_pid_.Reset();
+      if (dp == MotionPhase::Stopped) {
+        // Start pass 2 (driver_.Start resets fully)
+        driver_.Start(MakeDriverConfig(target_accel_g_));
         TransitionTo(Phase::Pass2_Accelerate);
       }
       break;
@@ -136,44 +131,35 @@ void ComOffsetCalibration::Update(float current_accel_g, float accel_magnitude,
     // ─────────────── Pass 2: CCW (steering = -magnitude) ──────────────
 
     case Phase::Pass2_Accelerate: {
-      float error = target_accel_g_ - current_accel_g;
-      throttle = accel_pid_.Step(error, dt_sec);
-      throttle = std::clamp(throttle, 0.0f, 0.5f);
       steering = -steering_magnitude_;
-
-      if (phase_elapsed_sec_ >= kAccelDurationSec) {
-        cruise_throttle_ = throttle;
+      if (dp == MotionPhase::Cruise) {
         TransitionTo(Phase::Pass2_Cruise);
       }
       break;
     }
 
     case Phase::Pass2_Cruise: {
-      throttle = cruise_throttle_;
+      throttle = driver_.GetCruiseThrottle();
       steering = -steering_magnitude_;
 
-      if (phase_elapsed_sec_ > kSettleSkipSec) {
+      float elapsed = driver_.GetPhaseElapsed();
+      if (elapsed > kSettleSkipSec) {
         sum_ax_2_ += static_cast<double>(cal_ax);
         sum_ay_2_ += static_cast<double>(cal_ay);
         sum_gz_2_ += static_cast<double>(filtered_gz_dps);
         count_2_++;
       }
 
-      if (phase_elapsed_sec_ >= cruise_duration_sec_) {
+      if (elapsed >= cruise_duration_sec_) {
+        driver_.EndCruise();
         TransitionTo(Phase::Pass2_Brake);
       }
       break;
     }
 
     case Phase::Pass2_Brake: {
-      throttle = 0.0f;
       steering = 0.0f;
-
-      bool stopped = (std::abs(accel_magnitude - 1.0f) < kStopAccelThresh) &&
-                     (std::abs(filtered_gz_dps) < kStopGyroThresh);
-      bool timeout = phase_elapsed_sec_ >= kBrakeTimeoutSec;
-
-      if (stopped || timeout) {
+      if (dp == MotionPhase::Stopped) {
         ComputeResult();
       }
       break;
@@ -186,10 +172,6 @@ void ComOffsetCalibration::Update(float current_accel_g, float accel_magnitude,
 
 void ComOffsetCalibration::TransitionTo(Phase next) {
   phase_ = next;
-  phase_elapsed_sec_ = 0.0f;
-  if (next == Phase::Pass1_Brake || next == Phase::Pass2_Brake) {
-    accel_pid_.Reset();
-  }
 }
 
 void ComOffsetCalibration::ComputeResult() {

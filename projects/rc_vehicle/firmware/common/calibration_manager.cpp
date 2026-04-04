@@ -30,26 +30,26 @@ bool CalibrationManager::StartAutoForwardCalibration(float target_accel_g) {
                   "Auto-forward calib failed to start (need stage 1 full)");
     return false;
   }
-  target_accel_g_ = std::clamp(target_accel_g, 0.02f, 0.3f);
 
-  // PID gains для управления throttle по ускорению (g → throttle [0..0.5])
-  PidController::Gains gains;
-  gains.kp = 1.0f;           // 0.1g ошибки → +0.1 throttle
-  gains.ki = 0.5f;           // интеграл компенсирует постоянную ошибку (батарея)
-  gains.kd = 0.05f;          // демпфирование
-  gains.max_integral = 0.4f; // anti-windup
-  gains.max_output = 0.5f;   // макс throttle
-  accel_pid_.SetGains(gains);
-  accel_pid_.Reset();
+  MotionDriver::Config cfg;
+  cfg.accel_mode = MotionDriver::AccelMode::Pid;
+  cfg.pid_gains = {1.0f, 0.5f, 0.05f, 0.4f, 0.5f};
+  cfg.target_value = std::clamp(target_accel_g, 0.02f, 0.3f);
+  cfg.accel_duration_sec = 1.5f;
+  cfg.min_effective_throttle = 0.15f;
+  cfg.brake_throttle = 0.0f;
+  cfg.brake_timeout_sec = 3.0f;
+  cfg.zupt = {0.05f, 3.0f};
+  driver_.Start(cfg);
 
-  auto_forward_active_ = true;
-  auto_phase_ = AutoPhase::Accelerate;
-  phase_elapsed_sec_ = 0.0f;
-  cruise_throttle_ = 0.0f;
   char msg[80];
   snprintf(msg, sizeof(msg),
-           "Auto-forward calib started (PID, target=%.3f g)", target_accel_g_);
+           "Auto-forward calib started (PID, target=%.3f g)", cfg.target_value);
   platform_.Log(LogLevel::Info, msg);
+  if (event_log_) {
+    // param: 2 = auto_forward (stage 2)
+    event_log_->Push({0, TelemetryEventType::ImuCalibStart, 2});
+  }
   return true;
 }
 
@@ -57,70 +57,37 @@ float CalibrationManager::UpdateAutoForward(float current_accel_g,
                                             float accel_magnitude,
                                             float gyro_z_dps,
                                             float dt_sec) {
-  if (!auto_forward_active_ || dt_sec <= 0.0f) {
+  if (!IsAutoForwardActive()) {
     return 0.0f;
   }
 
-  phase_elapsed_sec_ += dt_sec;
+  float throttle =
+      driver_.Update(current_accel_g, accel_magnitude, gyro_z_dps, dt_sec);
 
-  switch (auto_phase_) {
-    case AutoPhase::Accelerate: {
-      float error = target_accel_g_ - current_accel_g;
-      float throttle = accel_pid_.Step(error, dt_sec);
-      throttle = std::clamp(throttle, 0.0f, 0.5f);
-      if (throttle > 0.0f && throttle < kMinEffectiveThrottle) {
-        throttle = kMinEffectiveThrottle;
-      }
+  MotionPhase phase = driver_.GetPhase();
 
-      if (phase_elapsed_sec_ >= kAccelDurationSec) {
-        // Переход в круиз: фиксируем текущий throttle
-        cruise_throttle_ = throttle;
-        auto_phase_ = AutoPhase::Cruise;
-        phase_elapsed_sec_ = 0.0f;
-        platform_.Log(LogLevel::Info,
-                      "Auto-forward: cruise phase (hold throttle)");
-      }
-      return throttle;
+  if (phase == MotionPhase::Cruise) {
+    if (driver_.GetPhaseElapsed() == 0.0f) {
+      // Just transitioned into Cruise
+      platform_.Log(LogLevel::Info, "Auto-forward: cruise phase (hold throttle)");
     }
-
-    case AutoPhase::Cruise: {
-      if (phase_elapsed_sec_ >= kCruiseDurationSec) {
-        auto_phase_ = AutoPhase::Brake;
-        phase_elapsed_sec_ = 0.0f;
-        accel_pid_.Reset();
-        platform_.Log(LogLevel::Info, "Auto-forward: braking");
-      }
-      // Постоянный газ — поддерживаем скорость
-      return cruise_throttle_;
+    if (driver_.GetPhaseElapsed() >= kCruiseDurationSec) {
+      driver_.EndCruise();
+      platform_.Log(LogLevel::Info, "Auto-forward: braking");
     }
-
-    case AutoPhase::Brake: {
-      // Детекция остановки: |a| ≈ 1g и |gyro_z| мал
-      bool stopped = (std::abs(accel_magnitude - 1.0f) < kStopAccelThresh) &&
-                     (std::abs(gyro_z_dps) < kStopGyroThresh);
-      bool timeout = phase_elapsed_sec_ >= kBrakeTimeoutSec;
-
-      if (stopped || timeout) {
-        platform_.Log(LogLevel::Info,
-                      stopped ? "Auto-forward: stopped (ZUPT)"
-                              : "Auto-forward: brake timeout");
-        StopAutoForward();
-        return 0.0f;
-      }
-      // Торможение: throttle = 0 (ESC neutral / coast)
-      return 0.0f;
-    }
-
-    default:
-      return 0.0f;
   }
+
+  if (phase == MotionPhase::Stopped) {
+    platform_.Log(LogLevel::Info, "Auto-forward: stopped (ZUPT)");
+    driver_.Reset();
+  }
+
+  return throttle;
 }
 
 void CalibrationManager::StopAutoForward() {
-  if (auto_forward_active_) {
-    auto_forward_active_ = false;
-    auto_phase_ = AutoPhase::Idle;
-    accel_pid_.Reset();
+  if (IsAutoForwardActive()) {
+    driver_.Reset();
     platform_.Log(LogLevel::Info, "Auto-forward calibration stopped");
   }
 }
@@ -150,17 +117,21 @@ const char* CalibrationManager::GetStatus() const {
 int CalibrationManager::GetStage() const { return imu_calib_.GetCalibStage(); }
 
 void CalibrationManager::ProcessRequest(uint32_t now_ms) {
-  (void)now_ms;                          // Unused parameter
   int req = calib_request_.exchange(0);  // Атомарное чтение и сброс
   if (req != 0) {
     CalibMode mode = (req == 2) ? CalibMode::Full : CalibMode::GyroOnly;
     int samples = (req == 2) ? 2000 : 1000;
     imu_calib_.StartCalibration(mode, samples);
     platform_.Log(LogLevel::Info, "Calibration stage 1 started");
+    if (event_log_) {
+      // param: 0 = gyro_only, 1 = full
+      event_log_->Push({now_ms, TelemetryEventType::ImuCalibStart,
+                        static_cast<uint8_t>(req == 2 ? 1 : 0)});
+    }
   }
 }
 
-void CalibrationManager::ProcessCompletion() {
+void CalibrationManager::ProcessCompletion(uint32_t now_ms) {
   const CalibStatus status = imu_calib_.GetStatus();
   if (status == prev_calib_status_) {
     return;  // Статус не изменился — ничего не делаем
@@ -188,8 +159,16 @@ void CalibrationManager::ProcessCompletion() {
       ekf_->Reset();
       platform_.Log(LogLevel::Info, "EKF state reset after calibration");
     }
+    if (event_log_) {
+      uint8_t stage = static_cast<uint8_t>(imu_calib_.GetCalibStage());
+      event_log_->Push({now_ms, TelemetryEventType::ImuCalibDone, stage});
+    }
   } else if (status == CalibStatus::Failed) {
     platform_.Log(LogLevel::Warning, "IMU calibration FAILED");
+    if (event_log_) {
+      uint8_t stage = static_cast<uint8_t>(imu_calib_.GetCalibStage());
+      event_log_->Push({now_ms, TelemetryEventType::ImuCalibFailed, stage});
+    }
   }
 }
 

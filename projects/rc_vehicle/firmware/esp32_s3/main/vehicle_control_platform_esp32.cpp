@@ -3,6 +3,7 @@
 #include <cstring>
 
 #include "config.hpp"
+#include "crash_logger.hpp"
 #include "esp_log.h"
 #include "esp_task_wdt.h"
 #include "esp_timer.h"
@@ -337,6 +338,7 @@ void VehicleControlPlatformEsp32::RegisterTaskWdt() {
 
 void VehicleControlPlatformEsp32::FeedTaskWdt() noexcept {
   esp_task_wdt_reset();
+  CrashLoggerTick(static_cast<uint32_t>(esp_timer_get_time() / 1000));
 }
 
 }  // namespace rc_vehicle

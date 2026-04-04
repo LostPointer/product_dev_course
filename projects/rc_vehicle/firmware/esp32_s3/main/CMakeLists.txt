@@ -29,6 +29,8 @@ idf_component_register(
         "../../common/stabilization_manager.cpp"
         "../../common/telemetry_manager.cpp"
         "../../common/telemetry_log.cpp"
+        "../../common/telemetry_event_log.cpp"
+        "../../common/motion_driver.cpp"
         "../../common/vehicle_ekf.cpp"
         "vehicle_control_platform_esp32.cpp"
         "pwm_control.cpp"
@@ -50,6 +52,7 @@ idf_component_register(
         "../../esp32_common/imu_calibration_nvs.cpp"
         "../../esp32_common/mag_calibration_nvs.cpp"
         "../../esp32_common/stabilization_config_nvs.cpp"
+        "../../esp32_common/crash_logger.cpp"
         "../../esp32_common/udp_telem_sender.cpp"
     INCLUDE_DIRS
         "."

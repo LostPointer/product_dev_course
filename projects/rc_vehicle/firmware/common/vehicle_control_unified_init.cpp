@@ -80,6 +80,12 @@ void VehicleControlUnified::InitImuSubsystem() {
   telem_mgr_.reset(new TelemetryManager());
 
   auto_drive_.SetCalibrationManager(calib_mgr_.get());
+
+  // Провязать лог событий для калибровки и авто-манёвров
+  TelemetryEventLog* ev_log = telem_mgr_->GetEventLog();
+  calib_mgr_->SetEventLog(ev_log);
+  auto_drive_.SetEventLog(ev_log);
+
   calib_mgr_->LoadFromNvs();
 
   float com_off[2]{0.f, 0.f};

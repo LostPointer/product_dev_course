@@ -71,7 +71,7 @@ class ControlLoopProcessor {
  private:
   void UpdateComponents(uint32_t now, uint32_t dt_ms);
   void UpdateSensorsAndEkf(uint32_t dt_ms);
-  void UpdateAutoDrive(uint32_t dt_ms);
+  void UpdateAutoDrive(uint32_t now_ms, uint32_t dt_ms);
   void UpdateStabilization(uint32_t dt_ms);
   void HandleFailsafe();
   void UpdatePwm(uint32_t now, uint32_t dt_ms);

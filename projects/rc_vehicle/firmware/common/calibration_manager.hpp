@@ -5,7 +5,8 @@
 
 #include "imu_calibration.hpp"
 #include "madgwick_filter.hpp"
-#include "pid_controller.hpp"
+#include "motion_driver.hpp"
+#include "telemetry_event_log.hpp"
 #include "vehicle_control_platform.hpp"
 
 namespace rc_vehicle {
@@ -71,7 +72,8 @@ class CalibrationManager {
 
   /** true пока идёт авто-движение для калибровки. */
   [[nodiscard]] bool IsAutoForwardActive() const {
-    return auto_forward_active_;
+    MotionPhase p = driver_.GetPhase();
+    return p != MotionPhase::Idle && p != MotionPhase::Stopped;
   }
 
   /**
@@ -116,8 +118,19 @@ class CalibrationManager {
 
   /**
    * @brief Обработка завершения калибровки (вызывается из control loop)
+   * @param now_ms Текущее время для метки события
    */
-  void ProcessCompletion();
+  void ProcessCompletion(uint32_t now_ms);
+
+  /**
+   * @brief Привязать лог событий (необязательно).
+   *
+   * При каждом старте/завершении/ошибке калибровки записывается событие.
+   * Передайте nullptr чтобы отключить запись.
+   *
+   * @param log Указатель на TelemetryEventLog (время жизни ≥ CalibrationManager)
+   */
+  void SetEventLog(TelemetryEventLog* log) { event_log_ = log; }
 
   /**
    * @brief Загрузить калибровку из NVS при инициализации
@@ -142,23 +155,12 @@ class CalibrationManager {
   // Предыдущий статус калибровки (для логирования только при переходах)
   CalibStatus prev_calib_status_{CalibStatus::Idle};
 
-  // Авто-движение вперёд для Forward-калибровки (PID по ускорению)
-  enum class AutoPhase { Idle, Accelerate, Cruise, Brake };
-  bool auto_forward_active_{false};
-  AutoPhase auto_phase_{AutoPhase::Idle};
-  float target_accel_g_{0.1f};
-  float phase_elapsed_sec_{0.0f};
-  float cruise_throttle_{0.0f};  // throttle зафиксированный в конце разгона
-  PidController accel_pid_;
+  // Опциональный лог событий (не владеет объектом)
+  TelemetryEventLog* event_log_{nullptr};
 
-  static constexpr float kAccelDurationSec = 1.5f;
+  // Авто-движение вперёд для Forward-калибровки
+  MotionDriver driver_;
   static constexpr float kCruiseDurationSec = 1.0f;
-  // Минимальный рабочий газ для преодоления мёртвой зоны ESC.
-  static constexpr float kMinEffectiveThrottle = 0.15f;
-  static constexpr float kBrakeTimeoutSec = 3.0f;
-  // ZUPT-пороги для детекции остановки
-  static constexpr float kStopAccelThresh = 0.05f;  // |a| - 1g| < 0.05g
-  static constexpr float kStopGyroThresh = 3.0f;    // |gyro_z| < 3 dps
 };
 
 }  // namespace rc_vehicle

@@ -19,11 +19,11 @@ void ControlLoopProcessor::Step(uint32_t now, uint32_t dt_ms) {
 
   if (ctx_.calib_mgr) {
     ctx_.calib_mgr->ProcessRequest(now);
-    ctx_.calib_mgr->ProcessCompletion();
+    ctx_.calib_mgr->ProcessCompletion(now);
   }
 
   SelectControlSource(sensors_, commanded_throttle_, commanded_steering_);
-  UpdateAutoDrive(dt_ms);
+  UpdateAutoDrive(now, dt_ms);
 
   stab_cfg_ = ctx_.stab_mgr ? ctx_.stab_mgr->GetConfig() : StabilizationConfig{};
 
@@ -65,8 +65,8 @@ void ControlLoopProcessor::UpdateSensorsAndEkf(uint32_t dt_ms) {
   }
 }
 
-void ControlLoopProcessor::UpdateAutoDrive(uint32_t dt_ms) {
-  auto ad_input = BuildAutoDriveInput(sensors_, ctx_.imu_calib, dt_ms);
+void ControlLoopProcessor::UpdateAutoDrive(uint32_t now_ms, uint32_t dt_ms) {
+  auto ad_input = BuildAutoDriveInput(sensors_, ctx_.imu_calib, dt_ms, now_ms);
   if (sensors_.imu_enabled) {
     ad_input.speed_ms = ctx_.ekf.GetSpeedMs();
   }

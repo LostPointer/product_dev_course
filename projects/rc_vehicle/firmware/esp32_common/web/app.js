@@ -1102,9 +1102,47 @@ function exportLogCsv(frames) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Binary log download via HTTP (replaces slow WebSocket JSON pagination)
-// Protocol: [4B frame_count][4B frame_size][count × frame_size raw bytes]
+// Binary log download via HTTP
+// Format: see http_server.cpp log_bin_handler for full protocol description.
+//   Section 1: [4B frame_count][4B frame_size][frame_count × frame_size bytes]
+//   Section 2: [4B event_count][4B event_size][event_count × event_size bytes]
 // ─────────────────────────────────────────────────────────────
+
+// TelemetryEventType names (must match telemetry_event_log.hpp)
+const EVENT_TYPE_NAMES = {
+    1:  'ImuCalibStart',     2:  'ImuCalibDone',      3:  'ImuCalibFailed',
+    4:  'TrimCalibStart',    5:  'TrimCalibDone',      6:  'TrimCalibFailed',
+    7:  'ComCalibStart',     8:  'ComCalibDone',       9:  'ComCalibFailed',
+    10: 'SpeedCalibStart',   11: 'SpeedCalibDone',     12: 'SpeedCalibFailed',
+    13: 'TestStart',         14: 'TestDone',           15: 'TestFailed',
+    16: 'TestStopped',
+    17: 'MagCalibStart',     18: 'MagCalibDone',       19: 'MagCalibFailed',
+    20: 'MagCalibCancelled',
+};
+
+function eventParamDesc(typeId, param) {
+    // Test events: param = TestType
+    if (typeId >= 13 && typeId <= 16) {
+        return ['', 'Straight', 'Circle', 'Step'][param] || String(param);
+    }
+    // ImuCalibStart: param = mode
+    if (typeId === 1) {
+        return ['gyro_only', 'full', 'auto_forward'][param] || String(param);
+    }
+    // ImuCalibDone/Failed: param = stage number
+    if (typeId === 2 || typeId === 3) {
+        return param ? 'stage' + param : '';
+    }
+    return param ? String(param) : '';
+}
+
+function triggerDownload(content, filename, mime) {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+}
 
 async function downloadBinaryLog() {
     const btn = $('btn-log-csv');
@@ -1115,64 +1153,86 @@ async function downloadBinaryLog() {
         const buf = await resp.arrayBuffer();
         const view = new DataView(buf);
         if (buf.byteLength < 8) { alert('Нет данных'); return; }
+
+        // ── Section 1: frames ──────────────────────────────────────────────
         const frameCount = view.getUint32(0, true);
-        const frameSize = view.getUint32(4, true);
-        if (frameCount === 0) { alert('Нет данных'); return; }
+        const frameSize  = view.getUint32(4, true);
+        const framesEnd  = 8 + frameCount * frameSize;
+
+        if (frameCount === 0) { alert('Нет данных телеметрии'); return; }
 
         const FIELD_OFFSETS = [
-            { name: 'ts_ms',   off: 0, type: 'u32' },
-            { name: 'ax',      off: 4, type: 'f32' },
-            { name: 'ay',      off: 8, type: 'f32' },
-            { name: 'az',      off: 12, type: 'f32' },
-            { name: 'gx',      off: 16, type: 'f32' },
-            { name: 'gy',      off: 20, type: 'f32' },
-            { name: 'gz',      off: 24, type: 'f32' },
-            { name: 'vx',      off: 28, type: 'f32' },
-            { name: 'vy',      off: 32, type: 'f32' },
-            { name: 'slip_deg',off: 36, type: 'f32' },
-            { name: 'speed_ms',off: 40, type: 'f32' },
-            { name: 'throttle',off: 44, type: 'f32' },
-            { name: 'steering',off: 48, type: 'f32' },
-            { name: 'pitch_deg',off: 52, type: 'f32' },
-            { name: 'roll_deg', off: 56, type: 'f32' },
-            { name: 'yaw_deg',  off: 60, type: 'f32' },
-            { name: 'yaw_rate_dps', off: 64, type: 'f32' },
-            { name: 'oversteer_active', off: 68, type: 'f32' },
-            { name: 'rc_throttle', off: 72, type: 'f32' },
-            { name: 'rc_steering', off: 76, type: 'f32' },
-            { name: 'cmd_throttle', off: 80, type: 'f32' },
-            { name: 'cmd_steering', off: 84, type: 'f32' },
+            { name: 'ts_ms',           off: 0,   type: 'u32' },
+            { name: 'ax',              off: 4,   type: 'f32' },
+            { name: 'ay',              off: 8,   type: 'f32' },
+            { name: 'az',              off: 12,  type: 'f32' },
+            { name: 'gx',              off: 16,  type: 'f32' },
+            { name: 'gy',              off: 20,  type: 'f32' },
+            { name: 'gz',              off: 24,  type: 'f32' },
+            { name: 'vx',              off: 28,  type: 'f32' },
+            { name: 'vy',              off: 32,  type: 'f32' },
+            { name: 'slip_deg',        off: 36,  type: 'f32' },
+            { name: 'speed_ms',        off: 40,  type: 'f32' },
+            { name: 'throttle',        off: 44,  type: 'f32' },
+            { name: 'steering',        off: 48,  type: 'f32' },
+            { name: 'pitch_deg',       off: 52,  type: 'f32' },
+            { name: 'roll_deg',        off: 56,  type: 'f32' },
+            { name: 'yaw_deg',         off: 60,  type: 'f32' },
+            { name: 'yaw_rate_dps',    off: 64,  type: 'f32' },
+            { name: 'oversteer_active',off: 68,  type: 'f32' },
+            { name: 'rc_throttle',     off: 72,  type: 'f32' },
+            { name: 'rc_steering',     off: 76,  type: 'f32' },
+            { name: 'cmd_throttle',    off: 80,  type: 'f32' },
+            { name: 'cmd_steering',    off: 84,  type: 'f32' },
             { name: 'ekf_vx_var',      off: 88,  type: 'f32' },
             { name: 'ekf_vy_var',      off: 92,  type: 'f32' },
             { name: 'ekf_r_var',       off: 96,  type: 'f32' },
-            { name: 'mx',              off: 100, type: 'f32' },
-            { name: 'my',              off: 104, type: 'f32' },
-            { name: 'mz',              off: 108, type: 'f32' },
-            { name: 'heading_deg',     off: 112, type: 'f32' },
-            { name: 'heading_rel_deg', off: 116, type: 'f32' },
-            { name: 'test_marker',     off: 120, type: 'u8'  },
+            { name: 'mx',             off: 100, type: 'f32' },
+            { name: 'my',             off: 104, type: 'f32' },
+            { name: 'mz',             off: 108, type: 'f32' },
+            { name: 'heading_deg',    off: 112, type: 'f32' },
+            { name: 'heading_rel_deg',off: 116, type: 'f32' },
+            { name: 'test_marker',    off: 120, type: 'u8'  },
         ];
 
-        const hdr = FIELD_OFFSETS.map(f => f.name).join(',') + '\n';
-        const lines = [];
-        const dataOffset = 8; // after header
+        const frameLines = [];
         for (let i = 0; i < frameCount; i++) {
-            const base = dataOffset + i * frameSize;
-            if (base + frameSize > buf.byteLength) break;
+            const base = 8 + i * frameSize;
+            if (base + frameSize > framesEnd) break;
             const vals = FIELD_OFFSETS.map(f => {
                 const o = base + f.off;
                 if (f.type === 'u32') return view.getUint32(o, true);
-                if (f.type === 'u8') return view.getUint8(o);
+                if (f.type === 'u8')  return view.getUint8(o);
                 return view.getFloat32(o, true);
             });
-            lines.push(vals.join(','));
+            frameLines.push(vals.join(','));
         }
-        const csv = hdr + lines.join('\n');
-        const blob = new Blob([csv], { type: 'text/csv' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url; a.download = 'telemetry_log.csv'; a.click();
-        URL.revokeObjectURL(url);
+        const framesCsv = FIELD_OFFSETS.map(f => f.name).join(',') + '\n' +
+                          frameLines.join('\n');
+        triggerDownload(framesCsv, 'telemetry_log.csv', 'text/csv');
+
+        // ── Section 2: events ──────────────────────────────────────────────
+        if (framesEnd + 8 > buf.byteLength) return; // нет секции событий
+
+        const eventCount = view.getUint32(framesEnd,     true);
+        const eventSize  = view.getUint32(framesEnd + 4, true);
+        if (eventCount === 0) return;
+
+        const eventLines = [];
+        for (let i = 0; i < eventCount; i++) {
+            const base = framesEnd + 8 + i * eventSize;
+            if (base + eventSize > buf.byteLength) break;
+            const ts     = view.getUint32(base,     true);
+            const typeId = view.getUint8 (base + 4);
+            const param  = view.getUint8 (base + 5);
+            const name   = EVENT_TYPE_NAMES[typeId] || 'Unknown_' + typeId;
+            const desc   = eventParamDesc(typeId, param);
+            eventLines.push([ts, typeId, name, param, desc].join(','));
+        }
+        const eventsCsv = 'ts_ms,type_id,type_name,param,param_desc\n' +
+                          eventLines.join('\n');
+        triggerDownload(eventsCsv, 'telemetry_events.csv', 'text/csv');
+
     } catch (e) {
         alert('Ошибка скачивания: ' + e.message);
     } finally {

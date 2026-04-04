@@ -8,6 +8,7 @@
 #include "speed_calibration.hpp"
 #include "stabilization_config.hpp"
 #include "steering_trim_calibration.hpp"
+#include "telemetry_event_log.hpp"
 #include "telemetry_log.hpp"
 #include "test_runner.hpp"
 
@@ -84,10 +85,15 @@ class IVehicleControl {
   [[nodiscard]] virtual const char* GetMagCalibFailReason() const = 0;
   virtual bool EraseMagCalibration() = 0;
 
-  // Телеметрия лог
+  // Телеметрия лог (кадры)
   virtual void GetLogInfo(size_t& count_out, size_t& cap_out) const = 0;
   virtual bool GetLogFrame(size_t idx, TelemetryLogFrame& out) const = 0;
   virtual void ClearLog() = 0;
+
+  // Лог событий (старт/стоп режимов и калибровок)
+  [[nodiscard]] virtual size_t GetEventCount() const = 0;
+  virtual bool GetEvent(size_t idx, TelemetryEvent& out) const = 0;
+  virtual void ClearEventLog() = 0;
 
   // Диагностика
   [[nodiscard]] virtual std::vector<SelfTestItem> RunSelfTest() const = 0;
