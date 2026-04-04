@@ -30,9 +30,9 @@ static const char* MMC_TAG = "mmc5983_spi";
 // CTRL1: BW = 00 (100 Гц пропускная полоса)
 #define MMC5983_CTRL1_BW_100HZ 0x00
 
-// CTRL2: CMM_en=1, CMM_freq=100Hz (000 → 1 Гц, 001 → 10 Гц, 010 → 20 Гц,
-//         011 → 50 Гц, 100 → 100 Гц, 101 → 200 Гц, 110 → 1000 Гц)
-#define MMC5983_CTRL2_CMM_100HZ 0x14  // CMM_en (бит 4) | freq=100Hz (0b100)
+// CTRL2 layout: [7]=EN_PRD_SET [6:4]=PRD_SET[2:0] [3]=CMM_EN [2:0]=CM_FREQ
+// CM_FREQ: 000=1Hz 001=10Hz 010=20Hz 011=50Hz 100=100Hz 101=200Hz 110=1000Hz
+#define MMC5983_CTRL2_CMM_100HZ 0x0C  // CMM_en (бит 3) | freq=100Hz (0b100)
 
 // STATUS: Meas_M_Done
 #define MMC5983_STATUS_MEAS_M_DONE 0x01
@@ -127,14 +127,11 @@ int Mmc5983Spi::Read(MagData& data) {
   if (!initialized_)
     return -1;
 
-  // Периодическое SET/RESET для компенсации температурного дрейфа.
-  // Чередуем: на чётных периодах — SET, на нечётных — RESET.
+  // Периодический SET для компенсации температурного дрейфа моста.
+  // RESET не используется — он инвертирует полярность моста и знак сигнала,
+  // что ломает непрерывный поток данных и сбивает калибровку.
   if (read_count_ > 0 && (read_count_ % kSetResetPeriod) == 0) {
-    if ((read_count_ / kSetResetPeriod) % 2 == 0) {
-      (void)DoSet();
-    } else {
-      (void)DoReset();
-    }
+    (void)DoSet();
   }
   ++read_count_;
 
