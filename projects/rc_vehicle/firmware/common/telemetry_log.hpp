@@ -34,6 +34,7 @@ struct TelemetryLogFrame {
   float ekf_vx_var{0};          // EKF: дисперсия vx [м²/с²]
   float ekf_vy_var{0};          // EKF: дисперсия vy [м²/с²]
   float ekf_r_var{0};           // EKF: дисперсия yaw rate [рад²/с²]
+  float ekf_yaw_deg{0};         // EKF: курсовой угол [°, из магнитометра]
   // --- Магнетометр MMC5983MA ---
   float mx{0};                   // Магнитное поле X [мГс]
   float my{0};                   // Магнитное поле Y [мГс]
@@ -42,10 +43,10 @@ struct TelemetryLogFrame {
   float heading_rel_deg{0};      // Относительный курс [°, -180..180]
   uint8_t test_marker{0};       // Маркер теста (0 = нет, >0 = ID теста)
   uint8_t _pad[3]{};            // Выравнивание до 4 байт
-};  // sizeof == 124 bytes (29 × float + uint32_t + uint8_t + 3 pad)
+};  // sizeof == 128 bytes (30 × float + uint32_t + uint8_t + 3 pad)
 
 // Compile-time проверка размера структуры
-static_assert(sizeof(TelemetryLogFrame) == 124,
+static_assert(sizeof(TelemetryLogFrame) == 128,
               "TelemetryLogFrame size mismatch");
 
 /**

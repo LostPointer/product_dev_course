@@ -1,5 +1,7 @@
 #include "control_loop_processor.hpp"
 
+#include <cmath>
+
 #include "config.hpp"
 #include "diagnostics_reporter.hpp"
 #include "drive_mode_registry.hpp"
@@ -55,9 +57,12 @@ void ControlLoopProcessor::UpdateSensorsAndEkf(uint32_t dt_ms) {
   const bool ekf_active =
       ctx_.stab_mgr && ctx_.stab_mgr->GetConfig().filter.ekf_enabled;
   if (ekf_active && sensors_.imu_enabled && dt_ms > 0) {
+    // Передаём |commanded_throttle_| для ZUPT gating:
+    // если throttle > 2%, ZUPT не применяется (машина пытается ехать).
     ctx_.ekf.UpdateFromImu(sensors_.imu_data.ax, sensors_.imu_data.ay,
                            sensors_.imu_data.az, sensors_.filtered_gz,
-                           static_cast<float>(dt_ms) * 0.001f);
+                           static_cast<float>(dt_ms) * 0.001f,
+                           std::abs(commanded_throttle_));
   }
   if (ekf_active && sensors_.imu_enabled && sensors_.mag_enabled) {
     constexpr float kDegToRad = 3.14159265358979f / 180.0f;

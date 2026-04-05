@@ -91,6 +91,7 @@ TelemetryLogFrame BuildLogFrame(const TelemetryContext& ctx, uint32_t now,
   frame.ekf_vx_var = ctx.ekf.GetVxVariance();
   frame.ekf_vy_var = ctx.ekf.GetVyVariance();
   frame.ekf_r_var = ctx.ekf.GetRVariance();
+  frame.ekf_yaw_deg = ctx.ekf.GetYawDeg();
   if (sensors.mag_enabled) {
     frame.mx = sensors.mag_data.mx;
     frame.my = sensors.mag_data.my;

@@ -1090,9 +1090,9 @@ function handleLogData(frames) {
 
 function exportLogCsv(frames) {
     if (!frames || !frames.length) { alert('Нет данных'); return; }
-    const hdr = 'ts_ms,ax,ay,az,gx,gy,gz,vx,vy,slip_deg,speed_ms,throttle,steering,pitch_deg,roll_deg,yaw_deg,yaw_rate_dps,oversteer_active,rc_throttle,rc_steering,cmd_throttle,cmd_steering,ekf_vx_var,ekf_vy_var,ekf_r_var,mx,my,mz,heading_deg,heading_rel_deg,test_marker\n';
+    const hdr = 'ts_ms,ax,ay,az,gx,gy,gz,vx,vy,slip_deg,speed_ms,throttle,steering,pitch_deg,roll_deg,yaw_deg,yaw_rate_dps,oversteer_active,rc_throttle,rc_steering,cmd_throttle,cmd_steering,ekf_vx_var,ekf_vy_var,ekf_r_var,ekf_yaw_deg,mx,my,mz,heading_deg,heading_rel_deg,test_marker\n';
     const rows = frames.map(f =>
-        `${f.ts_ms},${f.ax},${f.ay},${f.az},${f.gx},${f.gy},${f.gz},${f.vx},${f.vy},${f.slip_deg},${f.speed_ms},${f.throttle},${f.steering},${f.pitch_deg},${f.roll_deg},${f.yaw_deg},${f.yaw_rate_dps},${f.oversteer_active},${f.rc_throttle},${f.rc_steering},${f.cmd_throttle??0},${f.cmd_steering??0},${f.ekf_vx_var??0},${f.ekf_vy_var??0},${f.ekf_r_var??0},${f.mx??0},${f.my??0},${f.mz??0},${f.heading_deg??0},${f.heading_rel_deg??0},${f.test_marker??0}`
+        `${f.ts_ms},${f.ax},${f.ay},${f.az},${f.gx},${f.gy},${f.gz},${f.vx},${f.vy},${f.slip_deg},${f.speed_ms},${f.throttle},${f.steering},${f.pitch_deg},${f.roll_deg},${f.yaw_deg},${f.yaw_rate_dps},${f.oversteer_active},${f.rc_throttle},${f.rc_steering},${f.cmd_throttle??0},${f.cmd_steering??0},${f.ekf_vx_var??0},${f.ekf_vy_var??0},${f.ekf_r_var??0},${f.ekf_yaw_deg??0},${f.mx??0},${f.my??0},${f.mz??0},${f.heading_deg??0},${f.heading_rel_deg??0},${f.test_marker??0}`
     ).join('\n');
     const blob = new Blob([hdr + rows], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -1187,12 +1187,13 @@ async function downloadBinaryLog() {
             { name: 'ekf_vx_var',      off: 88,  type: 'f32' },
             { name: 'ekf_vy_var',      off: 92,  type: 'f32' },
             { name: 'ekf_r_var',       off: 96,  type: 'f32' },
-            { name: 'mx',             off: 100, type: 'f32' },
-            { name: 'my',             off: 104, type: 'f32' },
-            { name: 'mz',             off: 108, type: 'f32' },
-            { name: 'heading_deg',    off: 112, type: 'f32' },
-            { name: 'heading_rel_deg',off: 116, type: 'f32' },
-            { name: 'test_marker',    off: 120, type: 'u8'  },
+            { name: 'ekf_yaw_deg',     off: 100, type: 'f32' },
+            { name: 'mx',             off: 104, type: 'f32' },
+            { name: 'my',             off: 108, type: 'f32' },
+            { name: 'mz',             off: 112, type: 'f32' },
+            { name: 'heading_deg',    off: 116, type: 'f32' },
+            { name: 'heading_rel_deg',off: 120, type: 'f32' },
+            { name: 'test_marker',    off: 124, type: 'u8'  },
         ];
 
         // ── Section 2: parse events into a map keyed by ts_ms ─────────────

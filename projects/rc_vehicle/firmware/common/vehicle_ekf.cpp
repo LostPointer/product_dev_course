@@ -213,20 +213,26 @@ void VehicleEkf::UpdateZeroVelocity(float r_zupt) noexcept {
 // ═════════════════════════════════════════════════════════════════════════
 
 void VehicleEkf::UpdateFromImu(float ax_g, float ay_g, float az_g,
-                               float gz_dps, float dt_sec) noexcept {
+                               float gz_dps, float dt_sec,
+                               float throttle_abs) noexcept {
   constexpr float kG = 9.80665f;
   constexpr float kDegToRad = kPi / 180.0f;
 
   Predict(ax_g * kG, ay_g * kG, dt_sec);
   UpdateGyroZ(gz_dps * kDegToRad);
 
-  const float accel_mag =
-      std::sqrt(ax_g * ax_g + ay_g * ay_g + az_g * az_g);
-  constexpr float kZuptAccelThresh = 0.05f;
-  constexpr float kZuptGyroThresh = 3.0f;
-  if (std::abs(accel_mag - 1.0f) < kZuptAccelThresh &&
-      std::abs(gz_dps) < kZuptGyroThresh) {
-    UpdateZeroVelocity(0.1f);
+  // ZUPT: применяем только если машина реально стоит (throttle ≈ 0).
+  // При throttle > порога машина пытается ехать — ZUPT обнулит скорость.
+  constexpr float kZuptThrottleThresh = 0.02f;  // 2% throttle
+  if (throttle_abs <= kZuptThrottleThresh) {
+    const float accel_mag =
+        std::sqrt(ax_g * ax_g + ay_g * ay_g + az_g * az_g);
+    constexpr float kZuptAccelThresh = 0.05f;
+    constexpr float kZuptGyroThresh = 3.0f;
+    if (std::abs(accel_mag - 1.0f) < kZuptAccelThresh &&
+        std::abs(gz_dps) < kZuptGyroThresh) {
+      UpdateZeroVelocity(0.1f);
+    }
   }
 }
 

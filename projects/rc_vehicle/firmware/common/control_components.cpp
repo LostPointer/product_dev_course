@@ -150,27 +150,10 @@ void ImuHandler::Update(uint32_t now_ms, [[maybe_unused]] uint32_t dt_ms) {
 
         const float h = std::atan2(comp2, comp1) * (180.f / 3.14159265f);
         heading_deg_ = (h < 0.f) ? h + 360.f : h;
-
-        // Подать mag в Madgwick 9DOF, повёрнутый в систему basis:
-        // basis1 ≈ body X, basis2 ≈ body Y, normal ≈ body Z
-        if (madgwick_enabled_) {
-          const float rmx = comp1;
-          const float rmy = comp2;
-          const float rmz = dot_n;
-          filter_.UpdateWithMag(raw_ax, raw_ay, raw_az, data_.gx, data_.gy,
-                                data_.gz, rmx, rmy, rmz, dt_sec);
-        }
       } else {
         // Нет калибровки — fallback: простой atan2 без проекции
         const float h = std::atan2(mag_cal.my, mag_cal.mx) * (180.f / 3.14159265f);
         heading_deg_ = (h < 0.f) ? h + 360.f : h;
-
-        // 9DOF с сырыми mag данными (лучше чем 6DOF, но heading неточный)
-        if (madgwick_enabled_) {
-          filter_.UpdateWithMag(raw_ax, raw_ay, raw_az, data_.gx, data_.gy,
-                                data_.gz, mag_cal.mx, mag_cal.my, mag_cal.mz,
-                                dt_sec);
-        }
       }
 
       // Установить опорный курс при первом валидном чтении (или после сброса)
@@ -178,11 +161,26 @@ void ImuHandler::Update(uint32_t now_ms, [[maybe_unused]] uint32_t dt_ms) {
         heading_ref_ = heading_deg_;
         heading_ref_set_ = true;
       }
-    } else {
-      // Новых данных магнитометра нет — 6DOF, гироскоп+акселерометр
-      if (madgwick_enabled_) {
-        filter_.Update(raw_ax, raw_ay, raw_az, data_.gx, data_.gy, data_.gz,
-                       dt_sec);
+    }
+
+    // Всегда подаём mag в Madgwick 9DOF (даже без нового семпла).
+    // Это предотвращает дрейф yaw между обновлениями магнитометра.
+    // При отсутствии нового семпла используются последние mag данные.
+    if (madgwick_enabled_) {
+      if (have_calib) {
+        const auto& cd = mag_calib_->GetData();
+        const float dot_n = mag_cal.mx * cd.normal[0] +
+                            mag_cal.my * cd.normal[1] +
+                            mag_cal.mz * cd.normal[2];
+        const float px = mag_cal.mx - dot_n * cd.normal[0];
+        const float py = mag_cal.my - dot_n * cd.normal[1];
+        const float pz = mag_cal.mz - dot_n * cd.normal[2];
+        filter_.UpdateWithMag(raw_ax, raw_ay, raw_az, data_.gx, data_.gy,
+                              data_.gz, px, py, dot_n, dt_sec);
+      } else {
+        filter_.UpdateWithMag(raw_ax, raw_ay, raw_az, data_.gx, data_.gy,
+                              data_.gz, mag_cal.mx, mag_cal.my, mag_cal.mz,
+                              dt_sec);
       }
     }
   } else {
