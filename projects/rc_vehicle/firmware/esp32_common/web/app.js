@@ -1094,11 +1094,7 @@ function exportLogCsv(frames) {
     const rows = frames.map(f =>
         `${f.ts_ms},${f.ax},${f.ay},${f.az},${f.gx},${f.gy},${f.gz},${f.vx},${f.vy},${f.slip_deg},${f.speed_ms},${f.throttle},${f.steering},${f.pitch_deg},${f.roll_deg},${f.yaw_deg},${f.yaw_rate_dps},${f.oversteer_active},${f.rc_throttle},${f.rc_steering},${f.cmd_throttle??0},${f.cmd_steering??0},${f.ekf_vx_var??0},${f.ekf_vy_var??0},${f.ekf_r_var??0},${f.ekf_yaw_deg??0},${f.mx??0},${f.my??0},${f.mz??0},${f.heading_deg??0},${f.heading_rel_deg??0},${f.test_marker??0}`
     ).join('\n');
-    const blob = new Blob([hdr + rows], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'telemetry_log.csv'; a.click();
-    URL.revokeObjectURL(url);
+    triggerDownload(hdr + rows, 'telemetry_log.csv', 'text/csv');
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1140,8 +1136,20 @@ function triggerDownload(content, filename, mime) {
     const blob = new Blob([content], { type: mime });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = filename; a.click();
-    URL.revokeObjectURL(url);
+    a.href = url;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+
+    // На мобильных браузерах фактическое чтение blob может начаться только
+    // после подтверждения системного диалога "Скачать файл". Если отозвать
+    // object URL сразу после click(), загрузка иногда падает с "не удалось
+    // скачать файл". Даём браузеру запас времени и только потом чистим ресурс.
+    window.setTimeout(() => {
+        URL.revokeObjectURL(url);
+        a.remove();
+    }, 60000);
 }
 
 async function downloadBinaryLog() {
