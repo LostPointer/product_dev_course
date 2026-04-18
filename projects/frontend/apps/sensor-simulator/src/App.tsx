@@ -357,8 +357,12 @@ export function App() {
     const [errors, setErrors] = useState(0)
     const [lastHttpStatus, setLastHttpStatus] = useState<number | null>(null)
     const [log, setLog] = useState<string>('')
+    const [effectiveRateDisplay, setEffectiveRateDisplay] = useState<string>('')
 
     const tickRef = useRef<number | null>(null) // setTimeout id
+
+    // Ref for tracking effective rate per sensor (for UI display)
+    const effectiveRateBySensorRef = useRef<Map<string, number>>(new Map())
 
     const seqBySensorRef = useRef<Map<string, number>>(new Map())
     const lastTimestampBySensorRef = useRef<Map<string, number>>(new Map())
@@ -406,7 +410,8 @@ export function App() {
         n: number,
         effectiveRateHz: number,
         snapshot: PersistedSettings,
-        isContinuous: boolean
+        isContinuous: boolean,
+        sendStartMs?: number
     ): TelemetryIngestReading[] {
         const readings: TelemetryIngestReading[] = []
 
@@ -415,11 +420,18 @@ export function App() {
 
         const rng = getSensorRng(sensorKey, snapshot.seed)
         let seq = seqBySensorRef.current.get(sensorKey) ?? 0
-        const lastTs = lastTimestampBySensorRef.current.get(sensorKey) ?? now
+        const lastTs = lastTimestampBySensorRef.current.get(sensorKey) ?? 0
 
-        // internal monotonic timestamp for steady generation
-        let base = Math.max(lastTs, now)
-        if (!isContinuous) base = now
+        // Start from the next expected timestamp after lastTs, or from sendStartMs/now
+        let base: number
+        if (lastTs > 0) {
+            base = lastTs + stepMs
+        } else if (sendStartMs) {
+            base = sendStartMs
+        } else {
+            base = now
+        }
+        if (!isContinuous && !sendStartMs) base = now
 
         for (let i = 0; i < n; i++) {
             const tMs = base + i * stepMs
@@ -475,7 +487,8 @@ export function App() {
         n: number,
         effectiveRateHz: number,
         snapshot: PersistedSettings,
-        isContinuous: boolean
+        isContinuous: boolean,
+        sendStartMs?: number
     ) {
         const sensorId = sensor.sensorId.trim()
         const sensorToken = sensor.sensorToken.trim()
@@ -497,7 +510,7 @@ export function App() {
                     duty_cycle: snapshot.waveform === 'pulses' ? clamp(snapshot.dutyCycle, 0, 1) : null,
                 },
             },
-            readings: buildReadings(sensor.key, n, effectiveRateHz, snapshot, isContinuous),
+            readings: buildReadings(sensor.key, n, effectiveRateHz, snapshot, isContinuous, sendStartMs),
         }
 
         const name = sensorDisplayName(sensor)
@@ -553,6 +566,9 @@ export function App() {
 
         const startMs = Date.now()
 
+        // Track last send time per sensor to maintain uniform cadence
+        const lastSendTimeBySensor = new Map<string, number>()
+
         const tick = async () => {
             const now = Date.now()
             const elapsedSec = Math.floor((now - startMs) / 1000)
@@ -566,24 +582,48 @@ export function App() {
             }
 
             const sends: Promise<void>[] = []
+            let minIntervalMs = 1000 // default fallback
+            const rateDisplays: string[] = []
+
             for (const sensor of activeSnap) {
                 const ss = sensor.settings
                 if (scenarioIsPausedAt(ss, elapsedSec)) {
                     appendLog(`[${nowIso()}] ⏸️ dropout window sensor=${sensorDisplayName(sensor)}`)
+                    effectiveRateBySensorRef.current.set(sensor.key, 0)
                     continue
                 }
                 const effRate = scenarioEffectiveRate(ss, elapsedSec)
-                // Each tick = 1 second → send exactly effRate readings per tick
-                const readingsCount = Math.max(1, Math.round(effRate))
-                sends.push(sendBatchForSensor(sensor, readingsCount, effRate, ss, true))
+                const intervalMs = 1000 / clamp(effRate, 1, 10_000)
+                if (intervalMs < minIntervalMs) minIntervalMs = intervalMs
+
+                effectiveRateBySensorRef.current.set(sensor.key, effRate)
+                rateDisplays.push(`${sensorDisplayName(sensor)}: ${effRate.toFixed(1)} Hz`)
+
+                const lastSend = lastSendTimeBySensor.get(sensor.key) ?? 0
+                const timeSinceLastSend = now - lastSend
+
+                // Check if this sensor is due for a send
+                if (timeSinceLastSend >= intervalMs * 0.8) {
+                    // Calculate how many readings are owed
+                    const readingsDue = Math.max(1, Math.round(timeSinceLastSend / intervalMs))
+                    // Cap to avoid huge bursts
+                    const readingsCount = Math.min(readingsDue, Math.max(10, Math.round(effRate * 2)))
+                    const sendStart = lastSend > 0 ? lastSend + intervalMs : startMs
+                    sends.push(sendBatchForSensor(sensor, readingsCount, effRate, ss, true, sendStart))
+                    lastSendTimeBySensor.set(sensor.key, now)
+                }
             }
 
-            if (sends.length > 0) await Promise.all(sends)
+            setEffectiveRateDisplay(rateDisplays.join(' | '))
 
-            // Schedule next tick in 1 second (uniform cadence)
+            // Schedule next tick before HTTP — avoids drift from round-trip latency
             if (tickRef.current !== null) {
-                tickRef.current = window.setTimeout(tick, 1000)
+                const computeMs = Date.now() - now
+                tickRef.current = window.setTimeout(tick, Math.max(10, minIntervalMs - computeMs))
             }
+
+            // Fire HTTP in background so it doesn't delay the next tick
+            if (sends.length > 0) void Promise.all(sends)
         }
 
         // kick off immediately
@@ -972,7 +1012,13 @@ export function App() {
                                         max={10000}
                                         onChange={(e) => updateSensorSettings(selectedSensor.key, { rateHz: Number(e.target.value) })}
                                     />
-                                    <div className="hint">Readings в секунду при continuous-режиме. Отправка каждую секунду.</div>
+                                    <div className="hint">
+                                        Readings в секунду. Интервал отправки: {(1000 / ss.rateHz).toFixed(0)}мс
+                                        {selectedSensor && (() => {
+                                            const eff = effectiveRateBySensorRef.current.get(selectedSensor.key)
+                                            return eff && eff !== ss.rateHz ? ` | сейчас: ${eff.toFixed(1)} Hz (сценарий)` : ''
+                                        })()}
+                                    </div>
                                 </div>
                                 <div>
                                     <label>batch size (manual)</label>
@@ -1128,6 +1174,14 @@ export function App() {
                             <div className="label">state</div>
                             <div className="value">{isRunning ? 'running' : 'idle'}</div>
                         </div>
+                        {effectiveRateDisplay && (
+                            <div className="kpi" style={{ gridColumn: '1 / -1' }}>
+                                <div className="label">effective send rate</div>
+                                <div className="value" style={{ fontSize: '0.85em', whiteSpace: 'normal' }}>
+                                    {effectiveRateDisplay}
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     <div className="log">{log || 'log is empty'}</div>
