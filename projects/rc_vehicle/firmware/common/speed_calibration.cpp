@@ -12,42 +12,55 @@ bool SpeedCalibration::Start(float target_throttle, float cruise_duration_sec) {
 
   target_throttle_ = target_throttle;
   cruise_duration_sec_ = cruise_duration_sec;
-  Reset();
+
+  MotionDriver::Config cfg;
+  cfg.accel_mode = MotionDriver::AccelMode::LinearRamp;
+  cfg.target_value = target_throttle_;
+  cfg.accel_duration_sec = 1.5f;
+  cfg.min_effective_throttle = 0.15f;
+  cfg.brake_throttle = kBrakeThrottle;
+  cfg.brake_timeout_sec = kBrakeTimeoutSec;
+  cfg.zupt = {0.05f, 0.0f};  // gyro_thresh=0 → no gyro check
+  driver_.Start(cfg);
+
+  result_ = {};
+  phase_elapsed_sec_ = 0.0f;
+  speed_sum_ = 0.0;
+  speed_count_ = 0;
   phase_ = Phase::Accelerate;
   return true;
 }
 
 void SpeedCalibration::Stop() {
+  driver_.Reset();
   phase_ = Phase::Idle;
-  Reset();
+  result_ = {};
+  phase_elapsed_sec_ = 0.0f;
+  speed_sum_ = 0.0;
+  speed_count_ = 0;
 }
 
 void SpeedCalibration::Update(float speed_ms, float accel_mag, float dt_sec,
                               float& throttle, float& steering) {
   steering = 0.0f;
-  phase_elapsed_sec_ += dt_sec;
 
   switch (phase_) {
     // ─────────────────────────────────────────────────────────────────────
     case Phase::Accelerate: {
-      // Линейный рост throttle 0 → target_throttle за kAccelSec
-      const float ramp = std::min(phase_elapsed_sec_ / kAccelSec, 1.0f);
-      throttle = ramp * target_throttle_;
-      if (throttle > 0.0f && throttle < kMinEffectiveThrottle) {
-        throttle = kMinEffectiveThrottle;
-      }
-      if (phase_elapsed_sec_ >= kAccelSec) {
-        cruise_throttle_ = target_throttle_;
-        phase_elapsed_sec_ = 0.0f;
+      // MotionDriver handles linear ramp; pass dummy accel_g (not used in ramp)
+      throttle = driver_.Update(0.0f, 2.0f, 0.0f, dt_sec);
+      if (driver_.GetPhase() == MotionPhase::Cruise) {
         phase_ = Phase::Cruise;
+        phase_elapsed_sec_ = 0.0f;
       }
       break;
     }
 
     // ─────────────────────────────────────────────────────────────────────
     case Phase::Cruise: {
-      throttle = cruise_throttle_;
-      // Сбор семплов скорости
+      throttle = driver_.GetCruiseThrottle();
+      phase_elapsed_sec_ += dt_sec;
+
       speed_sum_ += static_cast<double>(speed_ms);
       ++speed_count_;
 
@@ -55,8 +68,8 @@ void SpeedCalibration::Update(float speed_ms, float accel_mag, float dt_sec,
         if (speed_count_ < kMinSamples) {
           phase_ = Phase::Failed;
         } else {
-          phase_elapsed_sec_ = 0.0f;
           phase_ = Phase::Brake;
+          phase_elapsed_sec_ = 0.0f;
         }
       }
       break;
@@ -65,6 +78,7 @@ void SpeedCalibration::Update(float speed_ms, float accel_mag, float dt_sec,
     // ─────────────────────────────────────────────────────────────────────
     case Phase::Brake: {
       throttle = kBrakeThrottle;
+      phase_elapsed_sec_ += dt_sec;
 
       // Остановка по ZUPT: малое ускорение → машина стоит
       if (accel_mag < kStopAccelThresh) {
@@ -92,9 +106,10 @@ void SpeedCalibration::Update(float speed_ms, float accel_mag, float dt_sec,
 }
 
 void SpeedCalibration::Reset() {
+  driver_.Reset();
   result_ = {};
+  phase_ = Phase::Idle;
   phase_elapsed_sec_ = 0.0f;
-  cruise_throttle_ = 0.0f;
   speed_sum_ = 0.0;
   speed_count_ = 0;
 }

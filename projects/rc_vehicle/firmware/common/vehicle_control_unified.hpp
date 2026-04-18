@@ -106,18 +106,13 @@ class VehicleControlUnified : public IVehicleControl {
   // ─── Калибровка магнитометра ─────────────────────────────────────────────
 
   /** Запустить сбор семплов калибровки магнитометра. */
-  void StartMagCalibration() override { mag_calib_.Start(); }
+  void StartMagCalibration() override;
 
   /** Завершить сбор, вычислить offset и сохранить в NVS (если валидно). */
-  void FinishMagCalibration() override {
-    mag_calib_.Finish();
-    if (mag_calib_.IsValid()) {
-      platform_->SaveMagCalib(mag_calib_.GetData());
-    }
-  }
+  void FinishMagCalibration() override;
 
   /** Прервать сбор, вернуться в Idle. */
-  void CancelMagCalibration() override { mag_calib_.Cancel(); }
+  void CancelMagCalibration() override;
 
   /** Причина неудачи калибровки магнитометра (валидна при статусе "failed"). */
   [[nodiscard]] const char* GetMagCalibFailReason() const override {
@@ -304,6 +299,18 @@ class VehicleControlUnified : public IVehicleControl {
    * @brief Очистить буфер телеметрии
    */
   void ClearLog() override { telem_mgr_->Clear(); }
+
+  // ── Лог событий ───────────────────────────────────────────────────────────
+
+  [[nodiscard]] size_t GetEventCount() const override {
+    return telem_mgr_->GetEventCount();
+  }
+  bool GetEvent(size_t idx, TelemetryEvent& out) const override {
+    return telem_mgr_->GetEvent(idx, out);
+  }
+  void ClearEventLog() override { telem_mgr_->ClearEvents(); }
+
+  // ── Калибровка магнитометра ───────────────────────────────────────────────
 
   /**
    * @brief Запустить self-test (проверка подсистем)

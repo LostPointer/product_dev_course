@@ -48,6 +48,104 @@ URL для SSE/WebSocket-эндпоинта собирается из невал
 
 ---
 
+### BUG-F-006 — Popup «Создать проект» закрывается при отпускании ЛКМ вне popup
+**Приоритет:** MEDIUM
+**Статус:** [x] Исправлен
+**Файл:** `projects/frontend/apps/experiment-portal/src/components/Modal.tsx`
+
+При отпускании левой кнопки мыши вне области модального окна «Создать проект» окно закрывалось (drag-click: mousedown внутри, mouseup вне — триггерил `onClick` на overlay).
+
+**Исправление:** добавлен `useRef<boolean>` (`mouseDownOnOverlay`) и `onMouseDown` на overlay. `onClose` вызывается только если и `mousedown`, и `mouseup` (click) произошли на самом overlay (`e.target === e.currentTarget`). Также исправлено нарушение правил хуков — `useEffect` вынесен до условного `return null`.
+
+---
+
+### BUG-F-007 — Токен датчика показывается слишком коротко после создания (~2 с)
+**Приоритет:** HIGH
+**Статус:** [x] Исправлен
+**Файл:** `projects/frontend/apps/experiment-portal/src/pages/CreateSensor.tsx`
+
+После создания датчика токен отображался около 2 секунд — не успеваешь прочитать и скопировать.
+
+**Исправление:** убран `setTimeout` с авто-редиректом в `onSuccess` (страница с токеном оставалась видимой только 3000 мс). Текст подсказки переформулирован: пользователь сам нажимает «Перейти к датчику» после копирования. Добавлен регрессионный тест, проверяющий, что `mockNavigate` не вызывается автоматически и токен остаётся видимым спустя >3 с.
+
+---
+
+### BUG-F-008 — После тестовой отправки сообщения датчику — logout и редирект на страницу входа
+**Приоритет:** HIGH
+**Статус:** [x] Исправлен
+**Файл:** `projects/frontend/apps/experiment-portal/src/api/client.ts`
+
+После тестовой отправки сообщения датчику происходил выход из системы и редирект на страницу входа.
+
+**Корневая причина:** `telemetryApi.ingest()` использует `apiClient.post(...)` с sensor-токеном в `Authorization`, но глобальный response-interceptor `apiClient` на любой 401 считал, что протухла user-сессия: пытался `POST /auth/refresh`, а на ошибке рефреша делал `window.location.href = '/login'`. Если sensor-токен неверный — 401 про **sensor**, refresh user-сессии тут бесполезен, а редирект выкидывал пользователя из приложения.
+
+**Исправление:** в interceptor добавлена проверка флага `_skipAuthInterceptor`; `telemetryApi.ingest` передаёт его в config. Флаг делает интент явным и переиспользуемым для других будущих запросов с нестандартной авторизацией. Добавлен unit-тест в `client.test.ts`, проверяющий что при установленном флаге 401 не вызывает refresh и не меняет `window.location.href`.
+
+---
+
+### BUG-F-009 — Вкладка «Системные логи» выдаёт 404
+**Приоритет:** HIGH
+**Статус:** [x] Исправлен (та же причина что BUG-F-012)
+
+При переходе во вкладку «Системные логи» страница отвечает 404.
+
+**Корневая причина:** `GET /api/v1/audit-log` проксировался в experiment-service через generic `/api` прокси, но эндпоинт реализован в **auth-service**. Аналогично BUG-B-003.
+
+**Исправление:** в auth-proxy добавлен явный маршрут `/api/v1/audit-log` → auth-service (до generic `/api` прокси). Также `audit.ts` переведён на `apiClient` (см. BUG-F-012).
+
+---
+
+### BUG-F-010 — При создании системной роли: «CSRF token missing or invalid»
+**Приоритет:** HIGH
+**Статус:** [x] Исправлен
+**Файлы:** `projects/frontend/apps/experiment-portal/src/api/permissions.ts`, `projects/frontend/apps/auth-proxy/src/index.ts`
+
+При попытке создать системную роль выдавалась ошибка:
+```
+Ошибка
+×
+CSRF token missing or invalid
+```
+
+**Корневые причины:**
+1. `permissions.ts` создавал отдельный axios-инстанс без CSRF-интерцептора → `X-CSRF-Token` не добавлялся в заголовки state-changing запросов
+2. `POST /api/v1/system-roles` уходил в experiment-service (generic `/api` прокси), хотя эндпоинт живёт в **auth-service**
+
+**Исправление:** `permissions.ts` переведён на `apiGet/Post/Patch/Delete` из `client.ts` (у которого есть CSRF-интерцептор). В auth-proxy добавлен явный маршрут `/api/v1/system-roles` → auth-service.
+
+---
+
+### BUG-F-011 — В таблице инвайтов использованный инвайт показывает прочерк вместо даты использования
+**Приоритет:** MEDIUM
+**Статус:** [x] Исправлен
+**Файл:** `projects/backend/services/auth-service/src/auth_service/services/auth.py`
+
+Неактивный инвайт, по которому зарегистрировались, в столбце «Использован» показывал прочерк (`—`) вместо даты.
+
+**Корневая причина:** при `registration_mode == "open"` (дефолт) функция `register()` никогда не вызывала `mark_used` — `used_at` оставался `null` в БД. Инвайт становился неактивным только по истечении срока действия, но не по факту использования.
+
+**Исправление:** валидация и вызов `mark_used` вынесены из блока `if registration_mode == "invite"` — теперь если инвайт-токен передан при регистрации в любом режиме, он проверяется и помечается использованным.
+
+---
+
+### BUG-F-012 — При переходе в Аудит-лог выдаётся 404
+**Приоритет:** HIGH
+**Статус:** [x] Исправлен
+**Файлы:** `projects/frontend/apps/experiment-portal/src/api/audit.ts`, `projects/frontend/apps/auth-proxy/src/index.ts`
+
+При попытке открыть Аудит-лог выдавалась ошибка:
+```
+Ошибка
+×
+Request failed with status code 404
+```
+
+**Корневая причина:** `GET /api/v1/audit-log` проксировался в experiment-service через generic `/api` прокси, но эндпоинт реализован в **auth-service**. Аналогично BUG-B-003.
+
+**Исправление:** в auth-proxy добавлен явный маршрут `/api/v1/audit-log` → auth-service (до generic `/api` прокси). `audit.ts` переведён на `apiGet` из `client.ts`, убран дублирующий axios-инстанс.
+
+---
+
 ### BUG-F-003 — Не работает кнопка копирования токена датчика
 **Приоритет:** HIGH
 **Статус:** [x] Исправлен
@@ -113,6 +211,24 @@ invalid input value for enum conversion_profile_status: "archived"
 
 **Для исторических данных** с `physical_value = null` необходимо запустить backfill:
 `POST /api/v1/sensors/{sensor_id}/conversion-profiles/{profile_id}/backfill`
+
+---
+
+### BUG-B-003 — `GET /api/v1/sensors/{sensor_id}/error-log` возвращает 404
+**Приоритет:** HIGH
+**Статус:** [x] Исправлен
+**Файл:** `projects/frontend/apps/auth-proxy/src/index.ts`
+
+Запрос с фронта:
+```
+GET /api/v1/sensors/1a9d0362-815e-4683-94b1-2767dfa501f5/error-log
+  ?limit=25&offset=0&project_id=3739a924-37e1-402c-b9c7-fbf27f118ded
+```
+Отвечал: `404 Not Found`.
+
+**Корневая причина:** эндпоинт реализован в **telemetry-ingest-service** (таблица `sensor_error_log`, REST/WS обработчики ingest пишут в неё). Но auth-proxy маршрутизировал все `/api/v1/sensors/*` в experiment-service через generic `/api`-префикс — там обработчика нет, отсюда 404.
+
+**Исправление:** в auth-proxy перед регистрацией `/api`-прокси добавлен явный маршрут `GET /api/v1/sensors/:sensorId/error-log`, пробрасывающий запрос в `targetTelemetryUrl` с сохранением trace/request-id и access-токена из cookie. Добавлен тест, проверяющий что запрос уходит в telemetry-ingest, а не в experiment-service.
 
 ---
 

@@ -7,28 +7,28 @@ namespace rc_vehicle {
 
 bool SteeringTrimCalibration::Start(float target_accel_g, float current_trim,
                                     float steer_to_yaw_rate_dps) {
-  if (phase_ != Phase::Idle && phase_ != Phase::Done &&
-      phase_ != Phase::Failed) {
+  if (IsActive()) {
     return false;  // Уже идёт калибровка
   }
 
-  target_accel_g_ = std::clamp(target_accel_g, 0.02f, 0.3f);
   current_trim_ = current_trim;
   steer_to_yaw_rate_dps_ = std::max(steer_to_yaw_rate_dps, 10.0f);
 
-  // PID для управления газом (аналогично auto_forward)
-  PidController::Gains gains;
-  gains.kp = 1.0f;
-  gains.ki = 0.5f;
-  gains.kd = 0.05f;
-  gains.max_integral = 0.4f;
-  gains.max_output = 0.5f;
-  accel_pid_.SetGains(gains);
-  accel_pid_.Reset();
+  float clamped_accel = std::clamp(target_accel_g, 0.02f, 0.3f);
 
+  MotionDriver::Config cfg;
+  cfg.accel_mode = MotionDriver::AccelMode::Pid;
+  cfg.pid_gains = {0.3f, 0.2f, 0.0f, 0.15f, 0.5f};
+  cfg.target_value = clamped_accel;
+  cfg.accel_duration_sec = 1.5f;
+  cfg.min_effective_throttle = 0.0f;
+  cfg.brake_throttle = 0.0f;
+  cfg.brake_timeout_sec = 3.0f;
+  cfg.zupt = {0.05f, 3.0f};
+  cfg.breakaway = {0.5f, 0.25f, 0.03f, 25};
+
+  driver_.Start(cfg);
   phase_ = Phase::Accelerate;
-  phase_elapsed_sec_ = 0.0f;
-  cruise_throttle_ = 0.0f;
   yaw_rate_sum_ = 0.0;
   yaw_rate_count_ = 0;
   result_ = Result{};
@@ -37,20 +37,17 @@ bool SteeringTrimCalibration::Start(float target_accel_g, float current_trim,
 }
 
 void SteeringTrimCalibration::Stop() {
-  if (phase_ != Phase::Idle && phase_ != Phase::Done &&
-      phase_ != Phase::Failed) {
+  if (IsActive()) {
     phase_ = Phase::Failed;
     result_.valid = false;
   }
-  accel_pid_.Reset();
+  driver_.Reset();
 }
 
 void SteeringTrimCalibration::Reset() {
   phase_ = Phase::Idle;
   result_ = Result{};
-  accel_pid_.Reset();
-  phase_elapsed_sec_ = 0.0f;
-  cruise_throttle_ = 0.0f;
+  driver_.Reset();
   yaw_rate_sum_ = 0.0;
   yaw_rate_count_ = 0;
 }
@@ -62,65 +59,43 @@ void SteeringTrimCalibration::Update(float current_accel_g,
   throttle = 0.0f;
   steering = 0.0f;
 
-  if (phase_ == Phase::Idle || phase_ == Phase::Done ||
-      phase_ == Phase::Failed || dt_sec <= 0.0f) {
+  if (!IsActive() || dt_sec <= 0.0f) {
     return;
   }
 
-  phase_elapsed_sec_ += dt_sec;
+  throttle = driver_.Update(current_accel_g, accel_magnitude, filtered_gz_dps,
+                            dt_sec);
+  steering = 0.0f;
 
-  switch (phase_) {
-    case Phase::Accelerate: {
-      float error = target_accel_g_ - current_accel_g;
-      throttle = accel_pid_.Step(error, dt_sec);
-      throttle = std::clamp(throttle, 0.0f, 0.5f);
-      steering = 0.0f;
+  MotionPhase dp = driver_.GetPhase();
 
-      if (phase_elapsed_sec_ >= kAccelDurationSec) {
-        cruise_throttle_ = throttle;
-        phase_ = Phase::Cruise;
-        phase_elapsed_sec_ = 0.0f;
-        // Сбросить аккумуляторы — первые семплы круиза могут быть шумными
-        yaw_rate_sum_ = 0.0;
-        yaw_rate_count_ = 0;
-      }
-      break;
+  if (phase_ == Phase::Accelerate) {
+    if (dp == MotionPhase::Cruise) {
+      phase_ = Phase::Cruise;
+      yaw_rate_sum_ = 0.0;
+      yaw_rate_count_ = 0;
+    }
+  }
+
+  if (phase_ == Phase::Cruise) {
+    float elapsed = driver_.GetPhaseElapsed();
+
+    // Пропускаем первые kSettleSkipSec для стабилизации
+    if (elapsed > kSettleSkipSec) {
+      yaw_rate_sum_ += static_cast<double>(filtered_gz_dps);
+      yaw_rate_count_++;
     }
 
-    case Phase::Cruise: {
-      throttle = cruise_throttle_;
-      steering = 0.0f;
-
-      // Собираем yaw_rate (пропускаем первые 0.5 сек для стабилизации)
-      if (phase_elapsed_sec_ > 0.5f) {
-        yaw_rate_sum_ += static_cast<double>(filtered_gz_dps);
-        yaw_rate_count_++;
-      }
-
-      if (phase_elapsed_sec_ >= kCruiseDurationSec) {
-        phase_ = Phase::Brake;
-        phase_elapsed_sec_ = 0.0f;
-        accel_pid_.Reset();
-      }
-      break;
+    if (elapsed >= kCruiseDurationSec) {
+      driver_.EndCruise();
+      phase_ = Phase::Brake;
     }
+  }
 
-    case Phase::Brake: {
-      throttle = 0.0f;
-      steering = 0.0f;
-
-      bool stopped = (std::abs(accel_magnitude - 1.0f) < kStopAccelThresh) &&
-                     (std::abs(filtered_gz_dps) < kStopGyroThresh);
-      bool timeout = phase_elapsed_sec_ >= kBrakeTimeoutSec;
-
-      if (stopped || timeout) {
-        ComputeResult();
-      }
-      break;
+  if (phase_ == Phase::Brake) {
+    if (dp == MotionPhase::Stopped) {
+      ComputeResult();
     }
-
-    default:
-      break;
   }
 }
 

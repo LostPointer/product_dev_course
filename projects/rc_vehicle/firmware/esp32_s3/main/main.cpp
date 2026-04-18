@@ -10,6 +10,7 @@
 #include "lwip/ip4_addr.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "crash_logger.hpp"
 #include "dns_server.hpp"
 #include "http_server.hpp"
 #include "udp_telem_sender.hpp"
@@ -48,6 +49,10 @@ extern "C" void app_main(void) {
     ESP_LOGE(TAG, "Failed to initialize Wi-Fi AP");
     return;
   }
+
+  // Проверить причину перезагрузки и сохранить crash info в NVS при необходимости.
+  // NVS инициализируется внутри WiFiApInit(), поэтому вызываем сразу после него.
+  CrashLoggerInit();
 
   char ap_ip[16] = {};
   if (WiFiApGetIp(ap_ip, sizeof(ap_ip)) == ESP_OK) {

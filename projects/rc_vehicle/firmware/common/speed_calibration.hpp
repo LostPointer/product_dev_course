@@ -2,6 +2,8 @@
 
 #include <cstdint>
 
+#include "motion_driver.hpp"
+
 namespace rc_vehicle {
 
 /**
@@ -62,21 +64,19 @@ class SpeedCalibration {
   Phase phase_{Phase::Idle};
   Result result_{};
 
+  MotionDriver driver_;
+
   float target_throttle_{0.3f};
   float cruise_duration_sec_{3.0f};
 
-  float phase_elapsed_sec_{0.0f};
-  float cruise_throttle_{0.0f};  // throttle зафиксированный в конце разгона
+  float phase_elapsed_sec_{0.0f};  // elapsed within Cruise/Brake phases
 
   double speed_sum_{0.0};
   int speed_count_{0};
 
-  static constexpr float kAccelSec = 1.5f;         // длительность разгона
-  // Минимальный рабочий газ для преодоления мёртвой зоны ESC.
-  static constexpr float kMinEffectiveThrottle = 0.15f;
   static constexpr float kBrakeTimeoutSec = 3.0f;
-  static constexpr float kBrakeThrottle = -0.4f; // обратный газ при торможении
-  static constexpr float kStopAccelThresh = 0.05f; // порог остановки [g]
+  static constexpr float kBrakeThrottle = -0.4f;  // обратный газ при торможении
+  static constexpr float kStopAccelThresh = 0.05f;  // порог остановки [g]
   static constexpr int kMinSamples = 200;
 
   void ComputeResult();

@@ -61,3 +61,17 @@ inline bool VehicleControlGetLogFrame(size_t idx, TelemetryLogFrame* out) {
   }
   return detail::GetVehicleControl().GetLogFrame(idx, *out);
 }
+
+/** Количество событий в логе событий (старт/стоп режимов и калибровок). */
+inline size_t VehicleControlGetEventCount() {
+  return detail::GetVehicleControl().GetEventCount();
+}
+
+/** Событие по индексу (0 = самое старое). */
+inline bool VehicleControlGetEvent(size_t idx,
+                                   rc_vehicle::TelemetryEvent* out) {
+  if (!out) {
+    return false;
+  }
+  return detail::GetVehicleControl().GetEvent(idx, *out);
+}

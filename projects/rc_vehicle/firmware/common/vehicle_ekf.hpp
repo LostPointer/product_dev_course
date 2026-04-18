@@ -135,9 +135,12 @@ class VehicleEkf {
    * @param az_g Ускорение по Z в g
    * @param gz_dps Угловая скорость Z в °/с
    * @param dt_sec Шаг времени в секундах
+   * @param throttle_abs Абсолютное значение throttle [0..1] для ZUPT gating.
+   *        Если > kZuptThrottleThresh, ZUPT пропускается (машина пытается ехать).
+   *        По умолчанию 0 — ZUPT всегда активен (обратная совместимость).
    */
   void UpdateFromImu(float ax_g, float ay_g, float az_g, float gz_dps,
-                     float dt_sec) noexcept;
+                     float dt_sec, float throttle_abs = 0.0f) noexcept;
 
   // ─── Доступ к состоянию ───────────────────────────────────────────────
 

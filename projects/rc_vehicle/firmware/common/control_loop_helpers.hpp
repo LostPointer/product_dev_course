@@ -135,11 +135,13 @@ inline SensorSnapshot BuildSensorSnapshot(const RcInputHandler* rc_handler,
 /** Построить входные данные для авто-процедур из снимка датчиков. */
 inline AutoDriveInput BuildAutoDriveInput(const SensorSnapshot& sensors,
                                           const ImuCalibration& imu_calib,
-                                          uint32_t dt_ms) {
+                                          uint32_t dt_ms,
+                                          uint32_t now_ms = 0) {
   AutoDriveInput ad;
   ad.rc_active = sensors.rc_active;
   ad.imu_enabled = sensors.imu_enabled;
   ad.dt_sec = static_cast<float>(dt_ms) * 0.001f;
+  ad.ts_ms = now_ms;
   if (sensors.imu_enabled) {
     ad.fwd_accel = imu_calib.GetForwardAccel(sensors.imu_data);
     ad.accel_mag = std::sqrt(sensors.imu_data.ax * sensors.imu_data.ax +

@@ -16,19 +16,20 @@ bool TestRunner::Start(const TestParams& params) {
   params_.duration_sec = std::clamp(params_.duration_sec, 1.0f, 30.0f);
   params_.steering = std::clamp(params_.steering, -1.0f, 1.0f);
 
-  PidController::Gains gains;
-  gains.kp = 1.0f;
-  gains.ki = 0.5f;
-  gains.kd = 0.05f;
-  gains.max_integral = 0.4f;
-  gains.max_output = 0.5f;
-  accel_pid_.SetGains(gains);
-  accel_pid_.Reset();
+  MotionDriver::Config cfg;
+  cfg.accel_mode = MotionDriver::AccelMode::Pid;
+  cfg.pid_gains = {0.3f, 0.2f, 0.0f, 0.15f, 0.5f};
+  cfg.target_value = params_.target_accel_g;
+  cfg.accel_duration_sec = 1.5f;
+  cfg.min_effective_throttle = 0.0f;
+  cfg.brake_throttle = 0.0f;
+  cfg.brake_timeout_sec = 3.0f;
+  cfg.zupt = {0.05f, 3.0f};
+  cfg.breakaway = {0.5f, 0.25f, 0.03f, 25};
+  driver_.Start(cfg);
 
   type_ = params_.type;
   total_elapsed_sec_ = 0.0f;
-  phase_elapsed_sec_ = 0.0f;
-  cruise_throttle_ = 0.0f;
 
   TransitionTo(Phase::Accelerate);
   return true;
@@ -37,19 +38,18 @@ bool TestRunner::Start(const TestParams& params) {
 void TestRunner::Stop() {
   if (phase_ != Phase::Idle && phase_ != Phase::Done &&
       phase_ != Phase::Failed) {
+    driver_.Reset();
     TransitionTo(Phase::Failed);
   }
-  accel_pid_.Reset();
 }
 
 void TestRunner::Reset() {
   phase_ = Phase::Idle;
   type_ = TestType::Straight;
   params_ = TestParams{};
-  accel_pid_.Reset();
+  driver_.Reset();
   total_elapsed_sec_ = 0.0f;
   phase_elapsed_sec_ = 0.0f;
-  cruise_throttle_ = 0.0f;
 }
 
 TestRunner::Status TestRunner::GetStatus() const {
@@ -61,7 +61,6 @@ TestRunner::Status TestRunner::GetStatus() const {
   s.valid = (phase_ == Phase::Done);
   return s;
 }
-
 
 void TestRunner::Update(float current_accel_g, float accel_magnitude,
                         float filtered_gz_dps, float dt_sec, float& throttle,
@@ -75,32 +74,31 @@ void TestRunner::Update(float current_accel_g, float accel_magnitude,
   }
 
   total_elapsed_sec_ += dt_sec;
-  phase_elapsed_sec_ += dt_sec;
+
+  throttle = driver_.Update(current_accel_g, accel_magnitude, filtered_gz_dps,
+                            dt_sec);
+
+  MotionPhase dp = driver_.GetPhase();
 
   switch (phase_) {
     case Phase::Accelerate: {
-      float error = params_.target_accel_g - current_accel_g;
-      throttle = accel_pid_.Step(error, dt_sec);
-      throttle = std::clamp(throttle, 0.0f, 0.5f);
-      if (throttle > 0.0f && throttle < kMinEffectiveThrottle) {
-        throttle = kMinEffectiveThrottle;
-      }
+      phase_elapsed_sec_ += dt_sec;
       steering = 0.0f;
-
-      if (phase_elapsed_sec_ >= kAccelDurationSec) {
-        cruise_throttle_ = throttle;
+      if (dp == MotionPhase::Cruise) {
         TransitionTo(Phase::Cruise);
       }
       break;
     }
 
     case Phase::Cruise: {
-      throttle = cruise_throttle_;
+      phase_elapsed_sec_ += dt_sec;
+      throttle = driver_.GetCruiseThrottle();
 
       switch (type_) {
         case TestType::Straight:
           steering = 0.0f;
           if (phase_elapsed_sec_ >= params_.duration_sec) {
+            driver_.EndCruise();
             TransitionTo(Phase::Brake);
           }
           break;
@@ -108,6 +106,7 @@ void TestRunner::Update(float current_accel_g, float accel_magnitude,
         case TestType::Circle:
           steering = params_.steering;
           if (phase_elapsed_sec_ >= params_.duration_sec) {
+            driver_.EndCruise();
             TransitionTo(Phase::Brake);
           }
           break;
@@ -123,24 +122,20 @@ void TestRunner::Update(float current_accel_g, float accel_magnitude,
     }
 
     case Phase::StepExec: {
-      throttle = cruise_throttle_;
+      phase_elapsed_sec_ += dt_sec;
+      throttle = driver_.GetCruiseThrottle();
       steering = params_.steering;
 
       if (phase_elapsed_sec_ >= params_.duration_sec) {
+        driver_.EndCruise();
         TransitionTo(Phase::Brake);
       }
       break;
     }
 
     case Phase::Brake: {
-      throttle = 0.0f;
       steering = 0.0f;
-
-      bool stopped = (std::abs(accel_magnitude - 1.0f) < kStopAccelThresh) &&
-                     (std::abs(filtered_gz_dps) < kStopGyroThresh);
-      bool timeout = phase_elapsed_sec_ >= kBrakeTimeoutSec;
-
-      if (stopped || timeout) {
+      if (dp == MotionPhase::Stopped) {
         TransitionTo(Phase::Done);
       }
       break;
@@ -154,9 +149,6 @@ void TestRunner::Update(float current_accel_g, float accel_magnitude,
 void TestRunner::TransitionTo(Phase next) {
   phase_ = next;
   phase_elapsed_sec_ = 0.0f;
-  if (next == Phase::Brake) {
-    accel_pid_.Reset();
-  }
 }
 
 }  // namespace rc_vehicle

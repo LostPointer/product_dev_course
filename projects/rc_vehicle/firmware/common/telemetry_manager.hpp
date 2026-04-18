@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "telemetry_event_log.hpp"
 #include "telemetry_log.hpp"
 
 namespace rc_vehicle {
@@ -82,9 +83,44 @@ class TelemetryManager {
    */
   void ResetLastLogTime() { last_log_ms_ = 0; }
 
+  // ── Лог событий (старт/стоп режимов и калибровок) ─────────────────────────
+
+  /**
+   * @brief Записать событие в лог событий
+   */
+  void PushEvent(const TelemetryEvent& evt) { event_log_.Push(evt); }
+
+  /**
+   * @brief Получить количество событий в логе
+   */
+  [[nodiscard]] size_t GetEventCount() const { return event_log_.Count(); }
+
+  /**
+   * @brief Получить событие по индексу (0 = oldest)
+   * @param idx Индекс события
+   * @param out Выходное событие
+   * @return true если idx < Count()
+   */
+  bool GetEvent(size_t idx, TelemetryEvent& out) const {
+    return event_log_.GetEvent(idx, out);
+  }
+
+  /**
+   * @brief Очистить лог событий
+   */
+  void ClearEvents() { event_log_.Clear(); }
+
+  /**
+   * @brief Получить указатель на лог событий (для передачи в подсистемы)
+   */
+  [[nodiscard]] TelemetryEventLog* GetEventLog() { return &event_log_; }
+
  private:
   // PSRAM кольцевой буфер телеметрии
   TelemetryLog telem_log_;
+
+  // Буфер событий (старт/стоп режимов и калибровок)
+  TelemetryEventLog event_log_;
 
   // Время последней записи в лог
   uint32_t last_log_ms_{0};

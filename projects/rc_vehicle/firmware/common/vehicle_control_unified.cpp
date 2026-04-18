@@ -78,6 +78,33 @@ bool VehicleControlUnified::StartSteeringTrimCalibration(
                                     cfg.yaw_rate.steer_to_yaw_rate_dps);
 }
 
+void VehicleControlUnified::StartMagCalibration() {
+  mag_calib_.Start();
+  if (telem_mgr_) {
+    telem_mgr_->PushEvent({0, TelemetryEventType::MagCalibStart, 0});
+  }
+}
+
+void VehicleControlUnified::FinishMagCalibration() {
+  mag_calib_.Finish();
+  if (mag_calib_.IsValid()) {
+    platform_->SaveMagCalib(mag_calib_.GetData());
+  }
+  if (telem_mgr_) {
+    TelemetryEventType t = mag_calib_.IsValid()
+                               ? TelemetryEventType::MagCalibDone
+                               : TelemetryEventType::MagCalibFailed;
+    telem_mgr_->PushEvent({0, t, 0});
+  }
+}
+
+void VehicleControlUnified::CancelMagCalibration() {
+  mag_calib_.Cancel();
+  if (telem_mgr_) {
+    telem_mgr_->PushEvent({0, TelemetryEventType::MagCalibCancelled, 0});
+  }
+}
+
 void VehicleControlUnified::OnWifiCommand(float throttle, float steering) {
   if (platform_) {
     platform_->SendWifiCommand(throttle, steering);

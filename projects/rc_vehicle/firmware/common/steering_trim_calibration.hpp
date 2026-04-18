@@ -1,6 +1,6 @@
 #pragma once
 
-#include "pid_controller.hpp"
+#include "motion_driver.hpp"
 
 namespace rc_vehicle {
 
@@ -82,30 +82,20 @@ class SteeringTrimCalibration {
   Phase phase_{Phase::Idle};
   Result result_{};
 
-  // Параметры
-  float target_accel_g_{0.1f};
+  // Параметры (уникальные для этой калибровки)
   float current_trim_{0.0f};
   float steer_to_yaw_rate_dps_{180.0f};
 
-  // PID для управления газом
-  PidController accel_pid_;
-
-  // Фазовое время
-  float phase_elapsed_sec_{0.0f};
-  float cruise_throttle_{0.0f};
+  // Компонент разгона/торможения
+  MotionDriver driver_;
 
   // Сбор yaw_rate во время круиза
   double yaw_rate_sum_{0.0};
   int yaw_rate_count_{0};
 
-  // Длительности фаз
-  static constexpr float kAccelDurationSec = 1.5f;
-  static constexpr float kCruiseDurationSec = 4.0f;  // Дольше чем auto_forward
-  static constexpr float kBrakeTimeoutSec = 3.0f;
-
-  // ZUPT-пороги
-  static constexpr float kStopAccelThresh = 0.05f;
-  static constexpr float kStopGyroThresh = 3.0f;
+  // Длительность круиза и settle-задержка (уникальны для SteeringTrim)
+  static constexpr float kCruiseDurationSec = 4.0f;
+  static constexpr float kSettleSkipSec = 0.5f;
 
   // Минимальное количество семплов для валидного результата
   static constexpr int kMinSamples = 500;

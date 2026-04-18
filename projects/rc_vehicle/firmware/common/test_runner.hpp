@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-#include "pid_controller.hpp"
+#include "motion_driver.hpp"
 
 namespace rc_vehicle {
 
@@ -121,26 +121,13 @@ class TestRunner {
   TestType type_{TestType::Straight};
   TestParams params_{};
 
-  // PID для управления газом при разгоне
-  PidController accel_pid_;
+  MotionDriver driver_;
 
-  // Время
   float total_elapsed_sec_{0.0f};
   float phase_elapsed_sec_{0.0f};
-  float cruise_throttle_{0.0f};
 
-  // Длительности фиксированных фаз
-  static constexpr float kAccelDurationSec = 1.5f;
-  static constexpr float kBrakeTimeoutSec = 3.0f;
-  // Минимальный рабочий газ для преодоления мёртвой зоны ESC.
-  // Если PID выдаёт ненулевой, но слишком малый сигнал — поднимаем до порога.
-  static constexpr float kMinEffectiveThrottle = 0.15f;
   // Step: стабилизация перед поворотом
   static constexpr float kStepSettleSec = 1.0f;
-
-  // ZUPT-пороги
-  static constexpr float kStopAccelThresh = 0.05f;
-  static constexpr float kStopGyroThresh = 3.0f;
 
   void TransitionTo(Phase next);
 };
