@@ -129,7 +129,10 @@ async def ingest_telemetry(request: web.Request) -> web.Response:
         )
         raise web.HTTPTooManyRequests(
             text=f"Rate limit exceeded. Retry in {retry_after}s.",
-            headers={"Retry-After": str(retry_after)},
+            headers={
+                "Retry-After": str(retry_after),
+                "X-RateLimit-Limit": str(_rest_limiter._max_requests),
+            },
         )
 
     service = TelemetryIngestService()
