@@ -5,7 +5,7 @@ import { scriptsApi } from '../api/scripts'
 import type { Script, ScriptExecution, ExecutionStatus, ScriptType } from '../types/scripts'
 import { usePermissions } from '../hooks/usePermissions'
 import PermissionGate from '../components/PermissionGate'
-import { Loading, Error as ErrorComponent, EmptyState } from '../components/common'
+import { Loading, Error as ErrorComponent, EmptyState, MaterialSelect, LiveSwitch } from '../components/common'
 import Modal from '../components/Modal'
 import { notifySuccess, notifyError } from '../utils/notify'
 import './Scripts.scss'
@@ -698,40 +698,31 @@ function RegistryTab({ onScriptExecuted: _onScriptExecuted }: RegistryTabProps) 
 
   return (
     <>
-      <div className="scripts-filters card">
-        <div className="scripts-filters__fields">
-          <div className="form-group">
-            <label htmlFor="sf-filter-service">Сервис</label>
-            <input
-              id="sf-filter-service"
-              type="text"
-              placeholder="experiment-service"
-              value={filterService}
-              onChange={(e) => setFilterService(e.target.value)}
-            />
-          </div>
-          <div className="form-group form-group--checkbox">
-            <label htmlFor="sf-filter-active">
-              <input
-                id="sf-filter-active"
-                type="checkbox"
-                checked={filterActive === true}
-                onChange={(e) => setFilterActive(e.target.checked ? true : undefined)}
-              />
-              Только активные
-            </label>
-          </div>
+      <div className="filter-capsule scripts-filter-capsule">
+        <div className="filter-capsule__search filter-capsule__search--constrained">
+          <svg width="15" height="15" viewBox="0 0 20 20" fill="none"><rect x="3" y="4" width="14" height="2" rx="1" fill="currentColor"/><rect x="3" y="9" width="10" height="2" rx="1" fill="currentColor"/><rect x="3" y="14" width="7" height="2" rx="1" fill="currentColor"/></svg>
+          <input
+            type="text"
+            placeholder="Сервис..."
+            value={filterService}
+            onChange={(e) => setFilterService(e.target.value)}
+            aria-label="Фильтр по сервису"
+          />
         </div>
-        <div className="scripts-filters__actions">
-          <PermissionGate permission="scripts.manage" system>
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={() => setEditingScript(null)}
-            >
-              Создать скрипт
-            </button>
-          </PermissionGate>
-        </div>
+        <LiveSwitch
+          live={filterActive === true}
+          onChange={(on) => setFilterActive(on ? true : undefined)}
+          labelOn="Активные"
+          labelOff="Все"
+        />
+        <PermissionGate permission="scripts.manage" system>
+          <button
+            className="btn btn-primary btn-sm filter-capsule__btn"
+            onClick={() => setEditingScript(null)}
+          >
+            + Создать
+          </button>
+        </PermissionGate>
       </div>
 
       {isLoading && <Loading message="Загрузка скриптов..." />}
@@ -900,35 +891,31 @@ function ExecutionsTab({ onTabChange: _onTabChange }: ExecutionsTabProps) {
 
   return (
     <>
-      <div className="scripts-filters card">
-        <div className="scripts-filters__fields">
-          <div className="form-group">
-            <label htmlFor="exec-filter-status">Статус</label>
-            <select
-              id="exec-filter-status"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-            >
-              <option value="">Все</option>
-              <option value="pending">Ожидание</option>
-              <option value="running">Выполняется</option>
-              <option value="completed">Завершён</option>
-              <option value="failed">Ошибка</option>
-              <option value="cancelled">Отменён</option>
-              <option value="timeout">Таймаут</option>
-            </select>
-          </div>
-        </div>
-        <div className="scripts-filters__actions">
-          <PermissionGate permission="scripts.execute" system>
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={() => setShowExecuteModal(true)}
-            >
-              Запустить скрипт
-            </button>
-          </PermissionGate>
-        </div>
+      <div className="filter-capsule scripts-filter-capsule">
+        <MaterialSelect
+          id="exec-filter-status"
+          label="Статус"
+          value={statusFilter}
+          onChange={(v) => setStatusFilter(v)}
+          variant="pill"
+          icon={<svg width="14" height="14" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="2" fill="currentColor"/><circle cx="10" cy="10" r="5" stroke="currentColor" strokeWidth="1.4"/><circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="1.2" opacity=".5"/></svg>}
+        >
+          <option value="">Все</option>
+          <option value="pending">Ожидание</option>
+          <option value="running">Выполняется</option>
+          <option value="completed">Завершён</option>
+          <option value="failed">Ошибка</option>
+          <option value="cancelled">Отменён</option>
+          <option value="timeout">Таймаут</option>
+        </MaterialSelect>
+        <PermissionGate permission="scripts.execute" system>
+          <button
+            className="btn btn-primary btn-sm filter-capsule__btn"
+            onClick={() => setShowExecuteModal(true)}
+          >
+            + Запустить
+          </button>
+        </PermissionGate>
       </div>
 
       {exLoading && <Loading message="Загрузка выполнений..." />}

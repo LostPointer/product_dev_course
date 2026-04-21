@@ -1,3 +1,4 @@
+export { default as LiveSwitch } from './LiveSwitch'
 export { default as StatusBadge } from './StatusBadge'
 export { default as ConnectionStatusIndicator } from './ConnectionStatusIndicator'
 export { default as Loading } from './Loading'

@@ -102,30 +102,36 @@ function Login() {
           <form onSubmit={handleSubmit} className="login-form auth-form">
             <div className="form-group">
               <label htmlFor="username">Имя пользователя</label>
-              <input
-                id="username"
-                type="text"
-                value={formData.username}
-                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                required
-                autoComplete="username"
-                placeholder="Введите имя пользователя"
-                disabled={loginMutation.isPending}
-              />
+              <div className="login-input-field">
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="7" r="3" stroke="currentColor" strokeWidth="1.5"/><path d="M4 16.5c.9-2.6 3.2-4 6-4s5.1 1.4 6 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                <input
+                  id="username"
+                  type="text"
+                  value={formData.username}
+                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                  required
+                  autoComplete="username"
+                  placeholder="Введите имя пользователя"
+                  disabled={loginMutation.isPending}
+                />
+              </div>
             </div>
 
             <div className="form-group">
               <label htmlFor="password">Пароль</label>
-              <input
-                id="password"
-                type="password"
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                required
-                autoComplete="current-password"
-                placeholder="Введите пароль"
-                disabled={loginMutation.isPending}
-              />
+              <div className="login-input-field">
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><rect x="4" y="9" width="12" height="8" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M7 9V6.5a3 3 0 0 1 6 0V9" stroke="currentColor" strokeWidth="1.5"/></svg>
+                <input
+                  id="password"
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  required
+                  autoComplete="current-password"
+                  placeholder="Введите пароль"
+                  disabled={loginMutation.isPending}
+                />
+              </div>
             </div>
 
             <button
