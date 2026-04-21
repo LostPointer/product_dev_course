@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import Plotly from 'plotly.js-dist-min'
 import { captureSessionsApi, experimentsApi, projectsApi, runsApi, sensorsApi, telemetryApi } from '../api/client'
-import { EmptyState, Error as ErrorComponent, FloatingActionButton, Loading, MaterialSelect } from '../components/common'
+import { EmptyState, Error as ErrorComponent, FloatingActionButton, LiveSwitch, Loading, MaterialSelect } from '../components/common'
 import TelemetryPanel from '../components/TelemetryPanel'
 import TelemetryExportModal from '../components/TelemetryExportModal'
 import CaptureSessionTimeline from '../components/CaptureSessionTimeline'
@@ -976,21 +976,6 @@ function TelemetryViewer() {
                                     </p>
                                 </div>
 
-                                <div className="telemetry-view__menu">
-                                    <div className="telemetry-view__menu-item">
-                                        <span className="telemetry-view__menu-label">Mode</span>
-                                        <span className="telemetry-view__menu-value">{telemetryModeLabel}</span>
-                                    </div>
-                                    <div className="telemetry-view__menu-item">
-                                        <span className="telemetry-view__menu-label">Project</span>
-                                        <span className="telemetry-view__menu-value">{selectedProjectName}</span>
-                                    </div>
-                                    <div className="telemetry-view__menu-item">
-                                        <span className="telemetry-view__menu-label">Run</span>
-                                        <span className="telemetry-view__menu-value">{selectedRunName}</span>
-                                    </div>
-                                </div>
-
                                 <button
                                     type="button"
                                     className="telemetry-view__collapse"
@@ -1001,35 +986,11 @@ function TelemetryViewer() {
                                 </button>
                             </div>
 
-                            <div
-                                className={`telemetry-view__filters-body${filtersOpen ? ' telemetry-view__filters-body--open' : ''}`}
-                                aria-hidden={!filtersOpen}
-                            >
-                                <div className="telemetry-view__grid">
-                                <div className="form-group telemetry-view__mode">
-                                    <label>Режим</label>
-                                    <div className="telemetry-view__mode-toggle">
-                                        <label>
-                                            <input
-                                                type="radio"
-                                                name="telemetry-view-mode"
-                                                checked={viewMode === 'live'}
-                                                onChange={() => setViewMode('live')}
-                                            />
-                                            live
-                                        </label>
-                                        <label>
-                                            <input
-                                                type="radio"
-                                                name="telemetry-view-mode"
-                                                checked={viewMode === 'history'}
-                                                onChange={() => setViewMode('history')}
-                                            />
-                                            history
-                                        </label>
-                                    </div>
-                                </div>
-
+                            <div className="filter-capsule signal-route-capsule">
+                                <LiveSwitch
+                                    live={viewMode === 'live'}
+                                    onChange={(live) => setViewMode(live ? 'live' : 'history')}
+                                />
                                 <MaterialSelect
                                     id="telemetry_project_id"
                                     label="Проект"
@@ -1042,6 +1003,8 @@ function TelemetryViewer() {
                                         setRunId('')
                                     }}
                                     disabled={projectsLoading}
+                                    variant="pill"
+                                    icon={<svg width="14" height="14" viewBox="0 0 20 20" fill="none"><path d="M2.5 6.5A1.5 1.5 0 0 1 4 5h3.3a1.5 1.5 0 0 1 1.06.44l.94.94a1.5 1.5 0 0 0 1.06.44H16a1.5 1.5 0 0 1 1.5 1.5v6A1.5 1.5 0 0 1 16 15.82H4A1.5 1.5 0 0 1 2.5 14.3V6.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>}
                                 >
                                     {projectsData?.projects.map((project) => (
                                         <option key={project.id} value={project.id}>
@@ -1049,7 +1012,6 @@ function TelemetryViewer() {
                                         </option>
                                     ))}
                                 </MaterialSelect>
-
                                 <MaterialSelect
                                     id="telemetry_experiment_id"
                                     label="Эксперимент"
@@ -1060,6 +1022,8 @@ function TelemetryViewer() {
                                         setRunId('')
                                     }}
                                     disabled={!projectId || experimentsLoading || projectsLoading}
+                                    variant="pill"
+                                    icon={<svg width="14" height="14" viewBox="0 0 20 20" fill="none"><path d="M8 2.5h4M8.5 2.5v5.2L4.4 14.3a1.6 1.6 0 0 0 1.36 2.42h8.48a1.6 1.6 0 0 0 1.36-2.42L11.5 7.7V2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M6.3 11.2h7.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>}
                                 >
                                     {experiments.map((experiment) => (
                                         <option key={experiment.id} value={experiment.id}>
@@ -1067,7 +1031,6 @@ function TelemetryViewer() {
                                         </option>
                                     ))}
                                 </MaterialSelect>
-
                                 <MaterialSelect
                                     id="telemetry_run_id"
                                     label="Пуск"
@@ -1075,6 +1038,8 @@ function TelemetryViewer() {
                                     onChange={setRunId}
                                     placeholder="Выберите пуск"
                                     disabled={!experimentId || runsLoading || experimentsLoading || projectsLoading}
+                                    variant="pill"
+                                    icon={<svg width="14" height="14" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7.25" stroke="currentColor" strokeWidth="1.5"/><path d="M8.4 7.6v4.8l4-2.4-4-2.4Z" fill="currentColor"/></svg>}
                                 >
                                     {runs.map((run) => (
                                         <option key={run.id} value={run.id}>
@@ -1082,7 +1047,13 @@ function TelemetryViewer() {
                                         </option>
                                     ))}
                                 </MaterialSelect>
+                            </div>
 
+                            <div
+                                className={`telemetry-view__filters-body${filtersOpen ? ' telemetry-view__filters-body--open' : ''}`}
+                                aria-hidden={!filtersOpen}
+                            >
+                                <div className="telemetry-view__grid">
                                 {canManageCaptureSession && (
                                     <div className="telemetry-view__capture-actions form-group">
                                         <label className="telemetry-view__capture-actions-label">

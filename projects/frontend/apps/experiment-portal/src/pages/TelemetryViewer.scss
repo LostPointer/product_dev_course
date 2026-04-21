@@ -38,7 +38,7 @@
 
 .telemetry-view__filters-topbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   align-items: start;
 }
@@ -645,4 +645,12 @@
   .telemetry-view__collapse {
     width: 100%;
   }
+}
+
+.signal-route-capsule {
+  margin-bottom: 4px;
+}
+
+.signal-route-capsule .md-select {
+  min-width: 140px;
 }

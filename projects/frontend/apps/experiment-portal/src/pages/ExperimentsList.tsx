@@ -114,80 +114,39 @@ function ExperimentsList() {
 
       {!isBusy && !error && (
         <>
-          <div className="filters card filter-panel">
-            <div className="filter-panel__header">
-              <div>
-                <div className="filter-panel__title">Command Filters</div>
-                <p className="filter-panel__subtitle">
-                  Отберите нужный проект, статус или найдите эксперимент по названию и описанию.
-                </p>
-              </div>
-              <div className="experiments-filter-actions">
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  disabled={exporting || !projectId}
-                  onClick={() => handleExport('csv')}
-                >
-                  {exporting ? 'Экспорт...' : 'CSV'}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  disabled={exporting || !projectId}
-                  onClick={() => handleExport('json')}
-                >
-                  JSON
-                </button>
-              </div>
-            </div>
-
-            <div className="filters-grid">
-              <div className="form-group search-field">
-                <label htmlFor="experiment_search">Поиск</label>
-                <span className="search-field__icon" aria-hidden="true">
-                  / /
-                </span>
+          <div className="experiments-filter-row">
+            <div className="filter-capsule">
+              <div className="filter-capsule__search filter-capsule__search--constrained">
+                <svg width="15" height="15" viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.6"/><path d="m13.5 13.5 3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
                 <input
-                  id="experiment_search"
                   type="text"
                   placeholder="Название, описание..."
                   value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value)
-                    setPage(1)
-                  }}
+                  onChange={(e) => { setSearchQuery(e.target.value); setPage(1) }}
                   disabled={isBusy}
                 />
               </div>
-
               <MaterialSelect
                 id="experiment_project_id"
                 label="Проект"
                 value={projectId}
-                onChange={(id) => {
-                  setProjectId(id)
-                  setActiveProjectId(id)
-                  setPage(1)
-                }}
+                onChange={(id) => { setProjectId(id); setActiveProjectId(id); setPage(1) }}
                 disabled={isBusy}
+                variant="pill"
+                icon={<svg width="14" height="14" viewBox="0 0 20 20" fill="none"><path d="M2.5 6.5A1.5 1.5 0 0 1 4 5h3.3a1.5 1.5 0 0 1 1.06.44l.94.94a1.5 1.5 0 0 0 1.06.44H16a1.5 1.5 0 0 1 1.5 1.5v6A1.5 1.5 0 0 1 16 15.82H4A1.5 1.5 0 0 1 2.5 14.3V6.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>}
               >
                 {projectsData?.projects?.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.name}
-                  </option>
+                  <option key={project.id} value={project.id}>{project.name}</option>
                 ))}
               </MaterialSelect>
-
               <MaterialSelect
                 id="experiment_status"
                 label="Статус"
                 value={status}
-                onChange={(value) => {
-                  setStatus(value)
-                  setPage(1)
-                }}
+                onChange={(value) => { setStatus(value); setPage(1) }}
                 disabled={isBusy}
+                variant="pill"
+                icon={<svg width="14" height="14" viewBox="0 0 20 20" fill="none"><path d="M10.5 3h5v5l-6.5 6.5a1.5 1.5 0 0 1-2.1 0l-2.9-2.9a1.5 1.5 0 0 1 0-2.1L10.5 3Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><circle cx="12.5" cy="6.5" r=".9" fill="currentColor"/></svg>}
               >
                 <option value="">Все</option>
                 <option value="created">Создан</option>
@@ -196,6 +155,21 @@ function ExperimentsList() {
                 <option value="failed">Ошибка</option>
                 <option value="archived">Архивирован</option>
               </MaterialSelect>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm filter-capsule__btn"
+                onClick={() => setIsCreateModalOpen(true)}
+              >
+                + Новый
+              </button>
+            </div>
+            <div className="experiments-filter-actions">
+              <button type="button" className="btn btn-secondary btn-sm" disabled={exporting || !projectId} onClick={() => handleExport('csv')}>
+                {exporting ? 'Экспорт...' : 'CSV'}
+              </button>
+              <button type="button" className="btn btn-secondary btn-sm" disabled={exporting || !projectId} onClick={() => handleExport('json')}>
+                JSON
+              </button>
             </div>
           </div>
 
