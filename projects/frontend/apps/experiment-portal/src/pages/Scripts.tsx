@@ -5,7 +5,7 @@ import { scriptsApi } from '../api/scripts'
 import type { Script, ScriptExecution, ExecutionStatus, ScriptType } from '../types/scripts'
 import { usePermissions } from '../hooks/usePermissions'
 import PermissionGate from '../components/PermissionGate'
-import { Loading, Error as ErrorComponent, EmptyState, MaterialSelect } from '../components/common'
+import { Loading, Error as ErrorComponent, EmptyState, MaterialSelect, LiveSwitch } from '../components/common'
 import Modal from '../components/Modal'
 import { notifySuccess, notifyError } from '../utils/notify'
 import './Scripts.scss'
@@ -709,14 +709,12 @@ function RegistryTab({ onScriptExecuted: _onScriptExecuted }: RegistryTabProps) 
             aria-label="Фильтр по сервису"
           />
         </div>
-        <label className="scripts-filter-capsule__checkbox">
-          <input
-            type="checkbox"
-            checked={filterActive === true}
-            onChange={(e) => setFilterActive(e.target.checked ? true : undefined)}
-          />
-          Только активные
-        </label>
+        <LiveSwitch
+          live={filterActive === true}
+          onChange={(on) => setFilterActive(on ? true : undefined)}
+          labelOn="Активные"
+          labelOff="Все"
+        />
         <PermissionGate permission="scripts.manage" system>
           <button
             className="btn btn-primary btn-sm filter-capsule__btn"

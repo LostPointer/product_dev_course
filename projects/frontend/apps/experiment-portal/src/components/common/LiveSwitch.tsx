@@ -3,9 +3,11 @@ import './LiveSwitch.scss'
 interface LiveSwitchProps {
   live: boolean
   onChange: (live: boolean) => void
+  labelOn?: string
+  labelOff?: string
 }
 
-function LiveSwitch({ live, onChange }: LiveSwitchProps) {
+function LiveSwitch({ live, onChange, labelOn = 'Live', labelOff = 'History' }: LiveSwitchProps) {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === ' ' || e.key === 'Enter') {
       e.preventDefault()
@@ -25,7 +27,7 @@ function LiveSwitch({ live, onChange }: LiveSwitchProps) {
         <div className="liveswitch__thumb" />
       </div>
       <span className="liveswitch__dot" />
-      <span className="liveswitch__label">{live ? 'Live' : 'History'}</span>
+      <span className="liveswitch__label">{live ? labelOn : labelOff}</span>
     </div>
   )
 }

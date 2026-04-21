@@ -52,26 +52,6 @@
 
 // ---------------------------------------------------------------------------
 // Filters bar
-.scripts-filter-capsule {
-  &__checkbox {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    white-space: nowrap;
-    font-size: 0.82rem;
-    color: var(--color-text-secondary, #64748b);
-    cursor: pointer;
-    padding: 0 4px;
-
-    input[type='checkbox'] {
-      accent-color: var(--color-primary, #6366f1);
-      width: 15px;
-      height: 15px;
-      cursor: pointer;
-    }
-  }
-}
-
 // ---------------------------------------------------------------------------
 
 .scripts-filters {
