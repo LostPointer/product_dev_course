@@ -5,7 +5,7 @@ import { format } from 'date-fns'
 import { auditApi } from '../api/audit'
 import type { AuditEntry } from '../types/permissions'
 import { usePermissions } from '../hooks/usePermissions'
-import { Loading, Error as ErrorComponent, EmptyState, Pagination } from '../components/common'
+import { Loading, Error as ErrorComponent, EmptyState, Pagination, MaterialSelect } from '../components/common'
 import Modal from '../components/Modal'
 import { notifyError } from '../utils/notify'
 import './AuditLog.scss'
@@ -96,65 +96,62 @@ function AuditLog() {
     <div className="audit-log-page">
       <h2 className="audit-log-page__title">Аудит-лог</h2>
 
-      <div className="audit-log-filters card">
-        <div className="audit-log-filters__fields">
-          <div className="form-group">
-            <label htmlFor="al-actor-id">Пользователь (ID)</label>
-            <input
-              id="al-actor-id"
-              type="text"
-              placeholder="UUID пользователя"
-              value={draftActorId}
-              onChange={(e) => setDraftActorId(e.target.value)}
-            />
-          </div>
-          <div className="form-group">
-            <label htmlFor="al-action">Действие</label>
-            <input
-              id="al-action"
-              type="text"
-              placeholder="user.login, experiment.create"
-              value={draftAction}
-              onChange={(e) => setDraftAction(e.target.value)}
-            />
-          </div>
-          <div className="form-group">
-            <label htmlFor="al-scope-type">Тип области</label>
-            <input
-              id="al-scope-type"
-              type="text"
-              placeholder="project, experiment"
-              value={draftScopeType}
-              onChange={(e) => setDraftScopeType(e.target.value)}
-            />
-          </div>
-          <div className="form-group">
-            <label htmlFor="al-from">С</label>
-            <input
-              id="al-from"
-              type="date"
-              value={draftFrom}
-              onChange={(e) => setDraftFrom(e.target.value)}
-            />
-          </div>
-          <div className="form-group">
-            <label htmlFor="al-to">По</label>
-            <input
-              id="al-to"
-              type="date"
-              value={draftTo}
-              onChange={(e) => setDraftTo(e.target.value)}
-            />
-          </div>
+      <div className="filter-capsule audit-filter-capsule">
+        <div className="filter-capsule__search filter-capsule__search--constrained">
+          <svg width="15" height="15" viewBox="0 0 20 20" fill="none"><path d="M3 6h14M3 10h9M3 14h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+          <input
+            type="text"
+            placeholder="Действие (user.login...)"
+            value={draftAction}
+            onChange={(e) => setDraftAction(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleApply()}
+            aria-label="Фильтр по действию"
+          />
         </div>
-        <div className="audit-log-filters__actions">
-          <button className="btn btn-primary btn-sm" onClick={handleApply}>
-            Применить
-          </button>
-          <button className="btn btn-secondary btn-sm" onClick={handleReset}>
-            Сбросить
-          </button>
+        <div className="filter-capsule__search filter-capsule__search--constrained">
+          <svg width="15" height="15" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="7" r="3" stroke="currentColor" strokeWidth="1.5"/><path d="M4 16.5c.9-2.6 3.2-4 6-4s5.1 1.4 6 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          <input
+            type="text"
+            placeholder="UUID пользователя"
+            value={draftActorId}
+            onChange={(e) => setDraftActorId(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleApply()}
+            aria-label="Фильтр по пользователю"
+          />
         </div>
+        <MaterialSelect
+          id="al-scope-type"
+          label="Область"
+          value={draftScopeType}
+          onChange={(v) => setDraftScopeType(v)}
+          variant="pill"
+          icon={<svg width="14" height="14" viewBox="0 0 20 20" fill="none"><rect x="3" y="3" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.4"/><rect x="11" y="3" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.4"/><rect x="3" y="11" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.4"/><rect x="11" y="11" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.4"/></svg>}
+        >
+          <option value="">Все</option>
+          <option value="system">Система</option>
+          <option value="project">Проект</option>
+        </MaterialSelect>
+        <div className="audit-filter-capsule__date-range">
+          <input
+            type="date"
+            value={draftFrom}
+            onChange={(e) => setDraftFrom(e.target.value)}
+            aria-label="Дата с"
+          />
+          <span className="audit-filter-capsule__date-sep">—</span>
+          <input
+            type="date"
+            value={draftTo}
+            onChange={(e) => setDraftTo(e.target.value)}
+            aria-label="Дата по"
+          />
+        </div>
+        <button className="btn btn-primary btn-sm filter-capsule__btn" onClick={handleApply}>
+          Применить
+        </button>
+        <button className="btn btn-secondary btn-sm filter-capsule__btn" onClick={handleReset}>
+          Сбросить
+        </button>
       </div>
 
       {isLoading && <Loading message="Загрузка аудит-лога..." />}
