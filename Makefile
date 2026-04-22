@@ -660,6 +660,13 @@ experiment-migrate:
 		$(DOCKER_COMPOSE) exec experiment-service python -m bin.migrate --database-url "$${EXPERIMENT_DATABASE_URL:-postgresql://experiment_user:experiment_password@postgres:5432/experiment_db}"
 	@echo "✅ Миграции применены"
 
+# Применение миграций telemetry-ingest-service (использует ту же experiment_db)
+telemetry-ingest-migrate:
+	@echo "Применение миграций telemetry-ingest-service..."
+	@$(DOCKER_COMPOSE) exec -T telemetry-ingest-service python -m bin.migrate --database-url "$${EXPERIMENT_DATABASE_URL:-postgresql://experiment_user:experiment_password@postgres:5432/experiment_db}" || \
+		$(DOCKER_COMPOSE) exec telemetry-ingest-service python -m bin.migrate --database-url "$${EXPERIMENT_DATABASE_URL:-postgresql://experiment_user:experiment_password@postgres:5432/experiment_db}"
+	@echo "✅ Миграции telemetry-ingest-service применены"
+
 # Создание базы данных script-service
 script-create-db:
 	@echo "Создание базы данных script_db..."
@@ -699,5 +706,5 @@ infra-destroy:
 	@cd infrastructure/yandex-cloud && terraform destroy
 
 .PHONY: mvp-demo-check
-mvp-demo-check: dev-up auth-init experiment-migrate
+mvp-demo-check: dev-up auth-init experiment-migrate telemetry-ingest-migrate
 	@bash scripts/mvp_demo_check.sh
