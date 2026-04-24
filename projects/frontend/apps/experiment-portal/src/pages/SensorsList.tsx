@@ -15,6 +15,9 @@ import {
   FloatingActionButton,
   MaterialSelect,
   sensorStatusMap,
+  SearchIcon,
+  FolderIcon,
+  SensorIcon,
 } from '../components/common'
 import SensorDetailModal from '../components/SensorDetailModal'
 import SensorStatusSummaryBar from '../components/SensorStatusSummaryBar'
@@ -100,7 +103,7 @@ function SensorsList() {
 
           <div className="filter-capsule sensors-filter-capsule">
             <div className="filter-capsule__search filter-capsule__search--constrained">
-              <svg width="15" height="15" viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.6"/><path d="m13.5 13.5 3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+              <SearchIcon />
               <input
                 type="text"
                 placeholder="ID или имя сенсора"
@@ -115,7 +118,7 @@ function SensorsList() {
               onChange={(id) => { setProjectId(id); setActiveProjectId(id); setPage(1) }}
               disabled={projectsLoading || isLoading}
               variant="pill"
-              icon={<svg width="14" height="14" viewBox="0 0 20 20" fill="none"><path d="M2.5 6.5A1.5 1.5 0 0 1 4 5h3.3a1.5 1.5 0 0 1 1.06.44l.94.94a1.5 1.5 0 0 0 1.06.44H16a1.5 1.5 0 0 1 1.5 1.5v6A1.5 1.5 0 0 1 16 15.82H4A1.5 1.5 0 0 1 2.5 14.3V6.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>}
+              icon={<FolderIcon />}
             >
               <option value="">Все проекты</option>
               {projectsData?.projects.map((project) => (
@@ -129,7 +132,7 @@ function SensorsList() {
               onChange={(value) => { setStatus(value); setPage(1) }}
               disabled={isLoading}
               variant="pill"
-              icon={<svg width="14" height="14" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="2" fill="currentColor"/><circle cx="10" cy="10" r="5" stroke="currentColor" strokeWidth="1.4"/><circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="1.2" opacity=".5"/></svg>}
+              icon={<SensorIcon />}
             >
               <option value="">Все</option>
               <option value="registering">Регистрация</option>

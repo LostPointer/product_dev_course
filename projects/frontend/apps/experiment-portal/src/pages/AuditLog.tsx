@@ -5,7 +5,7 @@ import { format } from 'date-fns'
 import { auditApi } from '../api/audit'
 import type { AuditEntry } from '../types/permissions'
 import { usePermissions } from '../hooks/usePermissions'
-import { Loading, Error as ErrorComponent, EmptyState, Pagination, MaterialSelect } from '../components/common'
+import { Loading, Error as ErrorComponent, EmptyState, Pagination, MaterialSelect, ListSearchIcon, UserIcon, GridIcon } from '../components/common'
 import Modal from '../components/Modal'
 import { notifyError } from '../utils/notify'
 import './AuditLog.scss'
@@ -98,7 +98,7 @@ function AuditLog() {
 
       <div className="filter-capsule audit-filter-capsule">
         <div className="filter-capsule__search filter-capsule__search--constrained">
-          <svg width="15" height="15" viewBox="0 0 20 20" fill="none"><path d="M3 6h14M3 10h9M3 14h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+          <ListSearchIcon />
           <input
             type="text"
             placeholder="Действие (user.login...)"
@@ -109,7 +109,7 @@ function AuditLog() {
           />
         </div>
         <div className="filter-capsule__search filter-capsule__search--constrained">
-          <svg width="15" height="15" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="7" r="3" stroke="currentColor" strokeWidth="1.5"/><path d="M4 16.5c.9-2.6 3.2-4 6-4s5.1 1.4 6 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          <UserIcon />
           <input
             type="text"
             placeholder="UUID пользователя"
@@ -125,7 +125,7 @@ function AuditLog() {
           value={draftScopeType}
           onChange={(v) => setDraftScopeType(v)}
           variant="pill"
-          icon={<svg width="14" height="14" viewBox="0 0 20 20" fill="none"><rect x="3" y="3" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.4"/><rect x="11" y="3" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.4"/><rect x="3" y="11" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.4"/><rect x="11" y="11" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.4"/></svg>}
+          icon={<GridIcon />}
         >
           <option value="">Все</option>
           <option value="system">Система</option>

@@ -5,7 +5,7 @@ import { scriptsApi } from '../api/scripts'
 import type { Script, ScriptExecution, ExecutionStatus, ScriptType } from '../types/scripts'
 import { usePermissions } from '../hooks/usePermissions'
 import PermissionGate from '../components/PermissionGate'
-import { Loading, Error as ErrorComponent, EmptyState, MaterialSelect, LiveSwitch } from '../components/common'
+import { Loading, Error as ErrorComponent, EmptyState, MaterialSelect, LiveSwitch, ListSearchIcon, SensorIcon } from '../components/common'
 import Modal from '../components/Modal'
 import { notifySuccess, notifyError } from '../utils/notify'
 import './Scripts.scss'
@@ -700,7 +700,7 @@ function RegistryTab({ onScriptExecuted: _onScriptExecuted }: RegistryTabProps) 
     <>
       <div className="filter-capsule scripts-filter-capsule">
         <div className="filter-capsule__search filter-capsule__search--constrained">
-          <svg width="15" height="15" viewBox="0 0 20 20" fill="none"><rect x="3" y="4" width="14" height="2" rx="1" fill="currentColor"/><rect x="3" y="9" width="10" height="2" rx="1" fill="currentColor"/><rect x="3" y="14" width="7" height="2" rx="1" fill="currentColor"/></svg>
+          <ListSearchIcon />
           <input
             type="text"
             placeholder="Сервис..."
@@ -898,7 +898,7 @@ function ExecutionsTab({ onTabChange: _onTabChange }: ExecutionsTabProps) {
           value={statusFilter}
           onChange={(v) => setStatusFilter(v)}
           variant="pill"
-          icon={<svg width="14" height="14" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="2" fill="currentColor"/><circle cx="10" cy="10" r="5" stroke="currentColor" strokeWidth="1.4"/><circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="1.2" opacity=".5"/></svg>}
+          icon={<SensorIcon />}
         >
           <option value="">Все</option>
           <option value="pending">Ожидание</option>

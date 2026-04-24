@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import { projectsApi } from '../api/client'
 import { authApi } from '../api/auth'
-import { Loading, Error, EmptyState, FloatingActionButton, MaterialSelect } from '../components/common'
+import { Loading, Error, EmptyState, FloatingActionButton, MaterialSelect, SearchIcon, UserIcon, EyeIcon, TeamIcon } from '../components/common'
 import ProjectModal from '../components/ProjectModal'
 import ProjectMembersModal from '../components/ProjectMembersModal'
 import './ProjectsList.scss'
@@ -87,7 +87,7 @@ function ProjectsList() {
     <div className="projects-list">
       <div className="filter-capsule projects-filter-capsule">
         <div className="filter-capsule__search">
-          <svg width="15" height="15" viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.6"/><path d="m13.5 13.5 3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+          <SearchIcon />
           <input
             type="text"
             value={searchInput}
@@ -102,7 +102,7 @@ function ProjectsList() {
           value={roleFilter}
           onChange={(v) => setRoleFilter(v)}
           variant="pill"
-          icon={<svg width="14" height="14" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="7" r="3" stroke="currentColor" strokeWidth="1.5"/><path d="M4 16.5c.9-2.6 3.2-4 6-4s5.1 1.4 6 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>}
+          icon={<UserIcon />}
         >
           {ROLE_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -140,33 +140,32 @@ function ProjectsList() {
                     </div>
 
                     <div className="project-card-header">
-                      <div>
-                        <h3>{project.name}</h3>
-                        <p className="project-card__supporting-text">
-                          {owner
-                            ? 'Полный доступ к конфигурации проекта и составу команды.'
-                            : 'Доступ к просмотру и совместной работе в рамках проекта.'}
-                        </p>
-                      </div>
-
-                      <div className="project-card-actions">
+                      <h3>{project.name}</h3>
+                      <p className="project-card__supporting-text">
+                        {owner
+                          ? 'Полный доступ к конфигурации проекта и составу команды.'
+                          : 'Доступ к просмотру и совместной работе в рамках проекта.'}
+                      </p>
+                      <div className="pill-actions">
                         <button
-                          className="btn btn-secondary btn-sm"
+                          className="pill-btn"
                           onClick={() => openProject(project.id, project.owner_id)}
                           title={owner ? 'Просмотр и редактирование' : 'Просмотр'}
                           aria-label="Открыть проект"
                           disabled={actionsDisabled}
                         >
-                          {owner ? 'Открыть' : 'Просмотр'}
+                          <EyeIcon />
+                          Подробнее
                         </button>
                         {owner && (
                           <button
-                            className="btn btn-secondary btn-sm"
+                            className="pill-btn"
                             onClick={() => handleManageMembers(project.id, project.owner_id)}
                             title="Управление участниками"
                             aria-label="Управление участниками"
                             disabled={actionsDisabled}
                           >
+                            <TeamIcon />
                             Команда
                           </button>
                         )}

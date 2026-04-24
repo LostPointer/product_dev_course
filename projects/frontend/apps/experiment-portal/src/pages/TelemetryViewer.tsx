@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import Plotly from 'plotly.js-dist-min'
 import { captureSessionsApi, experimentsApi, projectsApi, runsApi, sensorsApi, telemetryApi } from '../api/client'
-import { EmptyState, Error as ErrorComponent, FloatingActionButton, LiveSwitch, Loading, MaterialSelect } from '../components/common'
+import { EmptyState, Error as ErrorComponent, FloatingActionButton, LiveSwitch, Loading, MaterialSelect, FolderIcon, FlaskIcon, PlayCircleIcon } from '../components/common'
 import TelemetryPanel from '../components/TelemetryPanel'
 import TelemetryExportModal from '../components/TelemetryExportModal'
 import CaptureSessionTimeline from '../components/CaptureSessionTimeline'
@@ -1004,7 +1004,7 @@ function TelemetryViewer() {
                                     }}
                                     disabled={projectsLoading}
                                     variant="pill"
-                                    icon={<svg width="14" height="14" viewBox="0 0 20 20" fill="none"><path d="M2.5 6.5A1.5 1.5 0 0 1 4 5h3.3a1.5 1.5 0 0 1 1.06.44l.94.94a1.5 1.5 0 0 0 1.06.44H16a1.5 1.5 0 0 1 1.5 1.5v6A1.5 1.5 0 0 1 16 15.82H4A1.5 1.5 0 0 1 2.5 14.3V6.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>}
+                                    icon={<FolderIcon />}
                                 >
                                     {projectsData?.projects.map((project) => (
                                         <option key={project.id} value={project.id}>
@@ -1023,7 +1023,7 @@ function TelemetryViewer() {
                                     }}
                                     disabled={!projectId || experimentsLoading || projectsLoading}
                                     variant="pill"
-                                    icon={<svg width="14" height="14" viewBox="0 0 20 20" fill="none"><path d="M8 2.5h4M8.5 2.5v5.2L4.4 14.3a1.6 1.6 0 0 0 1.36 2.42h8.48a1.6 1.6 0 0 0 1.36-2.42L11.5 7.7V2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M6.3 11.2h7.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>}
+                                    icon={<FlaskIcon />}
                                 >
                                     {experiments.map((experiment) => (
                                         <option key={experiment.id} value={experiment.id}>
@@ -1039,7 +1039,7 @@ function TelemetryViewer() {
                                     placeholder="Выберите пуск"
                                     disabled={!experimentId || runsLoading || experimentsLoading || projectsLoading}
                                     variant="pill"
-                                    icon={<svg width="14" height="14" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7.25" stroke="currentColor" strokeWidth="1.5"/><path d="M8.4 7.6v4.8l4-2.4-4-2.4Z" fill="currentColor"/></svg>}
+                                    icon={<PlayCircleIcon />}
                                 >
                                     {runs.map((run) => (
                                         <option key={run.id} value={run.id}>

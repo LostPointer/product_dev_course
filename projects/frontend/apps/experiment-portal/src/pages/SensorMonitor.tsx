@@ -10,6 +10,8 @@ import {
   Error,
   EmptyState,
   MaterialSelect,
+  FolderIcon,
+  SensorIcon,
 } from '../components/common'
 import SensorStatusSummaryBar from '../components/SensorStatusSummaryBar'
 import './SensorMonitor.scss'
@@ -90,7 +92,7 @@ function SensorMonitor() {
               onChange={(id) => setProjectId(id)}
               disabled={projectsLoading}
               variant="pill"
-              icon={<svg width="14" height="14" viewBox="0 0 20 20" fill="none"><path d="M2.5 6.5A1.5 1.5 0 0 1 4 5h3.3a1.5 1.5 0 0 1 1.06.44l.94.94a1.5 1.5 0 0 0 1.06.44H16a1.5 1.5 0 0 1 1.5 1.5v6A1.5 1.5 0 0 1 16 15.82H4A1.5 1.5 0 0 1 2.5 14.3V6.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>}
+              icon={<FolderIcon />}
             >
               <option value="">Все проекты</option>
               {projectsData?.projects.map((p) => (
@@ -103,7 +105,7 @@ function SensorMonitor() {
               value={connectionFilter}
               onChange={setConnectionFilter}
               variant="pill"
-              icon={<svg width="14" height="14" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="2" fill="currentColor"/><circle cx="10" cy="10" r="5" stroke="currentColor" strokeWidth="1.4"/><circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="1.2" opacity=".5"/></svg>}
+              icon={<SensorIcon />}
             >
               {CONNECTION_STATUS_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
