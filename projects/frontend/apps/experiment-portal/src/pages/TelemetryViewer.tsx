@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import Plotly from 'plotly.js-dist-min'
 import { captureSessionsApi, experimentsApi, projectsApi, runsApi, sensorsApi, telemetryApi } from '../api/client'
-import { EmptyState, Error as ErrorComponent, FloatingActionButton, LiveSwitch, Loading, MaterialSelect, FolderIcon, FlaskIcon, PlayCircleIcon } from '../components/common'
+import { EmptyState, Error as ErrorComponent, FloatingActionButton, LiveSwitch, Loading, MaterialSelect, FolderIcon, FlaskIcon, PlayCircleIcon, RefreshCwIcon, ArrowRightIcon, ExportIcon, SettingsIcon } from '../components/common'
 import TelemetryPanel from '../components/TelemetryPanel'
 import TelemetryExportModal from '../components/TelemetryExportModal'
 import CaptureSessionTimeline from '../components/CaptureSessionTimeline'
@@ -1377,10 +1377,7 @@ function TelemetryViewer() {
                                             onClick={loadHistory}
                                             disabled={historyLoading || !historyCaptureSessionId || historySensorOverLimit}
                                         >
-                                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                <path d="M21 12a9 9 0 1 1-9-9"/>
-                                                <path d="M21 3v6h-6"/>
-                                            </svg>
+                                            <RefreshCwIcon />
                                             {historyLoading ? 'Загрузка…' : 'Загрузить'}
                                         </button>
                                         <button
@@ -1390,10 +1387,7 @@ function TelemetryViewer() {
                                             disabled={historyLoading || historyEffectiveSensorIds.length === 0 || !historyLastTimestamp}
                                             title="Переключиться в live и продолжить с последних точек истории"
                                         >
-                                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                <path d="M5 12h14"/>
-                                                <path d="m13 6 6 6-6 6"/>
-                                            </svg>
+                                            <ArrowRightIcon />
                                             Продолжить в live
                                         </button>
                                         <button
@@ -1403,11 +1397,7 @@ function TelemetryViewer() {
                                             disabled={!historyCaptureSessionId || !runId}
                                             title="Открыть диалог настроек экспорта телеметрии"
                                         >
-                                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                <path d="M12 3v12"/>
-                                                <path d="m7 10 5 5 5-5"/>
-                                                <path d="M5 21h14"/>
-                                            </svg>
+                                            <ExportIcon />
                                             Экспорт…
                                         </button>
                                         <div className="history-settings-wrap" ref={historySettingsRef}>
@@ -1417,10 +1407,7 @@ function TelemetryViewer() {
                                                 aria-expanded={showHistorySettings}
                                                 onClick={() => setShowHistorySettings((prev) => !prev)}
                                             >
-                                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                    <circle cx="12" cy="12" r="3"/>
-                                                    <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>
-                                                </svg>
+                                                <SettingsIcon />
                                                 Настройки
                                             </button>
                                             {showHistorySettings && (
