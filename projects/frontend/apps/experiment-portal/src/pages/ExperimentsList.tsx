@@ -14,6 +14,9 @@ import {
   MaterialSelect,
   Tags,
   experimentStatusMap,
+  SearchIcon,
+  FolderIcon,
+  TagIcon,
 } from '../components/common'
 import CreateExperimentModal from '../components/CreateExperimentModal'
 import { setActiveProjectId } from '../utils/activeProject'
@@ -117,7 +120,7 @@ function ExperimentsList() {
           <div className="experiments-filter-row">
             <div className="filter-capsule">
               <div className="filter-capsule__search filter-capsule__search--constrained">
-                <svg width="15" height="15" viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.6"/><path d="m13.5 13.5 3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                <SearchIcon />
                 <input
                   type="text"
                   placeholder="Название, описание..."
@@ -133,7 +136,7 @@ function ExperimentsList() {
                 onChange={(id) => { setProjectId(id); setActiveProjectId(id); setPage(1) }}
                 disabled={isBusy}
                 variant="pill"
-                icon={<svg width="14" height="14" viewBox="0 0 20 20" fill="none"><path d="M2.5 6.5A1.5 1.5 0 0 1 4 5h3.3a1.5 1.5 0 0 1 1.06.44l.94.94a1.5 1.5 0 0 0 1.06.44H16a1.5 1.5 0 0 1 1.5 1.5v6A1.5 1.5 0 0 1 16 15.82H4A1.5 1.5 0 0 1 2.5 14.3V6.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>}
+                icon={<FolderIcon />}
               >
                 {projectsData?.projects?.map((project) => (
                   <option key={project.id} value={project.id}>{project.name}</option>
@@ -146,7 +149,7 @@ function ExperimentsList() {
                 onChange={(value) => { setStatus(value); setPage(1) }}
                 disabled={isBusy}
                 variant="pill"
-                icon={<svg width="14" height="14" viewBox="0 0 20 20" fill="none"><path d="M10.5 3h5v5l-6.5 6.5a1.5 1.5 0 0 1-2.1 0l-2.9-2.9a1.5 1.5 0 0 1 0-2.1L10.5 3Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><circle cx="12.5" cy="6.5" r=".9" fill="currentColor"/></svg>}
+                icon={<TagIcon />}
               >
                 <option value="">Все</option>
                 <option value="created">Создан</option>
