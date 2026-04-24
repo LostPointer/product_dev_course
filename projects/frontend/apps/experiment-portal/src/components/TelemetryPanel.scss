@@ -17,6 +17,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  position: relative;
+  z-index: 10;
 }
 
 .telemetry-panel__drag-handle {
@@ -394,6 +396,8 @@
   background: var(--surface-variant, #f1f5f9);
   border: 1px solid var(--outline);
   border-radius: 12px;
+  position: relative;
+  z-index: 5;
 }
 
 .tp-settings-tile__divider {
