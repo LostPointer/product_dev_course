@@ -72,3 +72,89 @@ export function SensorIcon({ width = 14, height = 14, ...props }: IconProps) {
     </svg>
   )
 }
+
+export function DeleteIcon({ width = '1em', height = '1em', ...props }: IconProps) {
+  return (
+    <svg width={width} height={height} viewBox="0 0 24 24" fill="currentColor" {...props}>
+      <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zm2.46-7.12 1.41-1.41L12 12.59l2.12-2.12 1.41 1.41L13.41 14l2.12 2.12-1.41 1.41L12 15.41l-2.12 2.12-1.41-1.41L10.59 14l-2.13-2.12zM15.5 4l-1-1h-5l-1 1H5v2h14V4h-3.5z" />
+    </svg>
+  )
+}
+
+export function CheckCircleOutlineIcon({ width = '1em', height = '1em', ...props }: IconProps) {
+  return (
+    <svg width={width} height={height} viewBox="0 0 24 24" fill="currentColor" {...props}>
+      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm4.59-12.42L10 14.17l-2.59-2.58L6 13l4 4 8-8-1.41-1.42z" />
+    </svg>
+  )
+}
+
+export function AddIcon({ width = '1em', height = '1em', ...props }: IconProps) {
+  return (
+    <svg width={width} height={height} viewBox="0 0 24 24" fill="currentColor" {...props}>
+      <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+    </svg>
+  )
+}
+
+export function UploadIcon({ width = '1em', height = '1em', ...props }: IconProps) {
+  return (
+    <svg width={width} height={height} viewBox="0 0 24 24" fill="currentColor" {...props}>
+      <path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z" />
+    </svg>
+  )
+}
+
+export function DownloadIcon({ width = '1em', height = '1em', ...props }: IconProps) {
+  return (
+    <svg width={width} height={height} viewBox="0 0 24 24" fill="currentColor" {...props}>
+      <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
+    </svg>
+  )
+}
+
+export function ListSearchIcon({ width = 15, height = 15, ...props }: IconProps) {
+  return (
+    <svg width={width} height={height} viewBox="0 0 20 20" fill="none" {...props}>
+      <path d="M3 6h14M3 10h9M3 14h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function GridIcon({ width = 14, height = 14, ...props }: IconProps) {
+  return (
+    <svg width={width} height={height} viewBox="0 0 20 20" fill="none" {...props}>
+      <rect x="3" y="3" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.4" />
+      <rect x="11" y="3" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.4" />
+      <rect x="3" y="11" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.4" />
+      <rect x="11" y="11" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.4" />
+    </svg>
+  )
+}
+
+export function LockIcon({ width = 14, height = 14, ...props }: IconProps) {
+  return (
+    <svg width={width} height={height} viewBox="0 0 20 20" fill="none" {...props}>
+      <rect x="4" y="9" width="12" height="8" rx="2" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M7 9V6.5a3 3 0 0 1 6 0V9" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  )
+}
+
+export function FlaskIcon({ width = 14, height = 14, ...props }: IconProps) {
+  return (
+    <svg width={width} height={height} viewBox="0 0 20 20" fill="none" {...props}>
+      <path d="M8 2.5h4M8.5 2.5v5.2L4.4 14.3a1.6 1.6 0 0 0 1.36 2.42h8.48a1.6 1.6 0 0 0 1.36-2.42L11.5 7.7V2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M6.3 11.2h7.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function PlayCircleIcon({ width = 14, height = 14, ...props }: IconProps) {
+  return (
+    <svg width={width} height={height} viewBox="0 0 20 20" fill="none" {...props}>
+      <circle cx="10" cy="10" r="7.25" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M8.4 7.6v4.8l4-2.4-4-2.4Z" fill="currentColor" />
+    </svg>
+  )
+}

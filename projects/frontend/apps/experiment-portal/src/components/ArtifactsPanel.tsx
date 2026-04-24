@@ -31,46 +31,7 @@ import {
 import type { SelectChangeEvent } from '@mui/material'
 import { artifactsApi } from '../api/client'
 import type { Artifact, ArtifactType } from '../types'
-// Inline minimal SVG icons (no @mui/icons-material dependency needed)
-function DeleteIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor">
-      <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zm2.46-7.12 1.41-1.41L12 12.59l2.12-2.12 1.41 1.41L13.41 14l2.12 2.12-1.41 1.41L12 15.41l-2.12 2.12-1.41-1.41L10.59 14l-2.13-2.12zM15.5 4l-1-1h-5l-1 1H5v2h14V4h-3.5z" />
-    </svg>
-  )
-}
-
-function CheckCircleOutlineIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor">
-      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm4.59-12.42L10 14.17l-2.59-2.58L6 13l4 4 8-8-1.41-1.42z" />
-    </svg>
-  )
-}
-
-function AddIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor">
-      <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
-    </svg>
-  )
-}
-
-function UploadIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor">
-      <path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z" />
-    </svg>
-  )
-}
-
-function DownloadIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor">
-      <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
-    </svg>
-  )
-}
+import { DeleteIcon, CheckCircleOutlineIcon, AddIcon, UploadIcon, DownloadIcon } from './common'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
