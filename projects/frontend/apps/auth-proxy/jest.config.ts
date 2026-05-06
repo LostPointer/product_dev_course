@@ -7,6 +7,13 @@ const config: Config = {
     clearMocks: true,
     restoreMocks: true,
     verbose: false,
+    coverageDirectory: 'coverage',
+    coverageReporters: ['text', 'html', 'lcov'],
+    collectCoverageFrom: [
+        'src/**/*.ts',
+        '!src/**/*.d.ts',
+        '!src/**/__mocks__/**',
+    ],
 }
 
 export default config

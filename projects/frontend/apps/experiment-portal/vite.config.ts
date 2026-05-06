@@ -49,6 +49,20 @@ export default defineConfig(({ mode }) => {
       testTimeout: 10000,
       hookTimeout: 10000,
       reporters: process.env.CI ? ['verbose'] : ['default'],
+      coverage: {
+        provider: 'v8',
+        reporter: ['text', 'html', 'lcov'],
+        reportsDirectory: './coverage',
+        include: ['src/**/*.{ts,tsx}'],
+        exclude: [
+          'src/**/*.test.{ts,tsx}',
+          'src/**/*.spec.{ts,tsx}',
+          'src/setupTests.ts',
+          'src/main.tsx',
+          'src/vite-env.d.ts',
+          'src/**/__mocks__/**',
+        ],
+      },
     },
   }
 })
