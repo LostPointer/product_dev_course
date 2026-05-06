@@ -604,7 +604,7 @@
 
   &:hover {
     background: var(--surface-variant);
-    border-color: #cbd5e1;
+    border-color: $input-border;
   }
 
   &:disabled {
@@ -619,8 +619,8 @@
   color: #fff;
 
   &:hover:not(:disabled) {
-    background: var(--primary-hover, #4338ca);
-    border-color: var(--primary-hover, #4338ca);
+    background: var(--primary-hover);
+    border-color: var(--primary-hover);
   }
 }
 
@@ -636,7 +636,7 @@
   z-index: 100;
   width: 360px;
   padding: 16px;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--outline);
   border-radius: 16px;
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.10);
@@ -650,7 +650,7 @@
   right: 20px;
   width: 12px;
   height: 12px;
-  background: #fff;
+  background: var(--surface);
   border-left: 1px solid var(--outline);
   border-top: 1px solid var(--outline);
   transform: rotate(45deg);
@@ -662,7 +662,7 @@
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--text-hint, #94a3b8);
+  color: var(--text-secondary);
   margin-bottom: -4px;
 }
 
@@ -679,7 +679,7 @@
 }
 
 .hsp-hint {
-  color: var(--text-hint, #94a3b8);
+  color: var(--text-secondary);
   font-size: 0.6875rem;
 }
 
@@ -714,7 +714,7 @@
     -webkit-appearance: none;
     width: 32px;
     height: 18px;
-    background: #cbd5e1;
+    background: $input-border;
     border-radius: 999px;
     position: relative;
     cursor: pointer;
@@ -775,7 +775,7 @@
     align-items: center;
 
     &.on {
-      background: #fff;
+      background: var(--surface);
       color: var(--text);
       box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(15, 23, 42, 0.04);
     }
