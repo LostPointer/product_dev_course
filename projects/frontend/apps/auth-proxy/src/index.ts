@@ -7,6 +7,7 @@ import httpProxy from '@fastify/http-proxy'
 import { randomUUID } from 'crypto'
 import { PassThrough } from 'stream'
 import Redis from 'ioredis'
+import { registerAuthProxy } from './proxyFactory'
 
 type Config = {
     port: number
@@ -890,40 +891,11 @@ export async function buildServer(config: Config, _cache?: PermissionsCache) {
     })
 
     // Admin routes proxy — forward /auth/admin/* to Auth Service with access token from cookie
-    await app.register(httpProxy, {
+    await registerAuthProxy(app, {
         prefix: '/auth/admin',
         upstream: config.authUrl,
-        rewritePrefix: '/auth/admin',
-        http2: false,
-        replyOptions: {
-            rewriteRequestHeaders: (req, headers) => {
-                const cookies = parseCookies(req.headers.cookie as string | undefined)
-                const access = cookies[config.accessCookieName]
-                const traceId = normalizeUUID(req.headers['x-trace-id'] as string) || generateUUID()
-                const outgoingHeaders = getOutgoingRequestHeaders(traceId)
-
-                const newHeaders: Record<string, string> = {}
-                for (const [key, value] of Object.entries(headers)) {
-                    if (typeof value === 'string') {
-                        newHeaders[key] = value
-                    } else if (Array.isArray(value) && value.length > 0) {
-                        newHeaders[key] = String(value[0])
-                    }
-                }
-                if (
-                    !newHeaders['content-type'] &&
-                    (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH')
-                ) {
-                    newHeaders['content-type'] = 'application/json'
-                }
-                newHeaders['X-Trace-Id'] = outgoingHeaders['X-Trace-Id']
-                newHeaders['X-Request-Id'] = outgoingHeaders['X-Request-Id']
-                if (access) {
-                    newHeaders['authorization'] = `Bearer ${access}`
-                }
-                return newHeaders
-            },
-        },
+        accessCookieName: config.accessCookieName,
+        deleteCookie: false,
     })
 
     /**
@@ -1318,56 +1290,22 @@ export async function buildServer(config: Config, _cache?: PermissionsCache) {
     }
 
     // Users API proxy — forward /api/v1/users/* to Auth Service (must be before generic /api proxy)
-    await app.register(httpProxy, {
+    await registerAuthProxy(app, {
         prefix: '/api/v1/users',
         upstream: config.authUrl,
-        rewritePrefix: '/api/v1/users',
-        http2: false,
-        replyOptions: {
-            rewriteRequestHeaders: (req, headers) => {
-                const cookies = parseCookies(req.headers.cookie as string | undefined)
-                const access = cookies[config.accessCookieName]
-                const traceId = normalizeUUID(req.headers['x-trace-id'] as string) || generateUUID()
-                const outgoingHeaders = getOutgoingRequestHeaders(traceId)
-                const newHeaders: Record<string, string> = {}
-                for (const [key, value] of Object.entries(headers)) {
-                    if (typeof value === 'string') newHeaders[key] = value
-                    else if (Array.isArray(value) && value.length > 0) newHeaders[key] = String(value[0])
-                }
-                newHeaders['X-Trace-Id'] = outgoingHeaders['X-Trace-Id']
-                newHeaders['X-Request-Id'] = outgoingHeaders['X-Request-Id']
-                if (access) newHeaders['authorization'] = `Bearer ${access}`
-                return newHeaders
-            },
-        },
+        accessCookieName: config.accessCookieName,
+        deleteCookie: false,
+        ensureJsonContentType: false,
     })
 
     // Auth Service API proxies — these endpoints live in auth-service, not experiment-service.
     // Must be registered BEFORE the generic `/api` proxy so they win route matching.
     for (const prefix of ['/api/v1/system-roles', '/api/v1/permissions', '/api/v1/audit-log']) {
-        await app.register(httpProxy, {
+        await registerAuthProxy(app, {
             prefix,
             upstream: config.authUrl,
-            rewritePrefix: prefix,
-            http2: false,
-            replyOptions: {
-                rewriteRequestHeaders: (req, headers) => {
-                    const cookies = parseCookies(req.headers.cookie as string | undefined)
-                    const access = cookies[config.accessCookieName]
-                    const traceId = normalizeUUID(req.headers['x-trace-id'] as string) || generateUUID()
-                    const outgoingHeaders = getOutgoingRequestHeaders(traceId)
-                    const newHeaders: Record<string, string> = {}
-                    for (const [key, value] of Object.entries(headers)) {
-                        if (typeof value === 'string') newHeaders[key] = value
-                        else if (Array.isArray(value) && value.length > 0) newHeaders[key] = String(value[0])
-                    }
-                    newHeaders['X-Trace-Id'] = outgoingHeaders['X-Trace-Id']
-                    newHeaders['X-Request-Id'] = outgoingHeaders['X-Request-Id']
-                    if (access) newHeaders['authorization'] = `Bearer ${access}`
-                    delete newHeaders['cookie']
-                    return newHeaders
-                },
-            },
+            accessCookieName: config.accessCookieName,
+            ensureJsonContentType: false,
         })
     }
 
