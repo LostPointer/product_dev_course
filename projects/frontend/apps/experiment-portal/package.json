@@ -14,6 +14,7 @@
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "test": "cross-env VITE_CJS_IGNORE_WARNING=1 vitest run",
     "test:watch": "cross-env VITE_CJS_IGNORE_WARNING=1 vitest",
+    "test:coverage": "cross-env VITE_CJS_IGNORE_WARNING=1 vitest run --coverage",
     "cy:open": "cypress open",
     "cy:run": "cypress run",
     "e2e": "start-server-and-test \"vite --host 0.0.0.0 --port 3005 --strictPort\" http://localhost:3005 \"cypress run\""
@@ -51,6 +52,7 @@
     "start-server-and-test": "^2.0.10",
     "typescript": "^5.9.3",
     "vite": "^7.3.0",
-    "vitest": "^4.0.16"
+    "vitest": "^4.0.16",
+    "@vitest/coverage-v8": "^4.0.16"
   }
 }

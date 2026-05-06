@@ -141,8 +141,32 @@ gtest_discover_tests(unit_tests)
 option(ENABLE_COVERAGE "Enable coverage reporting" OFF)
 if(ENABLE_COVERAGE)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-        target_compile_options(unit_tests PRIVATE --coverage)
+        target_compile_options(unit_tests PRIVATE --coverage -O0 -g)
         target_link_options(unit_tests PRIVATE --coverage)
+
+        find_program(LCOV_EXEC lcov)
+        find_program(GENHTML_EXEC genhtml)
+
+        if(LCOV_EXEC AND GENHTML_EXEC)
+            add_custom_target(coverage
+                COMMAND ${LCOV_EXEC} --directory . --zerocounters
+                COMMAND $<TARGET_FILE:unit_tests>
+                COMMAND ${LCOV_EXEC} --directory . --capture --output-file lcov.info --ignore-errors mismatch,inconsistent
+                COMMAND ${LCOV_EXEC} --remove lcov.info
+                    '/usr/*'
+                    '*/_deps/*'
+                    '*/tests/*'
+                    --output-file lcov.info
+                    --ignore-errors unused
+                COMMAND ${GENHTML_EXEC} lcov.info --output-directory lcov-report
+                COMMAND ${CMAKE_COMMAND} -E echo "Coverage report: ${CMAKE_BINARY_DIR}/lcov-report/index.html"
+                WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+                COMMENT "Generating firmware coverage report (lcov + genhtml)"
+                DEPENDS unit_tests
+            )
+        else()
+            message(WARNING "lcov/genhtml not found — `coverage` target unavailable. Install lcov to enable.")
+        endif()
     endif()
 endif()
 
