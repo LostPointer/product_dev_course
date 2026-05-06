@@ -175,18 +175,18 @@
   min-height: 40px;
   border-radius: var(--radius-pill);
   border-color: $input-border;
-  background: #fff;
+  background: var(--surface);
 }
 
 .md-select--pill .md-select__control:hover {
   border-color: $outline-muted;
-  background: #f8fafc;
+  background: var(--surface-variant);
 }
 
 .md-select--pill .md-select__control--open {
   border-color: $primary;
   box-shadow: var(--focus-ring);
-  background: #fff;
+  background: var(--surface);
 }
 
 .md-select--pill .md-select__control--disabled {
@@ -239,7 +239,7 @@
   font-size: 0.85rem;
   color: $text-secondary;
   pointer-events: none;
-  background: #fff;
+  background: var(--surface);
   padding: 0 3px;
   transition: top 0.15s ease, font-size 0.15s ease, color 0.15s ease, left 0.15s ease, transform 0.15s ease;
   white-space: nowrap;

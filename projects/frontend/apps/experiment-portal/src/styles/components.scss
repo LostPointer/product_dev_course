@@ -138,7 +138,7 @@
   align-items: center;
   gap: 6px;
   padding: 6px;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--outline);
   border-radius: var(--radius-pill);
   box-shadow: var(--elevation-1);
@@ -164,11 +164,11 @@
   padding: 0 12px;
   border: 1px solid $input-border;
   border-radius: var(--radius-pill);
-  background: #fff;
+  background: var(--surface);
   transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 
-  &:hover { border-color: $outline-muted; background: #f8fafc; }
-  &:focus-within { border-color: $primary; box-shadow: var(--focus-ring); background: #fff; }
+  &:hover { border-color: $outline-muted; background: var(--surface-variant); }
+  &:focus-within { border-color: $primary; box-shadow: var(--focus-ring); background: var(--surface); }
 
   svg { color: $text-secondary; flex: none; }
 
@@ -199,7 +199,7 @@
   display: inline-flex;
   gap: 4px;
   padding: 4px;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--outline);
   border-radius: var(--radius-pill);
   flex: 0 0 auto;
@@ -231,7 +231,7 @@
   padding: 0 16px;
   border: 1px solid $input-border;
   border-radius: 14px;
-  background: #fff;
+  background: var(--surface);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 
   &:hover { border-color: $outline-muted; }

@@ -70,7 +70,7 @@
 }
 
 .sensor-card__pulse.is-live {
-  background: #16a34a;
+  background: var(--success);
   box-shadow: 0 0 0 6px rgba(22, 163, 74, 0.14);
 }
 
