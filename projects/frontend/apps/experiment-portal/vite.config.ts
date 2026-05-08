@@ -62,6 +62,14 @@ export default defineConfig(({ mode }) => {
           'src/vite-env.d.ts',
           'src/**/__mocks__/**',
         ],
+        // Ratchet floor — start conservative, raise as more tests land.
+        // Plan target: 65% lines (see docs/coverage plan).
+        thresholds: {
+          lines: 50,
+          statements: 50,
+          functions: 45,
+          branches: 50,
+        },
       },
     },
   }

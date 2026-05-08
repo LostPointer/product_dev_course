@@ -14,6 +14,16 @@ const config: Config = {
         '!src/**/*.d.ts',
         '!src/**/__mocks__/**',
     ],
+    // Ratchet floor — measured 60.6% lines / 51.2% branches at PR #100 baseline.
+    // Plan target: 90% (aspirational); raise as wiring code in index.ts gets covered.
+    coverageThreshold: {
+        global: {
+            lines: 58,
+            statements: 58,
+            functions: 55,
+            branches: 48,
+        },
+    },
 }
 
 export default config
