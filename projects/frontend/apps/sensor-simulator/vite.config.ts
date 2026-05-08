@@ -30,6 +30,14 @@ export default defineConfig({
             reporter: ['text', 'html'],
             include: ['src/**/*.{ts,tsx}'],
             exclude: ['src/main.tsx', 'src/setupTests.ts', '**/*.test.{ts,tsx}'],
+            // Ratchet floor — sensor-simulator is smoke-only (~52% measured at PR #99).
+            // Plan target: 50% lines.
+            thresholds: {
+                lines: 50,
+                statements: 50,
+                functions: 50,
+                branches: 50,
+            },
         },
     },
 })
