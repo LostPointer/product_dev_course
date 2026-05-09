@@ -70,21 +70,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install PostgreSQL
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends postgresql
-
       - name: Install Poetry
         uses: snok/install-poetry@v1
         with:
           version: 1.8.3
           installer-parallel: true
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: poetry
+          cache-dependency-path: projects/backend/services/auth-service/poetry.lock
+
+      - name: Install PostgreSQL
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends postgresql
 
       - name: Install dependencies
         run: poetry install --no-interaction --no-root
@@ -115,21 +117,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install PostgreSQL
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends postgresql
-
       - name: Install Poetry
         uses: snok/install-poetry@v1
         with:
           version: 1.8.3
           installer-parallel: true
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: poetry
+          cache-dependency-path: projects/backend/services/script-service/poetry.lock
+
+      - name: Install PostgreSQL
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends postgresql
 
       - name: Install dependencies
         run: poetry install --no-interaction --no-root
@@ -160,19 +164,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Set up PostgreSQL 16 + TimescaleDB
-        uses: ./.github/actions/setup-timescaledb
-
       - name: Install Poetry
         uses: snok/install-poetry@v1
         with:
           version: 1.8.3
           installer-parallel: true
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: poetry
+          cache-dependency-path: projects/backend/services/experiment-service/poetry.lock
+
+      - name: Set up PostgreSQL 16 + TimescaleDB
+        uses: ./.github/actions/setup-timescaledb
 
       - name: Install dependencies
         run: poetry install --no-interaction --no-root
@@ -202,19 +208,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Set up PostgreSQL 16 + TimescaleDB
-        uses: ./.github/actions/setup-timescaledb
-
       - name: Install Poetry
         uses: snok/install-poetry@v1
         with:
           version: 1.8.3
           installer-parallel: true
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: poetry
+          cache-dependency-path: projects/backend/services/telemetry-ingest-service/poetry.lock
+
+      - name: Set up PostgreSQL 16 + TimescaleDB
+        uses: ./.github/actions/setup-timescaledb
 
       - name: Install dependencies
         run: poetry install --no-interaction --no-root
