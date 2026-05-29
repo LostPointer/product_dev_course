@@ -129,7 +129,10 @@ async def ingest_telemetry(request: web.Request) -> web.Response:
         )
         raise web.HTTPTooManyRequests(
             text=f"Rate limit exceeded. Retry in {retry_after}s.",
-            headers={"Retry-After": str(retry_after)},
+            headers={
+                "Retry-After": str(retry_after),
+                "X-RateLimit-Limit": str(_rest_limiter._max_requests),
+            },
         )
 
     service = TelemetryIngestService()
@@ -143,7 +146,7 @@ async def ingest_telemetry(request: web.Request) -> web.Response:
             endpoint="rest",
             readings_count=readings_count,
         )
-        raise web.HTTPUnauthorized(text=str(exc)) from exc
+        raise web.HTTPUnauthorized(text="Unauthorized") from exc
     except ScopeMismatchError as exc:
         _fire_and_forget_error_log(
             sensor_id_str,
@@ -152,7 +155,7 @@ async def ingest_telemetry(request: web.Request) -> web.Response:
             endpoint="rest",
             readings_count=readings_count,
         )
-        raise web.HTTPBadRequest(text=str(exc)) from exc
+        raise web.HTTPBadRequest(text="Scope mismatch") from exc
     except NotFoundError as exc:
         _fire_and_forget_error_log(
             sensor_id_str,
@@ -161,7 +164,7 @@ async def ingest_telemetry(request: web.Request) -> web.Response:
             endpoint="rest",
             readings_count=readings_count,
         )
-        raise web.HTTPNotFound(text=str(exc)) from exc
+        raise web.HTTPNotFound(text="Resource not found") from exc
 
     TELEMETRY_READINGS_INGESTED.labels(transport="rest").inc(accepted)
     return web.json_response({"status": "accepted", "accepted": accepted}, status=202)
@@ -406,10 +409,11 @@ async def telemetry_stream(request: web.Request) -> web.StreamResponse:
             await asyncio.sleep(settings.telemetry_stream_poll_interval_seconds)
     except asyncio.CancelledError:
         raise
-    except Exception as exc:
+    except Exception:
         # avoid raising after headers are sent; close stream
+        logger.exception("SSE telemetry stream failed")
         await resp.write(b"event: error\n")
-        await resp.write(b"data: " + str(exc).encode("utf-8") + b"\n\n")
+        await resp.write(b"data: stream error\n\n")
         return resp
     finally:
         SSE_CONNECTIONS_ACTIVE.dec()

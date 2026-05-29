@@ -79,7 +79,7 @@ class SensorErrorLogRepository:
                 error_message=r["error_message"],
                 endpoint=r["endpoint"],
                 readings_count=r["readings_count"],
-                meta=dict(r["meta"]),
+                meta=r["meta"] or {},
             )
             for r in rows
         ]
