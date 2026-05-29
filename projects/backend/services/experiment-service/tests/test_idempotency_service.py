@@ -39,16 +39,19 @@ class MockIdempotencyRepository:
         request_body_hash: bytes,
         response_status: int,
         response_body: dict,
-    ) -> None:
-        if key not in self._storage:
-            self._storage[key] = IdempotencyRecord(
-                key=key,
-                user_id=user_id,
-                request_path=request_path,
-                request_body_hash=request_body_hash,
-                response_status=response_status,
-                response_body=response_body,
-            )
+    ) -> bool:
+        if key in self._storage:
+            # Mirrors INSERT ... ON CONFLICT DO NOTHING: existing row wins.
+            return False
+        self._storage[key] = IdempotencyRecord(
+            key=key,
+            user_id=user_id,
+            request_path=request_path,
+            request_body_hash=request_body_hash,
+            response_status=response_status,
+            response_body=response_body,
+        )
+        return True
 
     async def delete_expired(self, created_before: datetime) -> int:
         # Simplified: just clear all and return count
@@ -271,7 +274,8 @@ class TestIdempotencyServiceStoreResponse:
         response_status = 201
         response_body = {"id": "123", "created": True}
 
-        await service.store_response(
+        # First writer owns the key → returns None (caller emits own response).
+        result = await service.store_response(
             key=key,
             user_id=user_id,
             request_path=request_path,
@@ -279,6 +283,7 @@ class TestIdempotencyServiceStoreResponse:
             response_status=response_status,
             response_body=response_body,
         )
+        assert result is None
 
         record = await repo.get(key)
         assert record is not None
@@ -306,21 +311,52 @@ class TestIdempotencyServiceStoreResponse:
             response_body={"first": True},
         )
 
-        # Try to store second response with same key
-        await service.store_response(
+        # A concurrent writer that lost the race with the SAME body must get
+        # the already-stored response back (no silent divergence, no overwrite).
+        returned = await service.store_response(
             key=key,
             user_id=user_id,
             request_path="/api/test",
-            body_hash=b"hash2",
+            body_hash=b"hash1",
             response_status=201,
             response_body={"second": True},
         )
+        assert returned is not None
+        assert returned.status == 200
+        assert returned.body == {"first": True}
 
-        # Should still have first response (ON CONFLICT DO NOTHING)
+        # Storage still holds the first response (ON CONFLICT DO NOTHING).
         record = await repo.get(key)
         assert record is not None
         assert record.response_body == {"first": True}
         assert record.response_status == 200
+
+    @pytest.mark.asyncio
+    async def test_store_conflict_on_different_body_raises(self):
+        """A lost-race writer with a DIFFERENT body must get a 409 conflict."""
+        repo = MockIdempotencyRepository()
+        service = IdempotencyService(repo)
+        user_id = uuid4()
+        key = "test-key"
+
+        await service.store_response(
+            key=key,
+            user_id=user_id,
+            request_path="/api/test",
+            body_hash=b"hash1",
+            response_status=200,
+            response_body={"first": True},
+        )
+
+        with pytest.raises(IdempotencyConflictError, match="different payload"):
+            await service.store_response(
+                key=key,
+                user_id=user_id,
+                request_path="/api/test",
+                body_hash=b"hash2",
+                response_status=201,
+                response_body={"second": True},
+            )
 
 
 class TestIdempotencyServiceAssertRecord:

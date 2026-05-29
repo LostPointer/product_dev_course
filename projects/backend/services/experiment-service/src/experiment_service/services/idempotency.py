@@ -54,8 +54,16 @@ class IdempotencyService:
         body_hash: bytes,
         response_status: int,
         response_body: dict[str, Any],
-    ) -> None:
-        await self._repository.save(
+    ) -> IdempotencyPayload | None:
+        """Persist the response, resolving concurrent same-key races.
+
+        Returns ``None`` when this request owns the key (the caller returns its
+        freshly-computed response). If a concurrent request already stored a
+        response under this key, returns that stored payload so both callers
+        emit an identical result; raises ``IdempotencyConflictError`` (→ 409)
+        if the stored request used a different body/path/user.
+        """
+        inserted = await self._repository.save(
             key,
             user_id,
             request_path,
@@ -63,6 +71,15 @@ class IdempotencyService:
             response_status,
             response_body,
         )
+        if inserted:
+            return None
+        existing = await self._repository.get(key)
+        if existing is None:
+            # The winning row was removed (e.g. TTL cleanup) between INSERT and
+            # SELECT — nothing left to reconcile against.
+            return None
+        self._assert_record(existing, user_id, request_path, body_hash)
+        return IdempotencyPayload(status=existing.response_status, body=existing.response_body)
 
     @staticmethod
     def build_response(payload: IdempotencyPayload) -> web.Response:

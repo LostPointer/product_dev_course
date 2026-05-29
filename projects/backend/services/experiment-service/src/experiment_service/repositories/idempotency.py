@@ -50,8 +50,15 @@ class IdempotencyRepository(BaseRepository):
         request_body_hash: bytes,
         response_status: int,
         response_body: dict,
-    ) -> None:
-        await self._execute(
+    ) -> bool:
+        """Persist the response for an idempotency key.
+
+        Returns ``True`` if this call inserted the row, ``False`` if a record
+        for the key already existed (a concurrent request won the race). The
+        caller uses this to return the already-stored response instead of
+        silently diverging.
+        """
+        record = await self._fetchrow(
             """
             INSERT INTO request_idempotency (
                 idempotency_key,
@@ -63,6 +70,7 @@ class IdempotencyRepository(BaseRepository):
             )
             VALUES ($1, $2, $3, $4, $5, $6::jsonb)
             ON CONFLICT (idempotency_key) DO NOTHING
+            RETURNING idempotency_key
             """,
             key,
             user_id,
@@ -71,6 +79,7 @@ class IdempotencyRepository(BaseRepository):
             response_status,
             json.dumps(response_body, sort_keys=True, separators=(",", ":"), default=str),
         )
+        return record is not None
 
     async def delete_expired(self, created_before: datetime) -> int:
         """Delete idempotency records older than *created_before*. Returns count."""

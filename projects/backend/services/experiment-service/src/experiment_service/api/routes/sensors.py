@@ -81,14 +81,19 @@ async def register_sensor(request: web.Request):
         raise web.HTTPBadRequest(text="Bad request") from exc
     payload = {"sensor": _sensor_response(sensor), "token": token}
     if idempotency_key:
-        await idempotency_service.store_response(
-            idempotency_key,
-            user.user_id,
-            request.rel_url.path,
-            body_hash,
-            201,
-            payload,
-        )
+        try:
+            stored = await idempotency_service.store_response(
+                idempotency_key,
+                user.user_id,
+                request.rel_url.path,
+                body_hash,
+                201,
+                payload,
+            )
+        except IdempotencyConflictError as exc:
+            raise web.HTTPConflict(text="Conflict") from exc
+        if stored is not None:
+            return IdempotencyService.build_response(stored)
     return web.json_response(payload, status=201)
 
 

@@ -135,7 +135,7 @@ async def create_capture_session(request: web.Request):
     response_payload = _session_response(session)
     if idempotency_key:
         try:
-            await idempotency_service.store_response(
+            stored = await idempotency_service.store_response(
                 idempotency_key,
                 user.user_id,
                 request.rel_url.path,
@@ -145,6 +145,8 @@ async def create_capture_session(request: web.Request):
             )
         except IdempotencyConflictError as exc:
             raise web.HTTPConflict(text="Conflict") from exc
+        if stored is not None:
+            return IdempotencyService.build_response(stored)
     return web.json_response(response_payload, status=201)
 
 
