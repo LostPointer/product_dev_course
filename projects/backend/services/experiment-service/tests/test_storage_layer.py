@@ -167,6 +167,20 @@ async def test_storage_layer_crud(db_pool):
             project_id, run2.id, RunUpdateDTO(status=RunStatus.SUCCEEDED)
         )
 
+    session2 = await sessions_service.create_session(
+        CaptureSessionCreateDTO(
+            run_id=run2.id,
+            project_id=project_id,
+            ordinal_number=1,
+        )
+    )
+    with pytest.raises(InvalidStatusTransitionError):
+        await sessions_service.update_session(
+            project_id,
+            session2.id,
+            CaptureSessionUpdateDTO(status=CaptureSessionStatus.SUCCEEDED),
+        )
+
 
 @pytest.mark.asyncio
 async def test_artifact_repository_is_project_scoped(db_pool):
@@ -280,18 +294,4 @@ async def test_backfill_task_repository_is_project_scoped(db_pool):
     assert (await repo.get(project_b, task["id"])) is None
     items_b, total_b = await repo.list_by_sensor(project_b, sensor_id)
     assert total_b == 0 and items_b == []
-
-    session2 = await sessions_service.create_session(
-        CaptureSessionCreateDTO(
-            run_id=run2.id,
-            project_id=project_id,
-            ordinal_number=1,
-        )
-    )
-    with pytest.raises(InvalidStatusTransitionError):
-        await sessions_service.update_session(
-            project_id,
-            session2.id,
-            CaptureSessionUpdateDTO(status=CaptureSessionStatus.SUCCEEDED),
-        )
 
