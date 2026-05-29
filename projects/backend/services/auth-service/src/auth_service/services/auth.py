@@ -155,9 +155,18 @@ class AuthService:
             raise UserAlreadyExistsError("User with this username or email already exists")
 
         hashed_pw = hash_password(password)
+
+        # Atomically claim the invite BEFORE creating the user so two
+        # concurrent registrations cannot consume the same token (TOCTOU).
+        if validated_invite is not None and self._invite_repo is not None and invite_token is not None:
+            claimed = await self._invite_repo.claim(invite_token)
+            if claimed is None:
+                raise InvalidTokenError("Invalid or expired invite token")
+
         user = await self._user_repo.create(username, email, hashed_pw, password_change_required=False)
 
         if validated_invite is not None and self._invite_repo is not None and invite_token is not None:
+            # Record the consumer now that the user row exists (used_by FK).
             await self._invite_repo.mark_used(invite_token, user.id)
 
         tokens = await self._create_tokens(str(user.id))
@@ -294,11 +303,10 @@ class AuthService:
             if not user_id:
                 raise ValueError("Token missing user ID")
             exp: int = payload["exp"]
+            fid_str: str | None = payload.get("fid")
+            family_id: UUID | None = UUID(fid_str) if fid_str else None
         except ValueError as e:
             raise InvalidCredentialsError(str(e)) from e
-
-        fid_str: str | None = payload.get("fid")
-        family_id: UUID | None = UUID(fid_str) if fid_str else None
 
         expires_at = datetime.fromtimestamp(exp, tz=timezone.utc)
         await self._revoked_repo.revoke(UUID(jti), UUID(user_id), expires_at, family_id)
@@ -335,11 +343,10 @@ class AuthService:
             if not user_id:
                 raise ValueError("Token missing user ID")
             exp: int = payload["exp"]
+            fid_str: str | None = payload.get("fid")
+            family_id: UUID | None = UUID(fid_str) if fid_str else None
         except ValueError as e:
             raise InvalidCredentialsError(str(e)) from e
-
-        fid_str: str | None = payload.get("fid")
-        family_id: UUID | None = UUID(fid_str) if fid_str else None
 
         # Family-level check: if the whole family was revoked (e.g. logout / password change)
         if family_id is not None and self._family_repo is not None:
