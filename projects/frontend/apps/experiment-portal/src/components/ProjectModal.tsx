@@ -9,6 +9,7 @@ import { Error, InfoRow, Loading } from './common'
 import { IS_TEST } from '../utils/env'
 import { notifyError } from '../utils/notify'
 import './CreateRunModal.scss'
+import { apiErrorMessage } from '../api/http/errorMessage'
 
 type ProjectModalMode = 'create' | 'view' | 'edit'
 type ProjectUiMode = 'view' | 'edit'
@@ -131,12 +132,7 @@ function ProjectModal({ isOpen, onClose, mode, projectId }: ProjectModalProps) {
         invalidateKeys: [['projects']],
         successMessage: 'Проект создан',
         onSuccess: () => onClose(),
-        onError: (err: any) => setError(
-            err?.response?.data?.error ||
-            err?.response?.data?.message ||
-            err?.message ||
-            'Ошибка создания проекта'
-        ),
+        onError: (err: unknown) => setError(apiErrorMessage(err, 'Ошибка создания проекта')),
     })
 
     const updateMutation = useApiMutation<unknown, ProjectUpdate>({
@@ -144,12 +140,7 @@ function ProjectModal({ isOpen, onClose, mode, projectId }: ProjectModalProps) {
         invalidateKeys: [['projects']],
         successMessage: 'Проект обновлён',
         onSuccess: () => onClose(),
-        onError: (err: any) => setError(
-            err?.response?.data?.error ||
-            err?.response?.data?.message ||
-            err?.message ||
-            'Ошибка обновления проекта'
-        ),
+        onError: (err: unknown) => setError(apiErrorMessage(err, 'Ошибка обновления проекта')),
     })
 
     const isBusy = createMutation.isPending || updateMutation.isPending
