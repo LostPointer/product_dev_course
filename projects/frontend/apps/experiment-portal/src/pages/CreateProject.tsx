@@ -7,6 +7,7 @@ import { Error, FormGroup, FormActions } from '../components/common'
 import { IS_TEST } from '../utils/env'
 import { notifyError, notifySuccess } from '../utils/notify'
 import './CreateProject.scss'
+import { apiErrorMessage } from '../api/http/errorMessage'
 
 function CreateProject() {
     const navigate = useNavigate()
@@ -23,8 +24,8 @@ function CreateProject() {
             // Переходим на список проектов после создания
             navigate('/projects')
         },
-        onError: (err: any) => {
-            const msg = err.response?.data?.error || 'Ошибка создания проекта'
+        onError: (err: unknown) => {
+            const msg = apiErrorMessage(err, 'Ошибка создания проекта')
             setError(msg)
             notifyError(msg)
         },

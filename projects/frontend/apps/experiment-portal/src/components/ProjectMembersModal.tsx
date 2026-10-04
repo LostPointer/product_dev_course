@@ -14,6 +14,7 @@ import AddMemberForm from './project-members/AddMemberForm'
 import MemberRolesModal from './project-members/MemberRolesModal'
 import ProjectRolesSection from './project-members/ProjectRolesSection'
 import './CreateRunModal.scss'
+import { apiErrorMessage } from '../api/http/errorMessage'
 
 // ---------------------------------------------------------------------------
 // ProjectMembersModal — основная модалка
@@ -129,7 +130,7 @@ function ProjectMembersModal({ isOpen, onClose, projectId, projectOwnerId }: Pro
         successMessage: 'Участник добавлен',
         errorFallback: 'Ошибка добавления участника',
         onSuccess: () => { setSelectedUser(null); setUserSearchInput(''); setDebouncedQuery(''); setNewMemberRoleId(''); setError(null) },
-        onError: (err: any) => setError(err?.response?.data?.error || err?.message || 'Ошибка добавления участника'),
+        onError: (err: unknown) => setError(apiErrorMessage(err, 'Ошибка добавления участника')),
     })
 
     // Мутация для удаления участника
@@ -139,7 +140,7 @@ function ProjectMembersModal({ isOpen, onClose, projectId, projectOwnerId }: Pro
         successMessage: 'Участник удалён',
         errorFallback: 'Ошибка удаления участника',
         onSuccess: () => setError(null),
-        onError: (err: any) => setError(err?.response?.data?.error || err?.message || 'Ошибка удаления участника'),
+        onError: (err: unknown) => setError(apiErrorMessage(err, 'Ошибка удаления участника')),
     })
 
     // Мутация для изменения роли участника (legacy)
@@ -149,7 +150,7 @@ function ProjectMembersModal({ isOpen, onClose, projectId, projectOwnerId }: Pro
         successMessage: 'Роль обновлена',
         errorFallback: 'Ошибка изменения роли',
         onSuccess: () => setError(null),
-        onError: (err: any) => setError(err?.response?.data?.error || err?.message || 'Ошибка изменения роли'),
+        onError: (err: unknown) => setError(apiErrorMessage(err, 'Ошибка изменения роли')),
     })
 
     const handleAddMember = (e: React.FormEvent) => {
